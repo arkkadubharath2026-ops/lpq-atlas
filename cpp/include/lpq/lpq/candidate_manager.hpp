@@ -301,17 +301,26 @@ public:
     /// Rejection is the common case once the window is full, and it costs one
     /// comparison: a candidate no better than the current worst cannot enter.
     ///
-    /// CONTRACT: a node must not be offered twice within one extraction.
+    /// CONTRACT: the same (node, key) ENTRY must not be offered twice within
+    /// one extraction.
     ///
     /// This matters more than it looks. expand() deliberately keeps the
     /// candidates already admitted, so a refill after an expansion must supply
-    /// only NEW candidates -- a substrate that restarted its enumeration would
-    /// re-offer the same high-scoring entries, they would be admitted a second
+    /// only NEW entries -- a substrate that restarted its enumeration would
+    /// re-offer the same high-scoring ones, they would be admitted a second
     /// time, and the widened window would fill with duplicates instead of
     /// reaching further into the queue. Expansion would then appear to happen
-    /// while making no progress at all, and the extraction would fall back for
-    /// no visible reason. A real substrate honours this naturally, because its
+    /// while making no progress, and the extraction would fall back for no
+    /// visible reason. A real substrate honours this naturally, because its
     /// enumeration continues from where it stopped.
+    ///
+    /// The uniqueness is on the ENTRY, not on the node. Under lazy deletion a
+    /// node is legitimately queued more than once -- Dijkstra pushes an
+    /// improved key without removing the old entry -- and both copies can sit
+    /// in the same bucket. Requiring node uniqueness would forbid a state the
+    /// substrate is designed to produce. Verification picks the smaller key and
+    /// removal matches on node and key together, so duplicate nodes carrying
+    /// different keys are handled correctly throughout.
     ///
     /// The check is an assertion rather than a branch: it is O(k) per offer,
     /// which is real cost on the hottest path in the system, and a violation is
@@ -319,8 +328,9 @@ public:
     /// and sanitizer configurations, which run the whole test suite, and
     /// compiles out entirely under NDEBUG.
     bool offer(const Candidate& c) noexcept {
-        assert(rank_of(c.node) == storage_.size() &&
-               "a node was offered twice in one extraction; see the contract on offer()");
+        assert(!holds_entry(c.node, c.key) &&
+               "the same (node, key) entry was offered twice in one extraction; "
+               "see the contract on offer()");
 
         ++metrics_.candidates_offered;
 
@@ -436,6 +446,18 @@ public:
     }
 
 private:
+    /// Whether an identical entry is already in the window. Used only by the
+    /// Debug assertion in offer(), so it never costs anything in a release
+    /// build.
+    [[nodiscard]] bool holds_entry(NodeId u, double key) const noexcept {
+        for (const Candidate& c : storage_) {
+            if (c.node == u && c.key == key) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     CandidateWindowConfig  config_{};
     std::vector<Candidate> storage_;   ///< ordered best-first, size <= target_
     std::uint32_t          target_     = 0;

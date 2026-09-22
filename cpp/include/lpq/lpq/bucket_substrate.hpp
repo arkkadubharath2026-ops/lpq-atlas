@@ -148,10 +148,16 @@ public:
     /// One queued entry. 16 bytes with a 64-bit key, so four share a cache
     /// line -- and the scan fallback is a linear walk over exactly this array,
     /// which is the access pattern caches are best at.
+    ///
+    /// The model score rides in what would otherwise be padding, so carrying it
+    /// costs nothing at all. That matters: it is what allows the candidate
+    /// window to be maintained AT PUSH TIME instead of selected by a scan at
+    /// pop time, and selecting it by a scan would be the very cost the learned
+    /// queue is trying to remove.
     struct Entry {
-        KeyType key  = 0;
-        NodeId  node = 0;
-        std::uint32_t padding_ = 0;
+        KeyType key   = 0;
+        NodeId  node  = 0;
+        float   score = 0.0F;
     };
 
     BucketSubstrate() : BucketSubstrate(1) {}
@@ -174,7 +180,17 @@ public:
 
     // --- PriorityQueueLike ---------------------------------------------------
 
-    void push(NodeId node, KeyType key) {
+    /// Size of each bucket's best-scoring front.
+    ///
+    /// Zero disables front maintenance entirely, which is the classical bucket
+    /// queue and the configuration the baselines are measured in.
+    void set_front_size(std::size_t k) noexcept { front_k_ = k; }
+
+    [[nodiscard]] std::size_t front_size() const noexcept { return front_k_; }
+
+    void push(NodeId node, KeyType key) { push(node, key, 0.0F); }
+
+    void push(NodeId node, KeyType key, float score) {
         if (key < base_) {
             // Monotonicity violated. Reported rather than tolerated: a key
             // below the base belongs to a bucket that has already been passed,
@@ -191,7 +207,7 @@ public:
         ++size_;
 
         if (offset >= kBucketCount) {
-            overflow_.push_back(Entry{key, node, 0});
+            overflow_.push_back(Entry{key, node, score});
             if (overflow_bound_ == kNoBound || key < overflow_bound_) {
                 overflow_bound_ = key;
             }
@@ -199,7 +215,7 @@ public:
         }
 
         const std::size_t index = (cursor_ + offset) & kBucketMask;
-        buckets_[index].push_back(Entry{key, node, 0});
+        insert_into_bucket(buckets_[index], Entry{key, node, score});
 
         // The O(1) bound maintenance that makes cheap verification possible.
         ++comparisons_;
@@ -307,6 +323,29 @@ public:
         }
         advance_to_non_empty();
         return {buckets_[cursor_].data(), buckets_[cursor_].size()};
+    }
+
+    /// The best-scoring entries of the current bucket: the LPQ's candidate
+    /// window, available without examining the rest of the bucket.
+    ///
+    /// The front is BEST EFFORT, not an exact top-k. A removal from inside it
+    /// is repaired by swapping in whatever sits at the back, which can leave a
+    /// lower-scoring entry in the front and a higher-scoring one outside it.
+    ///
+    /// That looseness is deliberate and safe. The front only decides which
+    /// candidates are LOOKED AT; whether one may be extracted is decided by
+    /// verification against the bound, which does not consult scores at all. So
+    /// a degraded front costs speed -- more refusals, more fallback scans --
+    /// and can never cost correctness. Keeping it exact would mean an O(bucket)
+    /// repair on every removal, which is the cost this whole design exists to
+    /// avoid.
+    [[nodiscard]] std::span<const Entry> current_front() {
+        if (size_ == 0) {
+            return {};
+        }
+        advance_to_non_empty();
+        const std::vector<Entry>& bucket = buckets_[cursor_];
+        return {bucket.data(), std::min(front_k_, bucket.size())};
     }
 
     /// A valid lower bound on every key still in the queue.
@@ -461,6 +500,47 @@ private:
     std::vector<Entry>              overflow_;
     KeyType                         overflow_bound_ = kNoBound;
 
+    /// Places an entry, keeping the bucket's best-scoring front at the front.
+    ///
+    /// O(1) for the common case -- an entry that does not beat the front simply
+    /// appends. Only an entry good enough to enter the front pays the O(k)
+    /// shift, and k is small.
+    void insert_into_bucket(std::vector<Entry>& bucket, const Entry& e) {
+        if (front_k_ == 0) {
+            bucket.push_back(e);
+            return;
+        }
+
+        if (bucket.size() < front_k_) {
+            // The front is not yet full, so this entry belongs in it. Insert in
+            // descending score order.
+            std::size_t at = bucket.size();
+            bucket.push_back(e);
+            while (at > 0 && bucket[at - 1].score < e.score) {
+                bucket[at] = bucket[at - 1];
+                --at;
+            }
+            bucket[at] = e;
+            return;
+        }
+
+        if (e.score <= bucket[front_k_ - 1].score) {
+            bucket.push_back(e);  // not good enough for the front
+            return;
+        }
+
+        // Displace the weakest front entry to the tail, then shift the new one
+        // into place.
+        bucket.push_back(bucket[front_k_ - 1]);
+        std::size_t at = front_k_ - 1;
+        while (at > 0 && bucket[at - 1].score < e.score) {
+            bucket[at] = bucket[at - 1];
+            --at;
+        }
+        bucket[at] = e;
+    }
+
+    std::size_t   front_k_     = 0;
     std::size_t   cursor_      = 0;
     std::size_t   size_        = 0;
     /// Mutable so the genuinely const top() can still count its own work:

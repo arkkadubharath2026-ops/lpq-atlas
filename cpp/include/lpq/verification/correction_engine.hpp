@@ -185,12 +185,13 @@ struct CorrectionMetrics {
 /// legitimately rises, and reusing the original bound would make expansion
 /// pointless -- the test would be no easier to pass than before.
 ///
-/// The refill must offer only candidates it has NOT already offered during
-/// this extraction. expand() keeps what was admitted, so a refill that
-/// restarted its enumeration would re-offer the same high-scoring entries and
-/// the widened window would fill with duplicates rather than reaching further
-/// into the queue. See CandidateManager::offer, which asserts this in Debug
-/// builds.
+/// The refill must offer only entries it has NOT already offered during this
+/// extraction. expand() keeps what was admitted, so a refill that restarted its
+/// enumeration would re-offer the same high-scoring entries and the widened
+/// window would fill with duplicates rather than reaching further into the
+/// queue. Uniqueness is on the (node, key) entry rather than on the node,
+/// because lazy deletion legitimately queues a node more than once. See
+/// CandidateManager::offer, which asserts this in Debug builds.
 template <typename F>
 concept CandidateRefill = requires(F f, CandidateManager& manager) {
     { f(manager) } -> std::same_as<QueueBound>;
