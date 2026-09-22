@@ -72,6 +72,16 @@ lpq_add_test(test_graph
     LIBS    lpq::graph
     LABELS  "unit")
 
+lpq_add_test(test_priority_queues
+    SOURCES pq/test_priority_queues.cpp
+    LIBS    lpq::pq
+    LABELS  "unit")
+
+lpq_add_test(test_radix_heap
+    SOURCES pq/test_radix_heap.cpp
+    LIBS    lpq::pq
+    LABELS  "unit")
+
 lpq_add_test(test_reference_dijkstra
     SOURCES algorithms/test_reference_dijkstra.cpp
     LIBS    lpq::algorithms

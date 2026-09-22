@@ -32,13 +32,22 @@ target_include_directories(lpq_graph INTERFACE
 target_link_libraries(lpq_graph INTERFACE lpq::common)
 
 # ------------------------------------------------------------------------------
+# lpq_pq -- classical priority queues (binary/d-ary, pairing, radix, Fibonacci).
+# ------------------------------------------------------------------------------
+add_library(lpq_pq INTERFACE)
+add_library(lpq::pq ALIAS lpq_pq)
+target_include_directories(lpq_pq INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+target_link_libraries(lpq_pq INTERFACE lpq::common)
+
+# ------------------------------------------------------------------------------
 # lpq_algorithms -- reference Dijkstra, Dijkstra over pluggable queues, A*.
 # ------------------------------------------------------------------------------
 add_library(lpq_algorithms INTERFACE)
 add_library(lpq::algorithms ALIAS lpq_algorithms)
 target_include_directories(lpq_algorithms INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
-target_link_libraries(lpq_algorithms INTERFACE lpq::graph lpq::common)
+target_link_libraries(lpq_algorithms INTERFACE lpq::graph lpq::pq lpq::common)
 
 # ------------------------------------------------------------------------------
 # Tests
