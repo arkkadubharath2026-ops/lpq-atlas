@@ -99,6 +99,21 @@ target_include_directories(lpq_verification INTERFACE
 target_link_libraries(lpq_verification INTERFACE lpq::lpq lpq::common)
 
 # ------------------------------------------------------------------------------
+# lpq_adaptation -- prediction events, online learning, exponentially weighted
+# statistics, and (as later milestones land) the adaptive controller.
+#
+# Depends on lpq::verification because an event's labels come from a
+# VerificationResult: the training signal is derived from authoritative keys
+# rather than from any model output, which is what keeps online learning from
+# drifting on its own predictions.
+# ------------------------------------------------------------------------------
+add_library(lpq_adaptation INTERFACE)
+add_library(lpq::adaptation ALIAS lpq_adaptation)
+target_include_directories(lpq_adaptation INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+target_link_libraries(lpq_adaptation INTERFACE lpq::verification lpq::models lpq::common)
+
+# ------------------------------------------------------------------------------
 # lpq_metrics -- statistics, CPU pinning, JSON, hardware info, result schema.
 # ------------------------------------------------------------------------------
 add_library(lpq_metrics INTERFACE)
