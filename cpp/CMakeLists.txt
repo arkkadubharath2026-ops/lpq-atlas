@@ -81,6 +81,20 @@ target_include_directories(lpq_lpq INTERFACE
 target_link_libraries(lpq_lpq INTERFACE lpq::models lpq::features lpq::common)
 
 # ------------------------------------------------------------------------------
+# lpq_verification -- correctness policy, guarantee classification, and the
+# verification engine that decides whether a candidate may be extracted.
+#
+# Separate from lpq::lpq so the correctness policy can be reasoned about, and
+# tested, without the candidate machinery -- and so that a change to candidate
+# selection cannot silently alter what "verified" means.
+# ------------------------------------------------------------------------------
+add_library(lpq_verification INTERFACE)
+add_library(lpq::verification ALIAS lpq_verification)
+target_include_directories(lpq_verification INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+target_link_libraries(lpq_verification INTERFACE lpq::lpq lpq::common)
+
+# ------------------------------------------------------------------------------
 # lpq_metrics -- statistics, CPU pinning, JSON, hardware info, result schema.
 # ------------------------------------------------------------------------------
 add_library(lpq_metrics INTERFACE)
