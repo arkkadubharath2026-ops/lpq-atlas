@@ -1,1 +1,29 @@
+# Normalise line endings. The repository is developed on both Windows and
+# Linux; storing LF in the object database keeps diffs and checksums stable
+# across platforms, which matters because dataset checksums and experiment
+# manifests are compared byte for byte.
+* text=auto eol=lf
+
+# Shell scripts must keep LF even when checked out on Windows, or bash and
+# the git hooks reject them with a bad-interpreter error.
+*.sh   text eol=lf
+*.bash text eol=lf
+
+# Windows-only scripts keep CRLF.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary and generated artifacts: never normalise, never diff as text.
+*.png  binary
+*.jpg  binary
+*.pdf  binary
+*.gz   binary
+*.zip  binary
+*.bin  binary
+*.npy  binary
+*.npz  binary
+
+# Graphify's knowledge graph is machine-generated; union-merge it via the
+# merge driver registered by `graphify hook install` rather than conflicting.
 graphify-out/graph.json merge=graphify
