@@ -70,15 +70,19 @@ target_link_libraries(lpq_models INTERFACE lpq::features lpq::common)
 # later milestones land) verification, correction and adaptation.
 #
 # Depends on lpq::models for Prediction and on lpq::features for the feature
-# layout. It does NOT depend on lpq::pq: the candidate manager is handed
-# candidates rather than reaching into a queue, which is what keeps candidate
-# policy testable without a queue, a graph or a search.
+# layout, and on lpq::pq for the QueueEntry type and the PriorityQueueLike
+# concept that the authoritative substrate satisfies.
+#
+# The CandidateManager itself still reaches into no queue -- it is handed
+# candidates -- which is what keeps candidate policy testable without a queue,
+# a graph or a search. The substrate is the component that needs the queue
+# vocabulary, because it IS one.
 # ------------------------------------------------------------------------------
 add_library(lpq_lpq INTERFACE)
 add_library(lpq::lpq ALIAS lpq_lpq)
 target_include_directories(lpq_lpq INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
-target_link_libraries(lpq_lpq INTERFACE lpq::models lpq::features lpq::common)
+target_link_libraries(lpq_lpq INTERFACE lpq::models lpq::features lpq::pq lpq::common)
 
 # ------------------------------------------------------------------------------
 # lpq_verification -- correctness policy, guarantee classification, and the

@@ -85,8 +85,8 @@ lpq_add_test(test_models
     LABELS  "unit")
 
 lpq_add_test(test_lpq
-    SOURCES lpq/test_candidate_manager.cpp
-    LIBS    lpq::lpq
+    SOURCES lpq/test_candidate_manager.cpp lpq/test_bucket_substrate.cpp
+    LIBS    lpq::lpq lpq::pq
     LABELS  "unit")
 
 lpq_add_test(test_verification
