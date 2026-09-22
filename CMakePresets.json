@@ -1,0 +1,91 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 24, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "LPQ_BUILD_TESTS": "ON",
+        "LPQ_BUILD_BENCHMARKS": "ON",
+        "LPQ_BUILD_APPS": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug (-O0, assertions, sanitizers where supported)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "LPQ_ENABLE_SANITIZERS": "ON",
+        "LPQ_ENABLE_INSTRUMENTATION": "ON",
+        "LPQ_ENABLE_WERROR": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release portable (-O3, no -march=native)",
+      "description": "Default benchmark build. Portable across machines of the same ISA baseline.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "LPQ_ENABLE_INSTRUMENTATION": "ON",
+        "LPQ_NATIVE_ARCH": "OFF"
+      }
+    },
+    {
+      "name": "release-native",
+      "inherits": "release",
+      "displayName": "Release native (-O3 -march=native, NOT portable)",
+      "description": "Fastest build for a single machine. Results are not comparable across differing CPUs.",
+      "cacheVariables": {
+        "LPQ_NATIVE_ARCH": "ON",
+        "LPQ_ENABLE_LTO": "ON"
+      }
+    },
+    {
+      "name": "release-noinstr",
+      "inherits": "release",
+      "displayName": "Release without instrumentation",
+      "description": "Measures the true hot path with all counters and timers compiled out.",
+      "cacheVariables": { "LPQ_ENABLE_INSTRUMENTATION": "OFF" }
+    },
+    {
+      "name": "profile",
+      "inherits": "base",
+      "displayName": "Profile (-O2 -g, frame pointers, for perf)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "LPQ_ENABLE_INSTRUMENTATION": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug",           "configurePreset": "debug" },
+    { "name": "release",         "configurePreset": "release" },
+    { "name": "release-native",  "configurePreset": "release-native" },
+    { "name": "release-noinstr", "configurePreset": "release-noinstr" },
+    { "name": "profile",         "configurePreset": "profile" }
+  ],
+  "testPresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "output": { "outputOnFailure": true, "verbosity": "default" },
+      "execution": { "noTestsAction": "error", "stopOnFailure": false }
+    },
+    { "name": "debug",   "inherits": "base", "configurePreset": "debug" },
+    { "name": "release", "inherits": "base", "configurePreset": "release" },
+    { "name": "profile", "inherits": "base", "configurePreset": "profile" },
+    {
+      "name": "release-fast",
+      "inherits": "base",
+      "configurePreset": "release",
+      "displayName": "Release tests excluding slow fuzz/differential sweeps",
+      "filter": { "exclude": { "label": "slow" } }
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+# Build
+build/
+out/
+cmake-build-*/
+_deps/
+CMakeUserPresets.json
+
+# Compiled objects
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.exe
+*.pdb
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Generated / large data — NOT versioned (see README "Git discipline")
+datasets/raw/
+datasets/processed/
+models/checkpoints/
+models/exported/
+experiments/runs/
+
+# Raw benchmark output is immutable but not committed by default.
+# Paper-frozen results are force-added deliberately.
+results/raw/
+results/processed/
+results/figures/
+results/tables/
+
+# Graphify knowledge-graph output (regenerable from source)
+graphify-out/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

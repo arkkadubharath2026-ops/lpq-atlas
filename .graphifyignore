@@ -1,0 +1,37 @@
+# Build artifacts
+build/
+out/
+cmake-build-*/
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.exe
+
+# Third-party / vendored sources (indexing these floods the graph)
+third_party/
+external/
+_deps/
+cpp/tests/vendor/
+
+# Data: large, generated, and not semantically useful in a code graph
+datasets/raw/
+datasets/processed/
+results/raw/
+results/processed/
+results/figures/
+experiments/runs/
+models/checkpoints/
+models/exported/
+
+# Python environment noise
+.venv/
+venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Graphify's own output
+graphify-out/
