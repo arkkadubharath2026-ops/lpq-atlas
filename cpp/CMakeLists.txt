@@ -41,6 +41,15 @@ target_include_directories(lpq_pq INTERFACE
 target_link_libraries(lpq_pq INTERFACE lpq::common)
 
 # ------------------------------------------------------------------------------
+# lpq_features -- feature vector, precomputed graph features, search observations.
+# ------------------------------------------------------------------------------
+add_library(lpq_features INTERFACE)
+add_library(lpq::features ALIAS lpq_features)
+target_include_directories(lpq_features INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+target_link_libraries(lpq_features INTERFACE lpq::graph lpq::common)
+
+# ------------------------------------------------------------------------------
 # lpq_metrics -- statistics, CPU pinning, JSON, hardware info, result schema.
 # ------------------------------------------------------------------------------
 add_library(lpq_metrics INTERFACE)

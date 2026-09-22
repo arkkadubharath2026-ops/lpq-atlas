@@ -72,6 +72,11 @@ lpq_add_test(test_graph
     LIBS    lpq::graph
     LABELS  "unit")
 
+lpq_add_test(test_features
+    SOURCES features/test_features.cpp
+    LIBS    lpq::features
+    LABELS  "unit")
+
 lpq_add_test(test_metrics
     SOURCES metrics/test_statistics.cpp metrics/test_json_and_records.cpp
             metrics/test_benchmark_harness.cpp
