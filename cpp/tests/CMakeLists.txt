@@ -91,6 +91,7 @@ lpq_add_test(test_lpq
 
 lpq_add_test(test_verification
     SOURCES verification/test_verification_engine.cpp
+            verification/test_correction_engine.cpp
     LIBS    lpq::verification
     LABELS  "unit")
 

@@ -73,6 +73,7 @@
 #define LPQ_LPQ_CANDIDATE_MANAGER_HPP
 
 #include <algorithm>
+#include <cassert>
 #include <bit>
 #include <cmath>
 #include <cstddef>
@@ -299,7 +300,28 @@ public:
     ///
     /// Rejection is the common case once the window is full, and it costs one
     /// comparison: a candidate no better than the current worst cannot enter.
+    ///
+    /// CONTRACT: a node must not be offered twice within one extraction.
+    ///
+    /// This matters more than it looks. expand() deliberately keeps the
+    /// candidates already admitted, so a refill after an expansion must supply
+    /// only NEW candidates -- a substrate that restarted its enumeration would
+    /// re-offer the same high-scoring entries, they would be admitted a second
+    /// time, and the widened window would fill with duplicates instead of
+    /// reaching further into the queue. Expansion would then appear to happen
+    /// while making no progress at all, and the extraction would fall back for
+    /// no visible reason. A real substrate honours this naturally, because its
+    /// enumeration continues from where it stopped.
+    ///
+    /// The check is an assertion rather than a branch: it is O(k) per offer,
+    /// which is real cost on the hottest path in the system, and a violation is
+    /// a caller bug rather than a runtime condition. It is active in the Debug
+    /// and sanitizer configurations, which run the whole test suite, and
+    /// compiles out entirely under NDEBUG.
     bool offer(const Candidate& c) noexcept {
+        assert(rank_of(c.node) == storage_.size() &&
+               "a node was offered twice in one extraction; see the contract on offer()");
+
         ++metrics_.candidates_offered;
 
         const CandidateBetter better;
