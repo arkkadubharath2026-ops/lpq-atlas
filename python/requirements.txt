@@ -1,0 +1,17 @@
+# Pinned analysis, training and plotting stack (ESD.md section 2).
+#
+# Versions are pinned because a figure regenerated with a different matplotlib
+# or a statistic recomputed with a different scipy is not the same artifact, and
+# ESD.md section 36 requires the paper build to be reproducible.
+#
+# These pins are the versions actually resolved on the development host, so the
+# container and the host compute identical results. Regenerate with:
+#   python scripts/build/freeze_requirements.py
+
+numpy==2.2.4
+pandas==2.3.1
+scipy==1.15.2
+scikit-learn==1.6.1
+matplotlib==3.10.8
+statsmodels==0.15.0
+PyYAML==6.0.2
