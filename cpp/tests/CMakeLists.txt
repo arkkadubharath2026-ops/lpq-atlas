@@ -97,7 +97,7 @@ lpq_add_test(test_verification
     LABELS  "unit")
 
 lpq_add_test(test_adaptation
-    SOURCES adaptation/test_online_learner.cpp
+    SOURCES adaptation/test_online_learner.cpp adaptation/test_adaptive_controller.cpp
     LIBS    lpq::adaptation
     LABELS  "unit")
 
