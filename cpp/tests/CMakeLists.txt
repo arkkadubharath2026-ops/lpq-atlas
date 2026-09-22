@@ -71,3 +71,8 @@ lpq_add_test(test_graph
     SOURCES graph/test_csr_graph.cpp graph/test_graph_builder.cpp graph/test_graph_metadata.cpp
     LIBS    lpq::graph
     LABELS  "unit")
+
+lpq_add_test(test_reference_dijkstra
+    SOURCES algorithms/test_reference_dijkstra.cpp
+    LIBS    lpq::algorithms
+    LABELS  "unit;differential")
