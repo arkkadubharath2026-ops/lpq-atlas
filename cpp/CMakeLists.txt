@@ -66,6 +66,21 @@ target_include_directories(lpq_models INTERFACE
 target_link_libraries(lpq_models INTERFACE lpq::features lpq::common)
 
 # ------------------------------------------------------------------------------
+# lpq_lpq -- the learned priority queue itself: candidate management, and (as
+# later milestones land) verification, correction and adaptation.
+#
+# Depends on lpq::models for Prediction and on lpq::features for the feature
+# layout. It does NOT depend on lpq::pq: the candidate manager is handed
+# candidates rather than reaching into a queue, which is what keeps candidate
+# policy testable without a queue, a graph or a search.
+# ------------------------------------------------------------------------------
+add_library(lpq_lpq INTERFACE)
+add_library(lpq::lpq ALIAS lpq_lpq)
+target_include_directories(lpq_lpq INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+target_link_libraries(lpq_lpq INTERFACE lpq::models lpq::features lpq::common)
+
+# ------------------------------------------------------------------------------
 # lpq_metrics -- statistics, CPU pinning, JSON, hardware info, result schema.
 # ------------------------------------------------------------------------------
 add_library(lpq_metrics INTERFACE)
