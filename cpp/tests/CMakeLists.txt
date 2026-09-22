@@ -77,6 +77,13 @@ lpq_add_test(test_features
     LIBS    lpq::features
     LABELS  "unit")
 
+lpq_add_test(test_models
+    SOURCES models/test_prediction.cpp models/test_serialization.cpp
+            models/test_linear_models.cpp models/test_mlp.cpp
+            models/test_tree_ensemble.cpp models/test_calibration.cpp
+    LIBS    lpq::models
+    LABELS  "unit")
+
 lpq_add_test(test_metrics
     SOURCES metrics/test_statistics.cpp metrics/test_json_and_records.cpp
             metrics/test_benchmark_harness.cpp

@@ -50,6 +50,22 @@ target_include_directories(lpq_features INTERFACE
 target_link_libraries(lpq_features INTERFACE lpq::graph lpq::common)
 
 # ------------------------------------------------------------------------------
+# lpq_models -- predictor interface, baselines, linear/logistic/MLP, tree
+# ensemble inference, calibration, model serialization.
+#
+# Depends on lpq::features for the feature layout (a model is meaningless
+# without the column order it was trained against) and on nothing else. In
+# particular it does NOT depend on lpq::algorithms: a predictor must be
+# testable, trainable and serialisable without a graph or a search, which is
+# what lets the model comparison run offline.
+# ------------------------------------------------------------------------------
+add_library(lpq_models INTERFACE)
+add_library(lpq::models ALIAS lpq_models)
+target_include_directories(lpq_models INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+target_link_libraries(lpq_models INTERFACE lpq::features lpq::common)
+
+# ------------------------------------------------------------------------------
 # lpq_metrics -- statistics, CPU pinning, JSON, hardware info, result schema.
 # ------------------------------------------------------------------------------
 add_library(lpq_metrics INTERFACE)
