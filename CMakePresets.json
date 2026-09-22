@@ -1,6 +1,10 @@
 {
   "version": 6,
-  "cmakeMinimumRequired": { "major": 3, "minor": 24, "patch": 0 },
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
   "configurePresets": [
     {
       "name": "base",
@@ -51,7 +55,9 @@
       "inherits": "release",
       "displayName": "Release without instrumentation",
       "description": "Measures the true hot path with all counters and timers compiled out.",
-      "cacheVariables": { "LPQ_ENABLE_INSTRUMENTATION": "OFF" }
+      "cacheVariables": {
+        "LPQ_ENABLE_INSTRUMENTATION": "OFF"
+      }
     },
     {
       "name": "profile",
@@ -64,28 +70,71 @@
     }
   ],
   "buildPresets": [
-    { "name": "debug",           "configurePreset": "debug" },
-    { "name": "release",         "configurePreset": "release" },
-    { "name": "release-native",  "configurePreset": "release-native" },
-    { "name": "release-noinstr", "configurePreset": "release-noinstr" },
-    { "name": "profile",         "configurePreset": "profile" }
+    {
+      "name": "debug",
+      "configurePreset": "debug"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "release-native",
+      "configurePreset": "release-native"
+    },
+    {
+      "name": "release-noinstr",
+      "configurePreset": "release-noinstr"
+    },
+    {
+      "name": "profile",
+      "configurePreset": "profile"
+    }
   ],
   "testPresets": [
     {
       "name": "base",
       "hidden": true,
-      "output": { "outputOnFailure": true, "verbosity": "default" },
-      "execution": { "noTestsAction": "error", "stopOnFailure": false }
+      "output": {
+        "outputOnFailure": true,
+        "verbosity": "default"
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false
+      }
     },
-    { "name": "debug",   "inherits": "base", "configurePreset": "debug" },
-    { "name": "release", "inherits": "base", "configurePreset": "release" },
-    { "name": "profile", "inherits": "base", "configurePreset": "profile" },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "configurePreset": "debug"
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "configurePreset": "release"
+    },
+    {
+      "name": "profile",
+      "inherits": "base",
+      "configurePreset": "profile"
+    },
     {
       "name": "release-fast",
       "inherits": "base",
       "configurePreset": "release",
       "displayName": "Release tests excluding slow fuzz/differential sweeps",
-      "filter": { "exclude": { "label": "slow" } }
+      "filter": {
+        "exclude": {
+          "label": "slow"
+        }
+      }
+    },
+    {
+      "name": "release-noinstr",
+      "inherits": "base",
+      "configurePreset": "release-noinstr",
+      "displayName": "Tests against the build with instrumentation compiled out"
     }
   ]
 }

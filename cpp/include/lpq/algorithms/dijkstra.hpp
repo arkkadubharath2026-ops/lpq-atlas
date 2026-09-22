@@ -100,16 +100,16 @@ template <WeightType W, PriorityQueueLike Queue>
     const TimePoint start = opts.measure_time ? now() : TimePoint{};
 
     queue.push(source, DistanceT{});
-    ++r.counters.pq_pushes;
+    count_event(r.counters.pq_pushes);
 
     while (!queue.empty()) {
-#if LPQ_ENABLE_INSTRUMENTATION
-        r.counters.peak_queue_size =
-            std::max(r.counters.peak_queue_size, static_cast<std::uint64_t>(queue.size()));
-#endif
+        if constexpr (kInstrumentationEnabled) {
+            r.counters.peak_queue_size = std::max(r.counters.peak_queue_size,
+                                                  static_cast<std::uint64_t>(queue.size()));
+        }
 
         const QueueEntry<DistanceT> entry = queue.pop();
-        ++r.counters.pq_pops;
+        count_event(r.counters.pq_pops);
         const NodeId    u = entry.node;
         const DistanceT d = entry.key;
 
@@ -117,38 +117,40 @@ template <WeightType W, PriorityQueueLike Queue>
             // Lazy deletion: discard superseded entries. See the header comment
             // for why the settled check is needed alongside the key check.
             if (r.settled[u] || d > r.dist[u]) {
-                ++r.counters.stale_pops;
+                count_event(r.counters.stale_pops);
                 continue;
             }
         }
 
         r.settled[u] = true;
-        ++r.counters.settled_nodes;
+        count_event(r.counters.settled_nodes);
 
         if (opts.target != kInvalidNode && u == opts.target) {
             r.termination = SearchTermination::kTargetReached;
             if (opts.measure_time) {
                 r.runtime_ns = elapsed_ns_since(start);
             }
-            r.counters.pq_comparisons = queue.comparison_count();
+            if constexpr (kInstrumentationEnabled) {
+                r.counters.pq_comparisons = queue.comparison_count();
+            }
             return r;
         }
 
         for (const Arc<W>& a : g.out_arcs(u)) {
-            ++r.counters.relaxations;
+            count_event(r.counters.relaxations);
             const DistanceT candidate = saturating_add<W>(d, a.weight);
             if (candidate < r.dist[a.target]) {
                 r.dist[a.target]   = candidate;
                 r.parent[a.target] = u;
-                ++r.counters.successful_relaxations;
+                count_event(r.counters.successful_relaxations);
 
                 if constexpr (Queue::kSupportsDecreaseKey) {
                     // Inserts when absent, lowers the key when present.
                     queue.decrease_key(a.target, candidate);
-                    ++r.counters.pq_decrease_keys;
+                    count_event(r.counters.pq_decrease_keys);
                 } else {
                     queue.push(a.target, candidate);
-                    ++r.counters.pq_pushes;
+                    count_event(r.counters.pq_pushes);
                 }
             }
         }
@@ -159,7 +161,9 @@ template <WeightType W, PriorityQueueLike Queue>
     if (opts.measure_time) {
         r.runtime_ns = elapsed_ns_since(start);
     }
-    r.counters.pq_comparisons = queue.comparison_count();
+    if constexpr (kInstrumentationEnabled) {
+        r.counters.pq_comparisons = queue.comparison_count();
+    }
     return r;
 }
 

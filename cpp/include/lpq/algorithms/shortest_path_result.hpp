@@ -25,6 +25,34 @@
 
 namespace lpq {
 
+/// Whether instrumentation was compiled in (ESD.md section 19).
+///
+/// Exposed as a constexpr bool rather than used as a bare macro so that call
+/// sites read as ordinary C++ and the compiler type-checks both branches.
+inline constexpr bool kInstrumentationEnabled =
+#if LPQ_ENABLE_INSTRUMENTATION
+    true;
+#else
+    false;
+#endif
+
+/// Increments a counter, or does nothing when instrumentation is compiled out.
+///
+/// ESD.md section 19 requires instrumentation to be compile-time configurable
+/// so that a timed run can measure the true hot path. Guarding each counter
+/// individually with #if would scatter preprocessor conditionals through the
+/// search loops; this keeps them readable while still removing the increment
+/// from the generated code entirely rather than merely skipping it at run time.
+template <typename T>
+constexpr void count_event(T& counter, T amount = T{1}) noexcept {
+    if constexpr (kInstrumentationEnabled) {
+        counter += amount;
+    } else {
+        (void)counter;
+        (void)amount;
+    }
+}
+
 /// Per-run priority-queue and traversal statistics (PRD.md section 20).
 ///
 /// Populated only when instrumentation is compiled in (ESD.md section 19);

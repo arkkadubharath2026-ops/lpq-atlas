@@ -137,6 +137,26 @@ template <WeightType W>
     }
 }
 
+/// Saturating addition of two distances.
+///
+/// A* forms its key as g + h, where both operands are distances rather than a
+/// distance plus an edge weight. Without this overload the call would select
+/// the one above and narrow the heuristic estimate from the 64-bit distance
+/// type to the 32-bit weight type -- silently wrapping any estimate above
+/// 2^32, which a Haversine heuristic in metres reaches easily on a
+/// continental-scale road network.
+template <WeightType W>
+[[nodiscard]] constexpr DistanceType<W> saturating_add_distances(
+    DistanceType<W> a, DistanceType<W> b) noexcept {
+    if constexpr (std::same_as<W, double>) {
+        return a + b;
+    } else {
+        using D = DistanceType<W>;
+        const D limit = std::numeric_limits<D>::max();
+        return (a > limit - b) ? limit : static_cast<D>(a + b);
+    }
+}
+
 }  // namespace lpq
 
 #endif  // LPQ_COMMON_NUMERIC_HPP

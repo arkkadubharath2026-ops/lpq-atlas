@@ -38,7 +38,9 @@
 #include <string>
 #include <vector>
 
+#include "lpq/algorithms/astar.hpp"
 #include "lpq/algorithms/dijkstra.hpp"
+#include "lpq/algorithms/heuristics.hpp"
 #include "lpq/algorithms/reference_dijkstra.hpp"
 #include "lpq/common/error.hpp"
 #include "lpq/common/rng.hpp"
@@ -67,6 +69,7 @@ using Graph = CsrGraph<W>;
 
 struct Options {
     std::string algorithm   = "dijkstra";
+    std::string heuristic   = "euclidean";
     std::string pq          = "all";
     std::string graph_spec  = "grid:200x200";
     std::string mode        = "exact";
@@ -86,7 +89,9 @@ struct Options {
 void print_usage() {
     std::cout << R"(lpq_benchmark -- shortest-path benchmark runner
 
-  --algorithm <name>     dijkstra (default)
+  --algorithm <name>     dijkstra (default) | astar
+  --heuristic <name>     zero | euclidean (default) | manhattan | haversine
+                         (astar only; euclidean/manhattan/haversine need coordinates)
   --pq <name>            binary_heap | four_ary_heap | pairing_heap |
                          fibonacci_heap | radix_heap | all (default)
   --graph <spec>         grid:RxC | path:N | star:N | random:N:P  (default grid:200x200)
@@ -121,6 +126,8 @@ void print_usage() {
             std::exit(0);
         } else if (a == "--algorithm") {
             o.algorithm = next_arg(argc, argv, i, "--algorithm");
+        } else if (a == "--heuristic") {
+            o.heuristic = next_arg(argc, argv, i, "--heuristic");
         } else if (a == "--pq") {
             o.pq = next_arg(argc, argv, i, "--pq");
         } else if (a == "--graph") {
@@ -153,6 +160,13 @@ void print_usage() {
     }
     if (o.repetitions == 0) {
         throw InvalidConfigError("--repetitions must be at least 1");
+    }
+    if (o.algorithm == "astar" && !o.single_target) {
+        // A* is inherently point-to-point; there is no "A* to everywhere".
+        throw InvalidConfigError("--sssp is incompatible with --algorithm astar");
+    }
+    if (o.algorithm != "dijkstra" && o.algorithm != "astar") {
+        throw InvalidConfigError("unknown --algorithm: " + o.algorithm);
     }
     return o;
 }
@@ -287,16 +301,47 @@ struct Query {
 // Running one (queue, query) pair
 // -----------------------------------------------------------------------------
 
+/// Dispatches an A* run on the heuristic named in the options.
+///
+/// The heuristic is a template parameter, so each variant is a separately
+/// compiled, fully inlined search -- there is no virtual call per node. The
+/// dispatch happens once per query, outside the timed region.
+template <typename Queue>
+ShortestPathResult<W> run_astar(const Graph& g, NodeId source, NodeId target, Queue& queue,
+                                const std::string& heuristic, double scale) {
+    AstarOptions aopts;
+    aopts.target       = target;
+    aopts.measure_time = false;
+
+    if (heuristic == "zero") {
+        ZeroHeuristic<W> h;
+        return astar<W, Queue, ZeroHeuristic<W>>(g, source, queue, h, aopts);
+    }
+    if (heuristic == "euclidean") {
+        EuclideanHeuristic<W> h(scale);
+        return astar<W, Queue, EuclideanHeuristic<W>>(g, source, queue, h, aopts);
+    }
+    if (heuristic == "manhattan") {
+        ManhattanHeuristic<W> h(scale);
+        return astar<W, Queue, ManhattanHeuristic<W>>(g, source, queue, h, aopts);
+    }
+    if (heuristic == "haversine") {
+        HaversineHeuristic<W> h(scale);
+        return astar<W, Queue, HaversineHeuristic<W>>(g, source, queue, h, aopts);
+    }
+    throw InvalidConfigError("unknown --heuristic: " + heuristic);
+}
+
 /// Runs and validates one query on one queue.
 template <typename Queue>
 ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query& q,
                          const Options& o, const std::string& pq_name,
-                         const HardwareInfo& hw) {
+                         const HardwareInfo& hw, double heuristic_scale) {
     ResultRecord rec;
     rec.experiment_id = o.experiment_id;
     rec.timestamp     = iso8601_now();
     rec.dataset       = g.dataset_id();
-    rec.algorithm     = o.algorithm;
+    rec.algorithm     = o.algorithm == "astar" ? ("astar:" + o.heuristic) : o.algorithm;
     rec.pq            = pq_name;
     rec.mode          = o.mode;
     rec.graph_nodes   = meta.node_count;
@@ -318,8 +363,18 @@ ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query&
     Queue queue;
     queue.reserve_nodes(g.num_nodes());
 
+    const bool is_astar = (o.algorithm == "astar");
+
+    // The exact call that will be timed, so validation and measurement cannot
+    // diverge.
+    auto run_once = [&]() {
+        return is_astar ? run_astar<Queue>(g, q.source, q.target, queue, o.heuristic,
+                                           heuristic_scale)
+                        : dijkstra<W, Queue>(g, q.source, queue, dopts);
+    };
+
     // --- Correctness first: a fast wrong answer is not a result -------------
-    const auto candidate = dijkstra<W, Queue>(g, q.source, queue, dopts);
+    const auto candidate = run_once();
     if (o.validate) {
         ReferenceDijkstraOptions ropts;
         ropts.target = q.target;
@@ -337,9 +392,10 @@ ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query&
             rec.exact_match = costs_equal<W>(candidate.dist[probe], reference.dist[probe]);
 
             if (!*rec.exact_match) {
-                std::cerr << "FATAL: " << pq_name << " disagreed with the reference on query "
-                          << q.source << "->" << q.target << " (" << candidate.dist[probe]
-                          << " vs " << reference.dist[probe] << ")\n";
+                std::cerr << "FATAL: " << rec.algorithm << " / " << pq_name
+                          << " disagreed with the reference on query " << q.source << "->"
+                          << q.target << " (" << candidate.dist[probe] << " vs "
+                          << reference.dist[probe] << ")\n";
                 std::exit(2);
             }
         } else {
@@ -356,10 +412,18 @@ ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query&
     bcfg.cpu_core           = o.cpu_core;
     bcfg.require_pinning    = o.require_pinning;
 
+    // The value consumed must be a genuine OUTPUT of the search, not a
+    // counter. Counters compile out entirely when instrumentation is disabled
+    // (ESD.md section 19), so consuming settled_nodes would hand the optimizer
+    // a constant zero in exactly the build configuration used to measure the
+    // true hot path -- the one where a deleted search would be least visible.
+    // The probed distance is always computed.
+    const NodeId probe_node = (q.target == kInvalidNode) ? q.source : q.target;
+
     rec.timing = run_benchmark(
         [&] {
-            const auto r = dijkstra<W, Queue>(g, q.source, queue, dopts);
-            do_not_optimize(r.counters.settled_nodes);
+            const auto r = run_once();
+            do_not_optimize(r.dist[probe_node]);
         },
         bcfg);
 
@@ -491,6 +555,26 @@ int main(int argc, char** argv) {
         const auto queries = generate_queries(g, o.query_count, o.seed, o.single_target);
         const auto hw      = collect_hardware_info();
 
+        // The heuristic scale converts coordinate units into weight units and
+        // must not exceed the smallest such ratio anywhere in the graph, or the
+        // estimate overshoots the true cost and A* silently returns non-optimal
+        // paths. It is therefore derived from the graph rather than defaulted.
+        double heuristic_scale = 1.0;
+        if (o.algorithm == "astar" && o.heuristic != "zero") {
+            if (!g.has_coordinates()) {
+                throw UnsupportedConfigurationError(
+                    "--heuristic " + o.heuristic + " requires a graph with coordinates; "
+                    "use --heuristic zero");
+            }
+            heuristic_scale = euclidean_admissible_scale(g);
+            if (!(heuristic_scale > 0.0)) {
+                throw UnsupportedConfigurationError(
+                    "no admissible heuristic scale could be derived for this graph");
+            }
+            std::cout << "heuristic    : " << o.heuristic
+                      << "  (admissible scale " << heuristic_scale << ")\n";
+        }
+
         if (hw.git_commit == "unknown") {
             std::cerr << "refusing to run: this binary carries no git provenance "
                          "(ESD.md section 40)\n";
@@ -519,16 +603,16 @@ int main(int argc, char** argv) {
             for (const auto& q : queries) {
                 ResultRecord rec;
                 if (name == "binary_heap") {
-                    rec = measure_one<BinaryHeap<Dist>>(g, meta, q, o, name, hw);
+                    rec = measure_one<BinaryHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
                 } else if (name == "four_ary_heap") {
-                    rec = measure_one<FourAryHeap<Dist>>(g, meta, q, o, name, hw);
+                    rec = measure_one<FourAryHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
                 } else if (name == "pairing_heap") {
-                    rec = measure_one<PairingHeap<Dist>>(g, meta, q, o, name, hw);
+                    rec = measure_one<PairingHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
                 } else if (name == "fibonacci_heap") {
-                    rec = measure_one<FibonacciHeap<Dist>>(g, meta, q, o, name, hw);
+                    rec = measure_one<FibonacciHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
                 } else if (name == "radix_heap") {
                     if constexpr (radix_heap_supports<W>()) {
-                        rec = measure_one<RadixHeap<Dist>>(g, meta, q, o, name, hw);
+                        rec = measure_one<RadixHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
                     } else {
                         rec.pq                 = name;
                         rec.unsupported_reason = radix_heap_unsupported_reason<W>();

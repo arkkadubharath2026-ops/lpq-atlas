@@ -93,6 +93,11 @@ lpq_add_test(test_reference_dijkstra
     LIBS    lpq::algorithms
     LABELS  "unit;differential")
 
+lpq_add_test(test_astar
+    SOURCES algorithms/test_astar.cpp
+    LIBS    lpq::algorithms lpq::pq
+    LABELS  "unit;differential")
+
 # The differential sweep runs every query through six implementations over
 # thousands of random graphs, so it is labelled "slow" and excluded from the
 # release-fast preset used for quick iteration.
