@@ -92,6 +92,10 @@ template <WeightType W, PriorityQueueLike Queue>
     }
 
     queue.clear();
+    // Queues are reused across queries, so the comparison counter must be
+    // zeroed per query. Without this the count would accumulate over a whole
+    // run and every per-query figure would be wrong.
+    queue.reset_comparison_count();
 
     const TimePoint start = opts.measure_time ? now() : TimePoint{};
 
@@ -126,6 +130,7 @@ template <WeightType W, PriorityQueueLike Queue>
             if (opts.measure_time) {
                 r.runtime_ns = elapsed_ns_since(start);
             }
+            r.counters.pq_comparisons = queue.comparison_count();
             return r;
         }
 
@@ -154,6 +159,7 @@ template <WeightType W, PriorityQueueLike Queue>
     if (opts.measure_time) {
         r.runtime_ns = elapsed_ns_since(start);
     }
+    r.counters.pq_comparisons = queue.comparison_count();
     return r;
 }
 

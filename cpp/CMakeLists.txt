@@ -41,6 +41,15 @@ target_include_directories(lpq_pq INTERFACE
 target_link_libraries(lpq_pq INTERFACE lpq::common)
 
 # ------------------------------------------------------------------------------
+# lpq_metrics -- statistics, CPU pinning, JSON, hardware info, result schema.
+# ------------------------------------------------------------------------------
+add_library(lpq_metrics INTERFACE)
+add_library(lpq::metrics ALIAS lpq_metrics)
+target_include_directories(lpq_metrics INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+target_link_libraries(lpq_metrics INTERFACE lpq::common lpq::algorithms Threads::Threads)
+
+# ------------------------------------------------------------------------------
 # lpq_algorithms -- reference Dijkstra, Dijkstra over pluggable queues, A*.
 # ------------------------------------------------------------------------------
 add_library(lpq_algorithms INTERFACE)
@@ -48,6 +57,13 @@ add_library(lpq::algorithms ALIAS lpq_algorithms)
 target_include_directories(lpq_algorithms INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 target_link_libraries(lpq_algorithms INTERFACE lpq::graph lpq::pq lpq::common)
+
+# ------------------------------------------------------------------------------
+# Applications
+# ------------------------------------------------------------------------------
+if(LPQ_BUILD_APPS)
+    add_subdirectory(apps)
+endif()
 
 # ------------------------------------------------------------------------------
 # Tests

@@ -72,6 +72,12 @@ lpq_add_test(test_graph
     LIBS    lpq::graph
     LABELS  "unit")
 
+lpq_add_test(test_metrics
+    SOURCES metrics/test_statistics.cpp metrics/test_json_and_records.cpp
+            metrics/test_benchmark_harness.cpp
+    LIBS    lpq::metrics lpq::pq
+    LABELS  "unit")
+
 lpq_add_test(test_priority_queues
     SOURCES pq/test_priority_queues.cpp
     LIBS    lpq::pq

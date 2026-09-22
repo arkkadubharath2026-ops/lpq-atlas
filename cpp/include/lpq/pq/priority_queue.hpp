@@ -81,6 +81,11 @@ concept PriorityQueueLike = requires(Q q, const Q cq, NodeId n, typename Q::KeyT
     /// in a way wall-clock time is not.
     { cq.comparison_count() } -> std::convertible_to<std::uint64_t>;
 
+    /// Zeroes the comparison counter. Queues are reused across queries, so a
+    /// per-query count requires an explicit reset; without it the counter would
+    /// accumulate across every query in a run.
+    { q.reset_comparison_count() } -> std::same_as<void>;
+
     /// Compile-time declaration of the key-update strategy.
     { Q::kSupportsDecreaseKey } -> std::convertible_to<bool>;
 };

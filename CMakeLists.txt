@@ -51,6 +51,7 @@ option(LPQ_ENABLE_WERROR      "Treat compiler warnings as errors"              O
 option(LPQ_ENABLE_INSTRUMENTATION "Compile in LPQ/PQ counters and timers" ON)
 
 include(LpqCompilerSettings)
+include(LpqBuildInfo)
 
 # ------------------------------------------------------------------------------
 # Dependencies
