@@ -35,6 +35,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -53,7 +54,9 @@
 #include "lpq/metrics/hardware_info.hpp"
 #include "lpq/metrics/json_writer.hpp"
 #include "lpq/metrics/result_record.hpp"
+#include "lpq/features/graph_features.hpp"
 #include "lpq/lpq/learned_priority_queue.hpp"
+#include "lpq/models/logistic_predictor.hpp"
 #include "lpq/pq/binary_heap.hpp"
 #include "lpq/pq/fibonacci_heap.hpp"
 #include "lpq/pq/pairing_heap.hpp"
@@ -89,6 +92,13 @@ struct Options {
     /// lists, in this one process -- see the note in experiment_manifest.hpp on
     /// why one process matters.
     std::string experiment_file;
+
+    /// A trained model for the learned queue's scorer.
+    ///
+    /// When empty the queue runs with no scorer at all, which scores every node
+    /// identically -- the control condition that isolates the LPQ machinery
+    /// from the value of its predictions.
+    std::string model;
 
     std::string mode        = "exact";
 
@@ -135,7 +145,11 @@ void print_usage() {
   --heuristic <name>     zero | euclidean (default) | manhattan | haversine
                          (astar only; euclidean/manhattan/haversine need coordinates)
   --pq <name>            binary_heap | four_ary_heap | pairing_heap |
-                         fibonacci_heap | radix_heap | lpq | all (default)
+                         fibonacci_heap | radix_heap | lpq | lpq_model |
+                         all (default)
+  --model <path>         trained model for --pq lpq_model. Without it the
+                         learned queue scores every node identically, which is
+                         the control condition rather than a degraded mode.
   --lpq-window <lo:hi>   learned-queue candidate window bounds (default 2:32)
   --lpq-bucket-width <n> substrate bucket width (default: derived from weights)
   --graph <spec>         grid:RxC | path:N | star:N | random:N:P  (default grid:200x200)
@@ -190,6 +204,8 @@ void print_usage() {
             o.queries_file = next_arg(argc, argv, i, "--queries-file");
         } else if (a == "--experiment") {
             o.experiment_file = next_arg(argc, argv, i, "--experiment");
+        } else if (a == "--model") {
+            o.model = next_arg(argc, argv, i, "--model");
         } else if (a == "--epsilon") {
             o.epsilon = std::stod(next_arg(argc, argv, i, "--epsilon"));
         } else if (a == "--mode") {
@@ -243,6 +259,22 @@ void print_usage() {
     }
     if (o.algorithm != "dijkstra" && o.algorithm != "astar") {
         throw InvalidConfigError("unknown --algorithm: " + o.algorithm);
+    }
+    // Each direction of this pair prevents a run whose label and behaviour
+    // disagree. lpq_model without a model would score every node identically
+    // and be indistinguishable from the control while carrying a name that says
+    // otherwise; a model with any other queue would be loaded, built and never
+    // consulted, leaving the command line claiming a learned component that
+    // played no part.
+    if (o.pq == "lpq_model" && o.model.empty()) {
+        throw InvalidConfigError(
+            "--pq lpq_model requires --model. Without one the queue scores every node "
+            "identically, which is the control condition and is spelled --pq lpq");
+    }
+    if (!o.model.empty() && o.pq != "lpq_model") {
+        throw InvalidConfigError(
+            "--model only affects --pq lpq_model; with --pq " + o.pq +
+            " it would be loaded and never consulted");
     }
     if (o.mode != "exact" && o.mode != "approximate") {
         throw InvalidConfigError("unknown --mode: " + o.mode);
@@ -441,6 +473,15 @@ ShortestPathResult<W> run_astar(const Graph& g, NodeId source, NodeId target, Qu
 /// whether a model earned its overhead.
 using BenchLpq = LearnedPriorityQueue<W, ConstantNodeScorer>;
 
+/// The learned queue with an actual model behind it.
+///
+/// A distinct type, not a flag, because the scorer is a template parameter: the
+/// score lookup is inlined into push, and making it a runtime branch would add
+/// a cost to the control condition that the control condition is supposed to be
+/// free of.
+using BenchScorer    = StaticNodeScorer<LogisticPredictor>;
+using BenchLpqStatic = LearnedPriorityQueue<W, BenchScorer>;
+
 /// Builds the queue for a measurement.
 ///
 /// Classical queues take no parameters, so the default does. The learned queue
@@ -451,7 +492,8 @@ using BenchLpq = LearnedPriorityQueue<W, ConstantNodeScorer>;
 /// rather than the queue.
 template <typename Queue>
 [[nodiscard]] Queue make_queue(const GraphMetadata& meta, const Options& o) {
-    if constexpr (std::is_same_v<Queue, BenchLpq>) {
+    if constexpr (std::is_same_v<Queue, BenchLpq> ||
+                  std::is_same_v<Queue, BenchLpqStatic>) {
         CandidateWindowConfig window;
         window.k_min = static_cast<std::uint32_t>(o.lpq_window_min);
         window.k_max = static_cast<std::uint32_t>(o.lpq_window_max);
@@ -479,7 +521,7 @@ template <typename Queue>
         const CorrectnessPolicy policy = (o.mode == "approximate")
                                              ? CorrectnessPolicy::approximate(o.epsilon)
                                              : CorrectnessPolicy::exact();
-        return BenchLpq{static_cast<Dist>(width), window, policy};
+        return Queue{static_cast<Dist>(width), window, policy};
     } else {
         (void)meta;
         (void)o;
@@ -491,7 +533,8 @@ template <typename Queue>
 template <typename Queue>
 ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query& q,
                          const Options& o, const std::string& pq_name,
-                         const HardwareInfo& hw, double heuristic_scale) {
+                         const HardwareInfo& hw, double heuristic_scale,
+                         const BenchScorer* scorer = nullptr) {
     ResultRecord rec;
     rec.experiment_id = o.experiment_id;
     rec.timestamp     = iso8601_now();
@@ -517,6 +560,15 @@ ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query&
     // Allocated once, outside the timed region, and reused across repetitions.
     Queue queue = make_queue<Queue>(meta, o);
     queue.reserve_nodes(g.num_nodes());
+
+    if constexpr (std::is_same_v<Queue, BenchLpqStatic>) {
+        // Built once per graph by the caller and pointed at here. The scorer
+        // holds one float per node and its construction is O(n) model
+        // inferences; rebuilding it per query would put model evaluation inside
+        // the measurement, which is exactly what StaticNodeScorer exists to
+        // keep out of it.
+        queue.set_scorer(scorer);
+    }
 
     const bool is_astar = (o.algorithm == "astar");
 
@@ -913,8 +965,11 @@ int main(int argc, char** argv) {
         } else {
             std::vector<std::string> queue_names;
             if (o.pq == "all") {
-                queue_names = {"binary_heap", "four_ary_heap", "pairing_heap", "fibonacci_heap",
-                               "radix_heap", "lpq"};
+                    // lpq_model is deliberately NOT in "all": without --model it
+                // cannot run, and a row that is always unsupported would be
+                // noise in every default run.
+                queue_names = {"binary_heap", "four_ary_heap", "pairing_heap",
+                               "fibonacci_heap", "radix_heap", "lpq"};
             } else {
                 queue_names = {o.pq};
             }
@@ -947,6 +1002,27 @@ int main(int argc, char** argv) {
                 std::cout << "hw counters  : requested by the manifest; reported as not "
                              "measured where the host exposes no PMU\n";
             }
+        }
+
+        // --- the scorer, built once outside every timed region ---------------
+        //
+        // O(n) model inferences and one float per node. Built here rather than
+        // per query because that is how it would be deployed: StaticNodeScorer
+        // exists precisely so that model evaluation happens before the search,
+        // not inside it.
+        std::unique_ptr<BenchScorer> scorer;
+        if (!o.model.empty()) {
+            std::ifstream model_in(o.model, std::ios::binary);
+            if (!model_in) {
+                throw InvalidConfigError("cannot open model: " + o.model);
+            }
+            const LogisticPredictor predictor = LogisticPredictor::load(model_in);
+            const GraphFeatures     features(g, meta);
+
+            scorer = std::make_unique<BenchScorer>();
+            scorer->build(features, predictor);
+            std::cout << "model        : " << o.model << "  ("
+                      << scorer->memory_bytes() / 1024 << " KiB of scores)\n";
         }
 
         std::vector<ResultRecord>           records;
@@ -998,6 +1074,14 @@ int main(int argc, char** argv) {
                     } else {
                         rec.pq                 = name;
                         rec.unsupported_reason = radix_heap_unsupported_reason<W>();
+                    }
+                } else if (name == "lpq_model") {
+                    if constexpr (bucket_substrate_supports<W>()) {
+                        rec = measure_one<BenchLpqStatic>(g, meta, q, o, name, hw,
+                                                          heuristic_scale, scorer.get());
+                    } else {
+                        rec.pq                 = name;
+                        rec.unsupported_reason = bucket_substrate_unsupported_reason<W>();
                     }
                 } else if (name == "lpq") {
                     if constexpr (bucket_substrate_supports<W>()) {

@@ -35,6 +35,14 @@ a badly chosen bucket width**: across a 135× change in width, approximate mode 
 nearly flat while exact mode degrades 41×. Also records the two regimes where the
 slack is provably inert.
 
+**[static-scorer-training.md](static-scorer-training.md)** — the first
+measurement with a model in it. The static features rank their target well on a
+social graph (held-out AUC 0.79, 22x the precision of a random ranker) and
+barely above chance on a road network (0.53, 1.12x). The finding that matters:
+**even where the model predicts well, using it makes the queue slightly worse** —
++0.68% comparisons on `snap_facebook`, +0.09% on `dimacs_ny`. Fitting the stated
+target is not the same as helping.
+
 **[profiling.md](profiling.md)** — why no hardware performance counters appear
 anywhere in this directory. WSL2 exposes no CPU PMU, so cycles, cache misses and
 branch misses are **not measured** on the development host, and no figure in this
@@ -67,7 +75,8 @@ fewer comparisons while running 4.57× slower. A document reporting a reduction
 in comparisons is reporting a reduction in comparisons, and says so explicitly
 where it might be misread as a speedup.
 
-**No learned model has been involved in any measurement yet.** Every run so far
-used a constant scorer, which was deliberate — it isolates the queue's machinery
-from prediction quality — but it means nothing here measures the learned
-contribution the project exists to evaluate.
+**A learned model has now been measured, and it did not help.** Most documents
+here predate it and describe runs with a constant scorer, which was deliberate:
+it isolates the queue's machinery from prediction quality. `static-scorer-training.md`
+is the exception and reports the model end to end. Nothing in this directory
+shows the learned component improving the queue on any dataset.

@@ -1,14 +1,24 @@
-# Training the static node scorer: it works on a social graph and not on a road network
+# Training the static node scorer: it predicts well and still does not help
 
 The first measurement of the project's learned component. Until now every
 benchmark ran with a constant scorer, so nothing measured had a model in it.
 
-The result is split. On a social graph the static features carry real,
-generalising signal. On a road network — the dataset this project's headline
-measurements use — they carry **almost none**.
+Two findings, and the second is the one that matters.
+
+**The features carry signal on a social graph and almost none on a road
+network.** Held-out ROC AUC is 0.79 on `snap_facebook` and 0.53 on `dimacs_ny`,
+and the reason is structural: road networks have near-uniform degree, so
+degree-based features cannot separate their nodes.
+
+**Where the model does predict well, using it still makes the queue slightly
+worse.** On `snap_facebook`, with 22x the precision of a random ranker, the
+trained scorer increases queue comparisons by 0.68%. Fitting the stated target
+accurately turns out not to be the same thing as helping, and the gap between
+those two is the real result here.
 
 Everything below is measured. The classification scores are held out: a node is
-wholly in the training split or wholly in the test split, never both.
+wholly in the training split or wholly in the test split, never both. The
+end-to-end numbers are comparison counts, which are exact.
 
 ## What is being predicted
 
@@ -95,13 +105,63 @@ leaves a static feature set with nothing to learn from.
 currently specified has essentially nothing to contribute.** A 1.12× precision
 lift will not reorder buckets usefully.
 
+## End to end: the model does not help, even where it predicts well
+
+The classification scores above say how well the model answers its question.
+They do not say whether answering it helps. That is a separate measurement, and
+it has now been made: `--pq lpq_model --model <file>` builds a `StaticNodeScorer`
+once per graph, outside every timed region, and runs the identical queue with it.
+
+Comparison counts, which are exact and machine-independent, over the same query
+manifests used above:
+
+| | control (constant scorer) | with the trained model | change |
+|---|---:|---:|---:|
+| `dimacs_ny` | 177,580,603 | 177,732,559 | **+0.09%** |
+| `snap_facebook` | 798,334,612 | 803,764,660 | **+0.68%** |
+
+**The model makes the queue slightly worse on both datasets**, including the one
+where it ranks its own target with AUC 0.79 and 22x the precision of a random
+ranker.
+
+The counts differ, so the scorer is demonstrably changing queue behaviour rather
+than being ignored -- the pop counts move too (3,534,412 to 3,531,956 on
+facebook). It is changing it in the wrong direction.
+
+No timing claim is made here. The measured medians were 34.4 ms against 31.9 ms
+on `dimacs_ny` and 2.15 ms against 2.62 ms on `snap_facebook`, but the
+across-query MAD was of the same order as the medians and every run was flagged
+noisy, so those differences are not separable from noise at five repetitions.
+The comparison counts are exact and are what the conclusion rests on.
+
+### Why this is not simply a bad model
+
+A hypothesis, not a measurement, and labelled as such.
+
+The scorer is asked for **P(this node is the first extraction from its bucket)**,
+marginalised over every query in the training set. The queue needs something
+else: within *this* bucket at *this* moment, which of the entries present has the
+smallest key. Those are different questions. A node with a high marginal
+probability of winning buckets is not thereby the minimum of the particular
+bucket it currently sits in, so ordering the front by that probability can
+promote entries that are not the current minimum and push the true minimum out
+of the examined window -- which costs a verification failure and a fallback scan.
+
+If that is right, the defect is in what the static formulation can express, not
+in the fit: no amount of accuracy on a marginal, per-node, query-independent
+target can order a per-instance, per-bucket comparison. Confirming it needs the
+window-hit rate to be compared between the two runs, which the runner does not
+currently report, so it remains untested.
+
 ## What this does not show
 
-- **No speedup is claimed or measured.** These are classification scores. The
-  phase profile established that the LPQ's deficit is not made of comparisons
-  (it performs 12.9% fewer than the binary heap while running 4.57× slower), so
-  even a perfect scorer would be improving the part that is not the problem. The
-  end-to-end effect of this model on wall-clock has **not been measured**.
+- **No speedup is claimed, and none was found.** The end-to-end comparison
+  counts above are exact and show the model making the queue marginally worse on
+  both datasets. The wall-clock effect remains **unmeasured**: at five
+  repetitions the medians differed by less than the across-query MAD. A paired
+  comparison at the full protocol would be needed before any timing statement.
+- **The window-hit rate was not measured**, so the explanation offered above for
+  why a well-fitted model does not help is a hypothesis and not a finding.
 - **Only static features were used**, because only static features can be
   precomputed per node. The dynamic, queue and search-state feature groups exist
   in `FeatureVector` and are left at zero here. A model that saw them would have
