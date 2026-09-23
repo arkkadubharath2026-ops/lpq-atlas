@@ -83,6 +83,7 @@ lpq_add_test(test_models
     SOURCES models/test_prediction.cpp models/test_serialization.cpp
             models/test_linear_models.cpp models/test_mlp.cpp
             models/test_tree_ensemble.cpp models/test_calibration.cpp
+            models/test_training_data.cpp
     LIBS    lpq::models
     LABELS  "unit")
 

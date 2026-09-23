@@ -79,3 +79,36 @@ target_link_libraries(lpq_profile_noinstr PRIVATE
 target_compile_definitions(lpq_profile_noinstr PRIVATE LPQ_ENABLE_PHASE_PROFILING=0)
 target_compile_options(lpq_profile_noinstr PRIVATE
     "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wno-old-style-cast>")
+
+# ------------------------------------------------------------------------------
+# lpq_collect -- builds the offline training set (ESD.md section 39 milestone 15).
+#
+# Offline preparation like lpq_convert, not measurement: it runs the trusted
+# reference search to derive ground-truth labels and never enters a timed
+# region. It deliberately uses no instrumentation hook in the learned queue --
+# the labels come from the reference search, so the hot path stays untouched.
+# ------------------------------------------------------------------------------
+add_executable(lpq_collect lpq_collect.cpp)
+target_link_libraries(lpq_collect PRIVATE
+    lpq::algorithms
+    lpq::features
+    lpq::models
+    lpq::graph
+    lpq::compiler_settings)
+
+# ------------------------------------------------------------------------------
+# lpq_model_info -- inspect a model file.
+#
+# Exists mainly for cross-language verification: the training pipeline writes
+# model files from Python against a second implementation of the layout in
+# serialization.hpp, and the only way to establish that the two agree is to load
+# a Python-written file with the real C++ loader. python/tests/test_model_io.py
+# does exactly that through this tool.
+# ------------------------------------------------------------------------------
+add_executable(lpq_model_info lpq_model_info.cpp)
+target_link_libraries(lpq_model_info PRIVATE
+    lpq::models
+    lpq::features
+    lpq::compiler_settings)
+target_compile_options(lpq_model_info PRIVATE
+    "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wno-old-style-cast>")

@@ -35,6 +35,12 @@ datasets/raw/
 datasets/processed/
 models/checkpoints/
 models/exported/
+
+# Training sets are derived: lpq_collect regenerates them exactly from the
+# graph and the query manifest, both of which ARE versioned. The NY set alone
+# is ~30 MB, and a file that can be rebuilt byte-for-byte from committed inputs
+# is not worth carrying in history.
+models/training/
 experiments/runs/
 
 # Raw benchmark output is immutable but not committed by default.
