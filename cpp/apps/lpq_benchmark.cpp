@@ -52,6 +52,7 @@
 #include "lpq/metrics/hardware_info.hpp"
 #include "lpq/metrics/json_writer.hpp"
 #include "lpq/metrics/result_record.hpp"
+#include "lpq/lpq/learned_priority_queue.hpp"
 #include "lpq/pq/binary_heap.hpp"
 #include "lpq/pq/fibonacci_heap.hpp"
 #include "lpq/pq/pairing_heap.hpp"
@@ -100,6 +101,17 @@ struct Options {
     /// need not be the same number, and reporting the wrong one would
     /// misattribute the query set.
     SeedType    query_seed = 42;
+
+    /// Candidate-window bounds for the learned queue. The window is the number
+    /// of entries the verification layer is allowed to examine per extraction;
+    /// it is the knob that trades verification cost against the chance of
+    /// skipping a scan (see learned_priority_queue.hpp).
+    std::size_t lpq_window_min = 2;
+    std::size_t lpq_window_max = 32;
+
+    /// Bucket width for the learned queue's substrate. 0 means "derive it from
+    /// the graph" -- see make_queue().
+    std::uint64_t lpq_bucket_width = 0;
 };
 
 void print_usage() {
@@ -109,7 +121,9 @@ void print_usage() {
   --heuristic <name>     zero | euclidean (default) | manhattan | haversine
                          (astar only; euclidean/manhattan/haversine need coordinates)
   --pq <name>            binary_heap | four_ary_heap | pairing_heap |
-                         fibonacci_heap | radix_heap | all (default)
+                         fibonacci_heap | radix_heap | lpq | all (default)
+  --lpq-window <lo:hi>   learned-queue candidate window bounds (default 2:32)
+  --lpq-bucket-width <n> substrate bucket width (default: derived from weights)
   --graph <spec>         grid:RxC | path:N | star:N | random:N:P  (default grid:200x200)
   --dataset <path>       converted graph (.lpqgraph) to load instead of --graph
   --queries-file <path>  query manifest to run instead of generating queries
@@ -173,6 +187,22 @@ void print_usage() {
             o.validate = false;
         } else if (a == "--sssp") {
             o.single_target = false;
+        } else if (a == "--lpq-window") {
+            const std::string spec  = next_arg(argc, argv, i, "--lpq-window");
+            const std::size_t colon = spec.find(':');
+            if (colon == std::string::npos) {
+                throw InvalidConfigError("--lpq-window expects lo:hi, got '" + spec + "'");
+            }
+            o.lpq_window_min = std::stoull(spec.substr(0, colon));
+            o.lpq_window_max = std::stoull(spec.substr(colon + 1));
+            if (o.lpq_window_min == 0 || o.lpq_window_max < o.lpq_window_min) {
+                throw InvalidConfigError("--lpq-window bounds must satisfy 0 < lo <= hi");
+            }
+        } else if (a == "--lpq-bucket-width") {
+            o.lpq_bucket_width = std::stoull(next_arg(argc, argv, i, "--lpq-bucket-width"));
+            if (o.lpq_bucket_width == 0) {
+                throw InvalidConfigError("--lpq-bucket-width must be positive");
+            }
         } else if (a == "--experiment-id") {
             o.experiment_id = next_arg(argc, argv, i, "--experiment-id");
         } else if (a == "--output") {
@@ -355,6 +385,58 @@ ShortestPathResult<W> run_astar(const Graph& g, NodeId source, NodeId target, Qu
     throw InvalidConfigError("unknown --heuristic: " + heuristic);
 }
 
+// -----------------------------------------------------------------------------
+// Queue construction
+// -----------------------------------------------------------------------------
+
+/// The learned queue under test, with the control scorer.
+///
+/// ConstantNodeScorer gives every node the same score, so this configuration
+/// measures the STRUCTURE -- bucket substrate, candidate window, verification
+/// and correction -- with the model held out. That separation matters: any
+/// difference from the classical queues here is attributable to the machinery
+/// rather than to prediction quality, which is the only way to tell later
+/// whether a model earned its overhead.
+using BenchLpq = LearnedPriorityQueue<W, ConstantNodeScorer>;
+
+/// Builds the queue for a measurement.
+///
+/// Classical queues take no parameters, so the default does. The learned queue
+/// needs a bucket width and a window, and both are derived from the graph
+/// rather than defaulted, for the same reason the A* heuristic scale is: a
+/// bucket width of 1 on a road network whose weights run to six figures puts
+/// almost every entry in the overflow ring, which measures the overflow path
+/// rather than the queue.
+template <typename Queue>
+[[nodiscard]] Queue make_queue(const GraphMetadata& meta, const Options& o) {
+    if constexpr (std::is_same_v<Queue, BenchLpq>) {
+        CandidateWindowConfig window;
+        window.k_min = static_cast<std::uint32_t>(o.lpq_window_min);
+        window.k_max = static_cast<std::uint32_t>(o.lpq_window_max);
+
+        // Aim for the bucket array to span roughly the range of edge weights,
+        // so a bucket holds entries of genuinely similar key rather than
+        // everything. Derived from the maximum weight because that is what
+        // determines how far a key can jump in one relaxation.
+        std::uint64_t width = o.lpq_bucket_width;
+        if (width == 0) {
+            const auto span = static_cast<std::uint64_t>(
+                meta.max_weight > 0.0 ? meta.max_weight : 1.0);
+            constexpr auto kBuckets =
+                static_cast<std::uint64_t>(BenchLpq::Substrate::kBucketCount);
+            width = (span + kBuckets - 1U) / kBuckets;
+            if (width == 0) {
+                width = 1;
+            }
+        }
+        return BenchLpq{static_cast<Dist>(width), window};
+    } else {
+        (void)meta;
+        (void)o;
+        return Queue{};
+    }
+}
+
 /// Runs and validates one query on one queue.
 template <typename Queue>
 ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query& q,
@@ -383,7 +465,7 @@ ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query&
     dopts.measure_time = false;  // the harness owns timing
 
     // Allocated once, outside the timed region, and reused across repetitions.
-    Queue queue;
+    Queue queue = make_queue<Queue>(meta, o);
     queue.reserve_nodes(g.num_nodes());
 
     const bool is_astar = (o.algorithm == "astar");
@@ -652,7 +734,7 @@ int main(int argc, char** argv) {
         std::vector<std::string> queue_names;
         if (o.pq == "all") {
             queue_names = {"binary_heap", "four_ary_heap", "pairing_heap", "fibonacci_heap",
-                           "radix_heap"};
+                           "radix_heap", "lpq"};
         } else {
             queue_names = {o.pq};
         }
@@ -680,6 +762,13 @@ int main(int argc, char** argv) {
                     } else {
                         rec.pq                 = name;
                         rec.unsupported_reason = radix_heap_unsupported_reason<W>();
+                    }
+                } else if (name == "lpq") {
+                    if constexpr (bucket_substrate_supports<W>()) {
+                        rec = measure_one<BenchLpq>(g, meta, q, o, name, hw, heuristic_scale);
+                    } else {
+                        rec.pq                 = name;
+                        rec.unsupported_reason = bucket_substrate_unsupported_reason<W>();
                     }
                 } else {
                     throw InvalidConfigError("unknown --pq: " + name);

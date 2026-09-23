@@ -249,7 +249,9 @@ struct CandidateMetrics {
         // ceil(log2(n + 1)) == bit_width(n) for every n >= 1. Exact, integer,
         // and one instruction. The equivalence is asserted in the tests rather
         // than assumed.
-        k = std::bit_width(queue_size);
+        // std::bit_width returns int; the cast is explicit so the conversion
+        // is visible rather than left to -Wsign-conversion to point out.
+        k = static_cast<std::uint64_t>(std::bit_width(queue_size));
     } else {
         const double exact = std::ceil(config.alpha *
                                        std::log2(static_cast<double>(queue_size) + 1.0));
