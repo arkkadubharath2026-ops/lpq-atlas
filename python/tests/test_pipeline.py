@@ -508,3 +508,128 @@ def test_changing_the_edge_listing_forces_a_reconversion(workspace, converter):
     second = prepare_dataset(parse_dataset_config(snap_config(edges_listed="both")), paths)
     assert second.converted
     assert second.header.arc_count != first.header.arc_count
+
+
+# -----------------------------------------------------------------------------
+# The benchmark runner consumes what the pipeline produces
+# -----------------------------------------------------------------------------
+#
+# These run the real lpq_benchmark against a real converted graph and manifest.
+# The pipeline's whole purpose is to feed that binary, so a test that stopped at
+# the manifest file would leave the actual handover unverified.
+
+
+@pytest.fixture(scope="session")
+def benchmark_tool():
+    try:
+        return RepoPaths.discover().benchmark()
+    except FileNotFoundError as exc:
+        pytest.skip(str(exc))
+
+
+def run_benchmark(tool, *args):
+    import subprocess
+
+    return subprocess.run(
+        [str(tool), *args], capture_output=True, text=True, check=False
+    )
+
+
+def prepared_toy(workspace, queries=8):
+    """Prepares a small dataset and returns its PreparationResult."""
+    paths, served = workspace
+    body = "".join(f"{i} {i + 1}\n" for i in range(60))
+    served["https://x.invalid/toy.txt.gz"] = gzipped(body)
+    config = parse_dataset_config(snap_config(query_count=queries))
+    return paths, prepare_dataset(config, paths)
+
+
+def test_the_runner_accepts_a_converted_graph_and_its_manifest(workspace, benchmark_tool):
+    _, result = prepared_toy(workspace)
+
+    completed = run_benchmark(
+        benchmark_tool,
+        "--dataset", str(result.graph_path),
+        "--queries-file", str(result.manifest_path),
+        "--pq", "binary_heap",
+        "--repetitions", "1",
+        "--warmup", "0",
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert "binary_heap" in completed.stdout
+
+
+def test_the_runner_reports_the_manifests_query_count_not_the_cli_default(
+    workspace, benchmark_tool
+):
+    # Regression. The runner printed --queries (default 20) in its header while
+    # actually running every query the manifest supplied, so a run that measured
+    # 1000 queries reported 20. Nothing failed and every timing was real; only
+    # the provenance was wrong, which is the kind of error that survives into a
+    # results table unnoticed.
+    _, result = prepared_toy(workspace, queries=7)
+
+    completed = run_benchmark(
+        benchmark_tool,
+        "--dataset", str(result.graph_path),
+        "--queries-file", str(result.manifest_path),
+        "--pq", "binary_heap",
+        "--repetitions", "1",
+        "--warmup", "0",
+    )
+    assert completed.returncode == 0, completed.stderr
+
+    header = next(
+        line for line in completed.stdout.splitlines() if line.startswith("queries")
+    )
+    assert "7" in header, header
+    # The default must not appear: reporting it would misattribute the query set.
+    assert "20" not in header.split("seed")[0], header
+    # And the run must say which manifest the queries came from.
+    assert "queries.yaml" in header, header
+
+
+def test_the_runner_refuses_a_manifest_from_a_different_graph(workspace, benchmark_tool):
+    # The guard that matters: manifest node ids are dense indices assigned at
+    # conversion time, so a manifest from another graph runs perfectly and
+    # measures a different set of queries.
+    paths, first = prepared_toy(workspace)
+
+    _, served = workspace
+    served["https://x.invalid/other.txt.gz"] = gzipped(
+        "".join(f"{i} {i + 1}\n" for i in range(20))
+    )
+    other = parse_dataset_config(
+        snap_config(
+            dataset_id="toy_other",
+            files=[{"url": "https://x.invalid/other.txt.gz", "role": "graph"}],
+        )
+    )
+    second = prepare_dataset(other, paths)
+
+    completed = run_benchmark(
+        benchmark_tool,
+        "--dataset", str(first.graph_path),
+        "--queries-file", str(second.manifest_path),
+        "--pq", "binary_heap",
+        "--repetitions", "1",
+        "--warmup", "0",
+    )
+    assert completed.returncode != 0
+    assert "manifest" in completed.stderr.lower()
+
+
+def test_the_runner_refuses_both_a_dataset_and_a_generated_graph(workspace, benchmark_tool):
+    # A run measures one graph; accepting both would silently ignore one.
+    _, result = prepared_toy(workspace)
+
+    completed = run_benchmark(
+        benchmark_tool,
+        "--dataset", str(result.graph_path),
+        "--graph", "grid:4x4",
+        "--pq", "binary_heap",
+        "--repetitions", "1",
+        "--warmup", "0",
+    )
+    assert completed.returncode != 0
+    assert "mutually exclusive" in completed.stderr.lower()

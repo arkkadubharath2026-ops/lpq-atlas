@@ -93,36 +93,50 @@ class RepoPaths:
 
     # -- build output ---------------------------------------------------------
 
-    def converter(self) -> Path:
-        """Locates the ``lpq_convert`` executable.
+    def tool(self, name: str) -> Path:
+        """Locates a built executable by name.
 
         Searched rather than configured because the build directory differs
         between the presets and between platforms, and an absolute path in a
         config file would be wrong on every machine but one.
+
+        An environment variable named after the tool (``LPQ_CONVERT`` for
+        ``lpq_convert``) overrides the search, which is what lets a test point
+        at a real binary from inside a synthetic directory tree.
         """
-        override = os.environ.get("LPQ_CONVERT")
+        override = os.environ.get(name.upper())
         if override:
             path = Path(override)
             if not path.exists():
-                raise FileNotFoundError(f"LPQ_CONVERT points at a missing file: {path}")
+                raise FileNotFoundError(f"{name.upper()} points at a missing file: {path}")
             return path
 
-        names = ("lpq_convert", "lpq_convert.exe")
+        names = (name, f"{name}.exe")
         roots = (
             self.root / "build" / "release" / "bin",
             self.root / "build" / "relwithdebinfo" / "bin",
             self.root / "build" / "debug" / "bin",
         )
         for directory in roots:
-            for name in names:
-                candidate = directory / name
+            # Not `for name in names`: that would shadow the parameter and make
+            # the error message below name whichever spelling was tried last.
+            for candidate_name in names:
+                candidate = directory / candidate_name
                 if candidate.exists():
                     return candidate
         raise FileNotFoundError(
-            "lpq_convert was not found in any build directory. Build it with\n"
-            "  cmake --build build/release --target lpq_convert\n"
-            "or set LPQ_CONVERT to its path."
+            f"{name} was not found in any build directory. Build it with\n"
+            f"  cmake --build build/release --target {name}\n"
+            f"or set {name.upper()} to its path."
         )
+
+    def converter(self) -> Path:
+        """The dataset converter (``lpq_convert``)."""
+        return self.tool("lpq_convert")
+
+    def benchmark(self) -> Path:
+        """The benchmark runner (``lpq_benchmark``)."""
+        return self.tool("lpq_benchmark")
 
     def ensure_directories(self) -> None:
         for path in (self.raw, self.processed, self.staging, self.metadata, self.manifests):

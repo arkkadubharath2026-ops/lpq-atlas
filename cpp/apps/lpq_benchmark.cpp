@@ -94,6 +94,12 @@ struct Options {
     bool        validate    = true;
     bool        single_target = true;
     bool        graph_spec_given = false;
+
+    /// The seed the QUERIES actually came from. Equal to `seed` when they are
+    /// generated here, and the manifest's seed when they are loaded -- which
+    /// need not be the same number, and reporting the wrong one would
+    /// misattribute the query set.
+    SeedType    query_seed = 42;
 };
 
 void print_usage() {
@@ -483,8 +489,12 @@ void print_console_summary(const std::map<std::string, QueueSummary>& summaries,
                            const GraphMetadata& meta, const Options& o) {
     std::cout << "\ngraph        : " << meta.dataset_id << "  (" << meta.node_count
               << " nodes, " << meta.edge_count << " edges)\n";
-    std::cout << "queries      : " << o.query_count << "  seed " << o.seed << "  "
-              << (o.single_target ? "single-target" : "full SSSP") << "\n";
+    std::cout << "queries      : " << o.query_count << "  seed " << o.query_seed << "  "
+              << (o.single_target ? "single-target" : "full SSSP");
+    if (!o.queries_file.empty()) {
+        std::cout << "  from " << o.queries_file;
+    }
+    std::cout << "\n";
     std::cout << "repetitions  : " << o.repetitions << " measured, " << o.warmup
               << " warm-up\n\n";
 
@@ -561,7 +571,8 @@ void print_console_summary(const std::map<std::string, QueueSummary>& summaries,
 
 int main(int argc, char** argv) {
     try {
-        const Options o = parse_args(argc, argv);
+        Options o = parse_args(argc, argv);
+        o.query_seed  = o.seed;
 
         if (!o.dataset.empty() && o.graph_spec_given) {
             throw InvalidConfigError(
@@ -598,8 +609,11 @@ int main(int argc, char** argv) {
             for (const ManifestQuery& q : manifest.queries) {
                 queries.push_back(Query{q.source, o.single_target ? q.target : kInvalidNode});
             }
-            std::cout << "queries      : " << queries.size() << " from "
-                      << o.queries_file << "  (manifest seed " << manifest.seed << ")\n";
+            // Taken from the manifest rather than left at the --queries
+            // default, so a run cannot report having measured 20 queries while
+            // having actually run the manifest's 1000.
+            o.query_count = queries.size();
+            o.query_seed  = static_cast<SeedType>(manifest.seed);
         } else {
             queries = generate_queries(g, o.query_count, o.seed, o.single_target);
         }
