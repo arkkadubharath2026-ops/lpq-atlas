@@ -45,7 +45,9 @@
 #include "lpq/common/error.hpp"
 #include "lpq/common/rng.hpp"
 #include "lpq/graph/graph_builder.hpp"
+#include "lpq/graph/graph_io.hpp"
 #include "lpq/graph/graph_metadata.hpp"
+#include "lpq/graph/query_manifest.hpp"
 #include "lpq/metrics/benchmark_harness.hpp"
 #include "lpq/metrics/hardware_info.hpp"
 #include "lpq/metrics/json_writer.hpp"
@@ -72,6 +74,13 @@ struct Options {
     std::string heuristic   = "euclidean";
     std::string pq          = "all";
     std::string graph_spec  = "grid:200x200";
+
+    /// A converted dataset (datasets/processed/<id>.lpqgraph) to load instead
+    /// of generating a graph. Mutually exclusive with --graph.
+    std::string dataset;
+
+    /// A query manifest to run instead of generating queries from a seed.
+    std::string queries_file;
     std::string mode        = "exact";
     std::string output;
     std::string experiment_id = "adhoc";
@@ -84,6 +93,7 @@ struct Options {
     bool        require_pinning = false;
     bool        validate    = true;
     bool        single_target = true;
+    bool        graph_spec_given = false;
 };
 
 void print_usage() {
@@ -95,6 +105,8 @@ void print_usage() {
   --pq <name>            binary_heap | four_ary_heap | pairing_heap |
                          fibonacci_heap | radix_heap | all (default)
   --graph <spec>         grid:RxC | path:N | star:N | random:N:P  (default grid:200x200)
+  --dataset <path>       converted graph (.lpqgraph) to load instead of --graph
+  --queries-file <path>  query manifest to run instead of generating queries
   --mode <name>          exact (default)
   --queries <n>          number of source-target pairs (default 20)
   --repetitions <n>      measured repetitions per query (default 11)
@@ -132,6 +144,11 @@ void print_usage() {
             o.pq = next_arg(argc, argv, i, "--pq");
         } else if (a == "--graph") {
             o.graph_spec = next_arg(argc, argv, i, "--graph");
+            o.graph_spec_given = true;
+        } else if (a == "--dataset") {
+            o.dataset = next_arg(argc, argv, i, "--dataset");
+        } else if (a == "--queries-file") {
+            o.queries_file = next_arg(argc, argv, i, "--queries-file");
         } else if (a == "--mode") {
             o.mode = next_arg(argc, argv, i, "--mode");
         } else if (a == "--queries") {
@@ -546,13 +563,46 @@ int main(int argc, char** argv) {
     try {
         const Options o = parse_args(argc, argv);
 
-        const Graph         g    = build_graph(o.graph_spec, o.seed);
-        const GraphMetadata meta = compute_metadata(g);
+        if (!o.dataset.empty() && o.graph_spec_given) {
+            throw InvalidConfigError(
+                "--dataset and --graph are mutually exclusive; the run measures one graph");
+        }
+
+        Graph       g;
+        std::string graph_label = o.graph_spec;
+        if (!o.dataset.empty()) {
+            LoadedGraph<W> loaded = read_binary_graph_file<W>(o.dataset);
+            g                     = std::move(loaded.graph);
+            graph_label           = std::filesystem::path(o.dataset).stem().string();
+        } else {
+            g = build_graph(o.graph_spec, o.seed);
+        }
+
+        GraphMetadata meta = compute_metadata(g);
+        if (meta.dataset_id.empty()) {
+            meta.dataset_id = graph_label;
+        }
         if (g.num_nodes() == 0) {
             throw InvalidConfigError("graph has no nodes");
         }
 
-        const auto queries = generate_queries(g, o.query_count, o.seed, o.single_target);
+        std::vector<Query> queries;
+        if (!o.queries_file.empty()) {
+            const QueryManifest manifest = read_query_manifest_file(o.queries_file);
+            // Refuses a manifest generated against a different graph. Without
+            // this the run would succeed and silently measure a different set
+            // of queries than the one it names.
+            manifest.validate_against(g);
+
+            queries.reserve(manifest.queries.size());
+            for (const ManifestQuery& q : manifest.queries) {
+                queries.push_back(Query{q.source, o.single_target ? q.target : kInvalidNode});
+            }
+            std::cout << "queries      : " << queries.size() << " from "
+                      << o.queries_file << "  (manifest seed " << manifest.seed << ")\n";
+        } else {
+            queries = generate_queries(g, o.query_count, o.seed, o.single_target);
+        }
         const auto hw      = collect_hardware_info();
 
         // The heuristic scale converts coordinate units into weight units and

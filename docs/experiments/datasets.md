@@ -239,10 +239,23 @@ query whose answer is "no path". The manifest states
 `reachability_filtered: false` in its own body so a reader never has to infer
 it.
 
-Note that `lpq_benchmark` does not yet read these manifests: it still generates
-its own queries from a seed, and loading a converted graph and its manifest is
-outstanding work. The manifests are produced and checked in now because they
-are an input to that step, not because anything consumes them today.
+`lpq_benchmark` consumes a converted graph and its manifest directly:
+
+```bash
+lpq_benchmark --dataset datasets/processed/dimacs_ny.lpqgraph \n              --queries-file experiments/manifests/dimacs_ny_queries.yaml \n              --pq all --repetitions 11
+```
+
+`--dataset` and `--graph` are mutually exclusive, since a run measures one
+graph. Before any query runs, the manifest is validated against the graph: the
+node counts must agree, every endpoint must be in range, and the manifest's
+recorded checksum must equal the checksum recomputed from the loaded arcs. The
+checksum is recomputed rather than read from the metadata file, so a metadata
+record edited after the fact cannot make a mismatched pair appear to agree.
+
+The reader in `cpp/include/lpq/graph/query_manifest.hpp` is deliberately not a
+YAML parser. It accepts exactly the shape the pipeline writes and rejects
+anything else, because a line it silently skipped could be the checksum line —
+which would disable the check above without failing.
 
 Each manifest carries the graph's FNV-1a-64 checksum, because **node ids are
 dense indices assigned at conversion time**. The same numeric pair means a

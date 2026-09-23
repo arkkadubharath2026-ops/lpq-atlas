@@ -66,3 +66,52 @@ The shortest-path hot path stays in native C++. Python never enters the timed lo
 
 Follow `ESD.md` §39 — classical system and measurement infrastructure first, ML last, so
 the learned contribution can be evaluated against a trustworthy baseline.
+
+## Measurement and testing standards
+
+These are standing rules, not per-milestone choices.
+
+**Randomised testing.** Every RNG seed is explicit and preserved, so any run can be
+replayed exactly. Every seed that has ever produced a failure is promoted to a permanent
+named regression test and kept forever — a seed that found a bug once is evidence that
+the bug's shape is reachable, so the fuzz corpus grows monotonically and a failure never
+silently stops being covered.
+
+**Benchmarking.** Benchmarks are pinned to a single CPU core. This is not optional on the
+development host, an Intel i5-1235U with 2 performance and 8 efficiency cores: without
+pinning, the scheduler migrates the benchmark thread between core types mid-run and the
+resulting swing has nothing to do with the algorithm under test and can exceed the effect
+being measured. Report **median and median absolute deviation**, not only the mean — a
+single migration artifact moves a mean substantially while leaving the median intact.
+Outliers are never silently dropped.
+
+**Sanitizers.** Sanitizer coverage is never weakened to make a run pass. Disabling
+LeakSanitizer with `detect_leaks=0` to silence a teardown crash is specifically
+forbidden: it resolves the symptom by discarding the check. Diagnose the root cause. The
+genuine fixes found so far were granting the container `SYS_PTRACE` and launching ctest
+under `setarch -R`, because WSL2's high ASLR entropy intermittently prevents ASan from
+mapping its shadow memory.
+
+**Hardware counters.** Unavailable PMU counters are reported as not measured, never
+estimated. WSL2 exposes no `cpu` PMU, so cycles, instructions, branch misses, cache
+misses, LLC misses and memory bandwidth cannot be collected on the development host —
+`perf` reports `<not supported>` even with `--privileged`. No figure may be inferred,
+modelled or extrapolated to fill that gap. `PRD.md` §20 permits documenting unavailable
+counters; `docs/experiments/profiling.md` is where that documentation lives, together
+with the genuine alternatives (native Linux, or Intel VTune on Windows).
+
+## Working style
+
+**Parallelise.** Fan independent work out rather than serialising it: long verification
+runs (the Windows `ctest` suite, the Linux GCC/Clang/sanitizer matrix in Docker, a
+Graphify refresh) belong in background tasks, and self-contained writing tasks such as
+documentation are good subagent work.
+
+This does not relax the no-fabrication rule. A subagent starts with no context and cannot
+verify a number it was not given, so **every measured figure a subagent needs must be
+passed to it explicitly**, together with an instruction to use only those figures and to
+omit anything it cannot verify from the files it reads.
+
+**Report honestly.** Say plainly when something is not yet wired up, when a claim is a
+budget rather than a result, and when a file was accepted on trust rather than verified.
+Prefer a stated limitation to an implied capability.
