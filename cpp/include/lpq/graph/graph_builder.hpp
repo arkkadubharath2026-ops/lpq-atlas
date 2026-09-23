@@ -70,6 +70,18 @@ struct GraphBuildOptions {
     SelfLoopPolicy     self_loops     = SelfLoopPolicy::kKeep;
     CoordinateSystem   coord_system   = CoordinateSystem::kNone;
     std::string        dataset_id;
+
+    /// Set when `edges` already contains BOTH directions of every undirected
+    /// edge -- as it does when the arcs come from a CSR graph rather than from
+    /// a source edge list.
+    ///
+    /// Without this, rebuilding an undirected graph from its own arcs has to
+    /// choose between two wrong answers: declare it directed and lose the label
+    /// (which doubles the reported edge count, since num_edges() halves
+    /// arcs_.size() only for undirected graphs), or declare it undirected and
+    /// have the builder pair every arc a second time. This option is the third
+    /// option -- keep the label, skip the pairing.
+    bool arcs_already_paired = false;
 };
 
 /// Builds CsrGraph instances from edge lists.
@@ -101,7 +113,7 @@ public:
         // Materialise reverse arcs for undirected graphs. A self-loop is added
         // only once even in the undirected case: duplicating it would double its
         // degree contribution and corrupt the degree statistics.
-        if (opts.directedness == Directedness::kUndirected) {
+        if (opts.directedness == Directedness::kUndirected && !opts.arcs_already_paired) {
             std::vector<EdgeT> both;
             both.reserve(edges.size() * 2U);
             for (const EdgeT& e : edges) {

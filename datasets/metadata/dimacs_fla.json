@@ -1,0 +1,35 @@
+{
+  "dataset_id": "dimacs_fla",
+  "source_path": "datasets/processed/staging/USA-road-d.FLA.gr",
+  "source_format": "dimacs",
+  "processed_path": "datasets/processed/dimacs_fla.lpqgraph",
+  "graph_checksum_fnv1a64": 8776265838209830888,
+  "weight_type": "uint32",
+  "node_count": 1070376,
+  "edge_count": 2712798,
+  "arc_count": 2712798,
+  "directed": true,
+  "density": 2.5344346285791159,
+  "min_weight": 1,
+  "max_weight": 214013,
+  "mean_weight": 2043.4636887818408,
+  "stddev_weight": 2918.7842250182161,
+  "max_path_cost_bound": 229074164875,
+  "min_out_degree": 1,
+  "max_out_degree": 8,
+  "mean_out_degree": 2.5344346285791159,
+  "stddev_out_degree": 0.96268721649997924,
+  "isolated_nodes": 0,
+  "has_coordinates": true,
+  "has_node_id_mapping": false,
+  "normalization": {
+    "directedness": "directed",
+    "self_loops": "drop",
+    "parallel_edges": "keep",
+    "edges_listed": "once"
+  },
+  "weights": {
+    "synthesized": false,
+    "source": "dataset"
+  }
+}

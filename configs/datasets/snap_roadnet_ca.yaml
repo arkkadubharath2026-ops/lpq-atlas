@@ -1,0 +1,41 @@
+# Largest SNAP graph in the required set (PRD.md section 17).
+dataset_id: snap_roadnet_ca
+description: >
+  SNAP roadNet-CA: the California road network, undirected and unweighted.
+
+source_format: snap
+files:
+  - url: https://snap.stanford.edu/data/roadNet-CA.txt.gz
+    # Digest observed on first acquisition (not a publisher-published checksum;
+    # see python/lpq_tools/data/sources.py). Pinned so a later run detects any
+    # change to the file.
+    sha256: 383f7b14424530a9e25c392969a9c19dace32ebcfd141f0967a1433498c2acdd
+    role: graph
+
+directedness: undirected
+self_loops: drop
+parallel_edges: keep
+
+# roadNet files list BOTH directions of every edge: 3,083,796 records for the
+# 1,541,898 edges SNAP publishes. Declaring "once" here would pair them a
+# second time and double the graph.
+edges_listed: both
+
+# Heavy-tailed here rather than uniform, deliberately: with roadNet-PA on
+# uniform weights and this graph on a heavy tail, the pair separates the effect
+# of SIZE from the effect of weight SPREAD, which a radix heap is sensitive to
+# through its bucket count.
+weights:
+  distribution: heavy_tailed
+  minimum: 1
+  maximum: 100000
+  alpha: 1.5
+  seed: 1003
+
+query_seed: 42
+query_count: 1000
+
+provenance:
+  collection: SNAP (Stanford Network Analysis Project)
+  citation: "J. Leskovec, K. Lang, A. Dasgupta, M. Mahoney. Community Structure in Large Networks. Internet Mathematics, 2009."
+  homepage: https://snap.stanford.edu/data/roadNet-CA.html

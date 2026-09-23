@@ -15,3 +15,8 @@ scikit-learn==1.6.1
 matplotlib==3.10.8
 statsmodels==0.15.0
 PyYAML==6.0.2
+
+# CA bundle for dataset downloads. Pinned like the rest because a pipeline
+# that cannot verify a TLS certificate cannot acquire the datasets at all on
+# Windows, where Python does not read the system trust store.
+certifi==2025.1.31

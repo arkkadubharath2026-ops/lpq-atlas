@@ -1,0 +1,30 @@
+{
+  "command": [
+    "build/release/bin/lpq_convert.exe",
+    "--input",
+    "datasets/processed/staging/USA-road-d.NY.gr",
+    "--format",
+    "dimacs",
+    "--output",
+    "datasets/processed/dimacs_ny.lpqgraph",
+    "--metadata",
+    "datasets/metadata/dimacs_ny.json",
+    "--dataset-id",
+    "dimacs_ny",
+    "--directedness",
+    "directed",
+    "--self-loops",
+    "drop",
+    "--parallel-edges",
+    "keep",
+    "--default-weight",
+    "1",
+    "--edges-listed",
+    "once",
+    "--coordinates",
+    "datasets/processed/staging/USA-road-d.NY.co"
+  ],
+  "converter": "build/release/bin/lpq_convert.exe",
+  "dataset_id": "dimacs_ny",
+  "stdout": "dimacs_ny: 264346 nodes, 733846 arcs, checksum 0xd268213e3a5c03e9"
+}

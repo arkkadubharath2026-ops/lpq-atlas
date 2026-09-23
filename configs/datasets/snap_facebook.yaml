@@ -1,0 +1,40 @@
+# Small SNAP validation graph (PRD.md section 17).
+#
+# The smallest of the three SNAP graphs, and the one used to check that the
+# whole pipeline works before spending bandwidth on the road networks. Dense and
+# highly clustered, which makes it the structural opposite of the DIMACS road
+# graphs and therefore a useful contrast rather than just a small case.
+dataset_id: snap_facebook
+description: >
+  SNAP ego-Facebook: combined ego networks, undirected and unweighted.
+
+source_format: snap
+files:
+  - url: https://snap.stanford.edu/data/facebook_combined.txt.gz
+    # Digest observed on first acquisition (not a publisher-published checksum;
+    # see python/lpq_tools/data/sources.py). Pinned so a later run detects any
+    # change to the file.
+    sha256: 125e84db872eeba443d270c70315c256b0af43a502fcfe51f50621166ad035d7
+    role: graph
+
+directedness: undirected
+self_loops: drop
+parallel_edges: keep
+
+# SNAP publishes this graph unweighted, so travel costs are synthetic. Recorded
+# in the metadata as synthesized, with this seed, so no results table can
+# attribute them to the dataset.
+weights:
+  distribution: lognormal
+  minimum: 1
+  maximum: 10000
+  sigma: 1.0
+  seed: 1001
+
+query_seed: 42
+query_count: 1000
+
+provenance:
+  collection: SNAP (Stanford Network Analysis Project)
+  citation: "J. McAuley and J. Leskovec. Learning to Discover Social Circles in Ego Networks. NIPS, 2012."
+  homepage: https://snap.stanford.edu/data/ego-Facebook.html

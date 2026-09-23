@@ -1,0 +1,35 @@
+{
+  "dataset_id": "dimacs_ny",
+  "source_path": "datasets/processed/staging/USA-road-d.NY.gr",
+  "source_format": "dimacs",
+  "processed_path": "datasets/processed/dimacs_ny.lpqgraph",
+  "graph_checksum_fnv1a64": 15161404696693572585,
+  "weight_type": "uint32",
+  "node_count": 264346,
+  "edge_count": 733846,
+  "arc_count": 733846,
+  "directed": true,
+  "density": 2.7760813479303641,
+  "min_weight": 1,
+  "max_weight": 36946,
+  "mean_weight": 1293.3033497491299,
+  "stddev_weight": 1130.0827148284277,
+  "max_path_cost_bound": 9766490370,
+  "min_out_degree": 1,
+  "max_out_degree": 8,
+  "mean_out_degree": 2.7760813479303641,
+  "stddev_out_degree": 0.98136535641478506,
+  "isolated_nodes": 0,
+  "has_coordinates": true,
+  "has_node_id_mapping": false,
+  "normalization": {
+    "directedness": "directed",
+    "self_loops": "drop",
+    "parallel_edges": "keep",
+    "edges_listed": "once"
+  },
+  "weights": {
+    "synthesized": false,
+    "source": "dataset"
+  }
+}

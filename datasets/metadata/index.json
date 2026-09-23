@@ -1,0 +1,88 @@
+{
+  "datasets": [
+    {
+      "arc_count": 1057066,
+      "dataset_id": "dimacs_col",
+      "directed": true,
+      "edge_count": 1057066,
+      "files_accepted_on_trust": [],
+      "graph_checksum_fnv1a64": 12010968222786330820,
+      "graph_path": "datasets/processed/dimacs_col.lpqgraph",
+      "has_coordinates": true,
+      "manifest_path": "experiments/manifests/dimacs_col_queries.yaml",
+      "metadata_path": "datasets/metadata/dimacs_col.json",
+      "node_count": 435666,
+      "weight_type": "uint32"
+    },
+    {
+      "arc_count": 2712798,
+      "dataset_id": "dimacs_fla",
+      "directed": true,
+      "edge_count": 2712798,
+      "files_accepted_on_trust": [],
+      "graph_checksum_fnv1a64": 8776265838209830888,
+      "graph_path": "datasets/processed/dimacs_fla.lpqgraph",
+      "has_coordinates": true,
+      "manifest_path": "experiments/manifests/dimacs_fla_queries.yaml",
+      "metadata_path": "datasets/metadata/dimacs_fla.json",
+      "node_count": 1070376,
+      "weight_type": "uint32"
+    },
+    {
+      "arc_count": 733846,
+      "dataset_id": "dimacs_ny",
+      "directed": true,
+      "edge_count": 733846,
+      "files_accepted_on_trust": [],
+      "graph_checksum_fnv1a64": 15161404696693572585,
+      "graph_path": "datasets/processed/dimacs_ny.lpqgraph",
+      "has_coordinates": true,
+      "manifest_path": "experiments/manifests/dimacs_ny_queries.yaml",
+      "metadata_path": "datasets/metadata/dimacs_ny.json",
+      "node_count": 264346,
+      "weight_type": "uint32"
+    },
+    {
+      "arc_count": 176468,
+      "dataset_id": "snap_facebook",
+      "directed": false,
+      "edge_count": 88234,
+      "files_accepted_on_trust": [],
+      "graph_checksum_fnv1a64": 27545307309881865,
+      "graph_path": "datasets/processed/snap_facebook.lpqgraph",
+      "has_coordinates": false,
+      "manifest_path": "experiments/manifests/snap_facebook_queries.yaml",
+      "metadata_path": "datasets/metadata/snap_facebook.json",
+      "node_count": 4039,
+      "weight_type": "uint32"
+    },
+    {
+      "arc_count": 5533214,
+      "dataset_id": "snap_roadnet_ca",
+      "directed": false,
+      "edge_count": 2766607,
+      "files_accepted_on_trust": [],
+      "graph_checksum_fnv1a64": 13088583623358142444,
+      "graph_path": "datasets/processed/snap_roadnet_ca.lpqgraph",
+      "has_coordinates": false,
+      "manifest_path": "experiments/manifests/snap_roadnet_ca_queries.yaml",
+      "metadata_path": "datasets/metadata/snap_roadnet_ca.json",
+      "node_count": 1965206,
+      "weight_type": "uint32"
+    },
+    {
+      "arc_count": 3083796,
+      "dataset_id": "snap_roadnet_pa",
+      "directed": false,
+      "edge_count": 1541898,
+      "files_accepted_on_trust": [],
+      "graph_checksum_fnv1a64": 18076285945588879189,
+      "graph_path": "datasets/processed/snap_roadnet_pa.lpqgraph",
+      "has_coordinates": false,
+      "manifest_path": "experiments/manifests/snap_roadnet_pa_queries.yaml",
+      "metadata_path": "datasets/metadata/snap_roadnet_pa.json",
+      "node_count": 1088092,
+      "weight_type": "uint32"
+    }
+  ]
+}

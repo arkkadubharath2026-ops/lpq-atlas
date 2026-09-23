@@ -119,4 +119,24 @@ if(WIN32)
         NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()
 
+# ------------------------------------------------------------------------------
+# MinGW: link the GCC and C++ runtimes statically.
+#
+# Without this, every binary needs libstdc++-6.dll, libgcc_s_seh-1.dll and
+# libwinpthread-1.dll from the toolchain directory on PATH. That turns running a
+# test or a converted-dataset build into "did you remember to set PATH", and the
+# failure is a bare 0xC0000139 exit code with no message -- which is exactly the
+# kind of thing that makes a reproduction script unreproducible on someone
+# else's machine.
+#
+# It also removes a measurement hazard: a dynamically linked libstdc++ can be
+# resolved to a different version on a different machine, so a benchmark would
+# not necessarily be running the same standard-library code it was validated
+# against.
+# ------------------------------------------------------------------------------
+if(MINGW)
+    target_link_options(lpq_compiler_settings INTERFACE
+        -static-libgcc -static-libstdc++ -static)
+endif()
+
 add_library(lpq::compiler_settings ALIAS lpq_compiler_settings)

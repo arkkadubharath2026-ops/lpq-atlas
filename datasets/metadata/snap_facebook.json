@@ -1,0 +1,39 @@
+{
+  "dataset_id": "snap_facebook",
+  "source_path": "datasets/processed/staging/facebook_combined.txt",
+  "source_format": "snap",
+  "processed_path": "datasets/processed/snap_facebook.lpqgraph",
+  "graph_checksum_fnv1a64": 27545307309881865,
+  "weight_type": "uint32",
+  "node_count": 4039,
+  "edge_count": 88234,
+  "arc_count": 176468,
+  "directed": false,
+  "density": 43.69101262688784,
+  "min_weight": 2,
+  "max_weight": 7911,
+  "mean_weight": 163.87516150236871,
+  "stddev_weight": 211.04381193985827,
+  "max_path_cost_bound": 31944618,
+  "min_out_degree": 1,
+  "max_out_degree": 1045,
+  "mean_out_degree": 43.69101262688784,
+  "stddev_out_degree": 52.414115567375212,
+  "isolated_nodes": 0,
+  "has_coordinates": false,
+  "has_node_id_mapping": true,
+  "normalization": {
+    "directedness": "undirected",
+    "self_loops": "drop",
+    "parallel_edges": "keep",
+    "edges_listed": "once"
+  },
+  "weights": {
+    "synthesized": true,
+    "distribution": "lognormal",
+    "minimum": 1,
+    "maximum": 10000,
+    "seed": 1001,
+    "sigma": 1
+  }
+}

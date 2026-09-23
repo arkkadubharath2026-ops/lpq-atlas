@@ -473,5 +473,132 @@ TEST(GraphIo, TextToBinaryConversionIsLossless) {
     }
 }
 
+
+// -----------------------------------------------------------------------------
+// Directedness survives the round trip (format version 2)
+// -----------------------------------------------------------------------------
+//
+// Regression: version 1 of the format carried no directedness field, so a graph
+// written as undirected came back labelled directed. Nothing crashed -- the
+// arcs were all still there -- but num_edges() halves the arc count only for
+// undirected graphs, so every metadata record computed after a conversion
+// reported twice the edges the dataset actually had.
+
+TEST(GraphIo, AnUndirectedGraphIsStillUndirectedAfterARoundTrip) {
+    std::vector<InputEdge<std::uint32_t>> edges = {
+        {0, 1, 5}, {1, 2, 7}, {2, 3, 9},
+    };
+    GraphBuildOptions opts;
+    opts.directedness = Directedness::kUndirected;
+    const CsrGraph<std::uint32_t> g =
+        GraphBuilder<std::uint32_t>::build(4, std::move(edges), opts);
+
+    ASSERT_EQ(g.num_arcs(), 6U);
+    ASSERT_EQ(g.num_edges(), 3U);
+
+    std::stringstream buffer(std::ios::in | std::ios::out | std::ios::binary);
+    write_binary_graph<std::uint32_t>(buffer, g, {}, {});
+    const LoadedGraph<std::uint32_t> back = read_binary_graph<std::uint32_t>(buffer);
+
+    EXPECT_EQ(back.graph.directedness(), Directedness::kUndirected);
+    EXPECT_EQ(back.graph.num_arcs(), g.num_arcs());
+    EXPECT_EQ(back.graph.num_edges(), g.num_edges());
+    // And the arcs must not have been paired a second time on the way back in.
+    EXPECT_EQ(back.graph.num_arcs(), 6U);
+}
+
+TEST(GraphIo, ADirectedGraphIsStillDirectedAfterARoundTrip) {
+    std::vector<InputEdge<std::uint32_t>> edges = {{0, 1, 5}, {1, 2, 7}};
+    GraphBuildOptions opts;
+    opts.directedness = Directedness::kDirected;
+    const CsrGraph<std::uint32_t> g =
+        GraphBuilder<std::uint32_t>::build(3, std::move(edges), opts);
+
+    std::stringstream buffer(std::ios::in | std::ios::out | std::ios::binary);
+    write_binary_graph<std::uint32_t>(buffer, g, {}, {});
+    const LoadedGraph<std::uint32_t> back = read_binary_graph<std::uint32_t>(buffer);
+
+    EXPECT_EQ(back.graph.directedness(), Directedness::kDirected);
+    EXPECT_EQ(back.graph.num_arcs(), 2U);
+    EXPECT_EQ(back.graph.num_edges(), 2U);
+}
+
+
+// -----------------------------------------------------------------------------
+// Edge listing convention (regression)
+// -----------------------------------------------------------------------------
+//
+// SNAP does not state, and is not consistent about, whether an undirected edge
+// appears once or in both directions. facebook_combined.txt lists each edge
+// once (88,234 records for the 88,234 edges SNAP publishes); roadNet-PA.txt
+// lists both (3,083,796 records for 1,541,898 edges). Reading the second as
+// though it were the first produces a graph with exactly twice the edges --
+// structurally valid, silent, and wrong in every per-edge measurement taken on
+// it. It is declared, not inferred, because a directed graph that happens to be
+// symmetric is indistinguishable from a doubly-listed undirected one.
+
+TEST(SnapReader, PairsEdgesWhenTheFileListsEachEdgeOnce) {
+    std::istringstream input("1 2\n2 3\n");
+    SnapReadOptions    options;
+    options.directedness                 = Directedness::kUndirected;
+    options.edges_listed_both_directions = false;
+
+    const LoadedGraph<std::uint32_t> loaded = read_snap_edge_list<std::uint32_t>(input, options);
+    EXPECT_EQ(loaded.graph.num_nodes(), 3U);
+    EXPECT_EQ(loaded.graph.num_arcs(), 4U);
+    EXPECT_EQ(loaded.graph.num_edges(), 2U);
+}
+
+TEST(SnapReader, DoesNotPairAgainWhenTheFileAlreadyListsBothDirections) {
+    std::istringstream input("1 2\n2 1\n2 3\n3 2\n");
+    SnapReadOptions    options;
+    options.directedness                 = Directedness::kUndirected;
+    options.edges_listed_both_directions = true;
+
+    const LoadedGraph<std::uint32_t> loaded = read_snap_edge_list<std::uint32_t>(input, options);
+    EXPECT_EQ(loaded.graph.num_nodes(), 3U);
+    // Four arcs, not eight.
+    EXPECT_EQ(loaded.graph.num_arcs(), 4U);
+    EXPECT_EQ(loaded.graph.num_edges(), 2U);
+    // The label is kept, which is what makes num_edges() halve the arc count.
+    EXPECT_EQ(loaded.graph.directedness(), Directedness::kUndirected);
+}
+
+TEST(SnapReader, TheTwoConventionsAgreeOnTheResultingGraph) {
+    // The same graph described both ways must convert to the same thing --
+    // including the same checksum, since that is what downstream records key on.
+    std::istringstream once("1 2\n2 3\n3 1\n");
+    std::istringstream both("1 2\n2 1\n2 3\n3 2\n3 1\n1 3\n");
+
+    SnapReadOptions once_options;
+    once_options.directedness                 = Directedness::kUndirected;
+    once_options.edges_listed_both_directions = false;
+
+    SnapReadOptions both_options;
+    both_options.directedness                 = Directedness::kUndirected;
+    both_options.edges_listed_both_directions = true;
+
+    const LoadedGraph<std::uint32_t> a = read_snap_edge_list<std::uint32_t>(once, once_options);
+    const LoadedGraph<std::uint32_t> b = read_snap_edge_list<std::uint32_t>(both, both_options);
+
+    EXPECT_EQ(a.graph.num_nodes(), b.graph.num_nodes());
+    EXPECT_EQ(a.graph.num_arcs(), b.graph.num_arcs());
+    EXPECT_EQ(a.graph.num_edges(), b.graph.num_edges());
+    EXPECT_EQ(a.checksum, b.checksum);
+}
+
+TEST(SnapReader, TheFlagIsIgnoredForADirectedGraph) {
+    // Nothing is paired in the directed case, so the flag has nothing to
+    // suppress and must not change the result.
+    std::istringstream input("1 2\n2 3\n");
+    SnapReadOptions    options;
+    options.directedness                 = Directedness::kDirected;
+    options.edges_listed_both_directions = true;
+
+    const LoadedGraph<std::uint32_t> loaded = read_snap_edge_list<std::uint32_t>(input, options);
+    EXPECT_EQ(loaded.graph.num_arcs(), 2U);
+    EXPECT_EQ(loaded.graph.directedness(), Directedness::kDirected);
+}
+
 }  // namespace
 }  // namespace lpq

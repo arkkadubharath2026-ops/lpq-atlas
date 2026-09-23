@@ -1,0 +1,42 @@
+# Mid-sized SNAP road network (PRD.md section 17).
+#
+# A road network without weights or coordinates: the same structure as the
+# DIMACS graphs but stripped of the metric, which isolates how much of a queue's
+# behaviour comes from road-network TOPOLOGY and how much from real travel
+# costs. Comparing this against DIMACS Colorado, which is of similar size and
+# carries real weights, is the point of including both.
+dataset_id: snap_roadnet_pa
+description: >
+  SNAP roadNet-PA: the Pennsylvania road network, undirected and unweighted.
+
+source_format: snap
+files:
+  - url: https://snap.stanford.edu/data/roadNet-PA.txt.gz
+    # Digest observed on first acquisition (not a publisher-published checksum;
+    # see python/lpq_tools/data/sources.py). Pinned so a later run detects any
+    # change to the file.
+    sha256: 450b8733635d887466a2b96b26411f6e62caf7006f8a264f59cf9b5d75cdf549
+    role: graph
+
+directedness: undirected
+self_loops: drop
+parallel_edges: keep
+
+# roadNet files list BOTH directions of every edge: 3,083,796 records for the
+# 1,541,898 edges SNAP publishes. Declaring "once" here would pair them a
+# second time and double the graph.
+edges_listed: both
+
+weights:
+  distribution: uniform
+  minimum: 1
+  maximum: 1000
+  seed: 1002
+
+query_seed: 42
+query_count: 1000
+
+provenance:
+  collection: SNAP (Stanford Network Analysis Project)
+  citation: "J. Leskovec, K. Lang, A. Dasgupta, M. Mahoney. Community Structure in Large Networks. Internet Mathematics, 2009."
+  homepage: https://snap.stanford.edu/data/roadNet-PA.html

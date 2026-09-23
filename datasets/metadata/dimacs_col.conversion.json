@@ -1,0 +1,30 @@
+{
+  "command": [
+    "build/release/bin/lpq_convert.exe",
+    "--input",
+    "datasets/processed/staging/USA-road-d.COL.gr",
+    "--format",
+    "dimacs",
+    "--output",
+    "datasets/processed/dimacs_col.lpqgraph",
+    "--metadata",
+    "datasets/metadata/dimacs_col.json",
+    "--dataset-id",
+    "dimacs_col",
+    "--directedness",
+    "directed",
+    "--self-loops",
+    "drop",
+    "--parallel-edges",
+    "keep",
+    "--default-weight",
+    "1",
+    "--edges-listed",
+    "once",
+    "--coordinates",
+    "datasets/processed/staging/USA-road-d.COL.co"
+  ],
+  "converter": "build/release/bin/lpq_convert.exe",
+  "dataset_id": "dimacs_col",
+  "stdout": "dimacs_col: 435666 nodes, 1057066 arcs, checksum 0xa6af87f637af20c4"
+}

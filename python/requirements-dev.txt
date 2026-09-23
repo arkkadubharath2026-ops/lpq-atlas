@@ -1,0 +1,9 @@
+# Development-only dependencies.
+#
+# Kept apart from requirements.txt because those pins define the environment a
+# published figure or statistic was computed in (ESD.md section 36), and a test
+# runner is not part of that environment.
+
+-r requirements.txt
+
+pytest==9.0.2

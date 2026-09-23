@@ -1,0 +1,30 @@
+{
+  "command": [
+    "build/release/bin/lpq_convert.exe",
+    "--input",
+    "datasets/processed/staging/USA-road-d.FLA.gr",
+    "--format",
+    "dimacs",
+    "--output",
+    "datasets/processed/dimacs_fla.lpqgraph",
+    "--metadata",
+    "datasets/metadata/dimacs_fla.json",
+    "--dataset-id",
+    "dimacs_fla",
+    "--directedness",
+    "directed",
+    "--self-loops",
+    "drop",
+    "--parallel-edges",
+    "keep",
+    "--default-weight",
+    "1",
+    "--edges-listed",
+    "once",
+    "--coordinates",
+    "datasets/processed/staging/USA-road-d.FLA.co"
+  ],
+  "converter": "build/release/bin/lpq_convert.exe",
+  "dataset_id": "dimacs_fla",
+  "stdout": "dimacs_fla: 1070376 nodes, 2712798 arcs, checksum 0x79cb8f47fce48fe8"
+}

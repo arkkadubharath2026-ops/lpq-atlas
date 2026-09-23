@@ -1,0 +1,51 @@
+# DIMACS 9th Implementation Challenge road network (PRD.md section 17).
+#
+# These are the OpenStreetMap-derived road graphs the PRD requires: real
+# non-negative travel-cost weights and real node coordinates, which is what
+# makes them the only datasets here on which A* is a meaningful baseline rather
+# than Dijkstra with extra steps.
+#
+# The distance variant (-d) is used rather than the travel-time variant (-t)
+# because distances are a pure function of geometry, so the coordinate-based A*
+# heuristic is admissible against them without a speed assumption. A travel-time
+# run would need a maximum-speed scaling factor, which is an experiment
+# parameter rather than a property of the dataset.
+dataset_id: dimacs_fla
+description: >
+  DIMACS Florida road network (USA-road-d.FLA), with node coordinates.
+
+source_format: dimacs
+files:
+  - url: https://www.diag.uniroma1.it/~challenge9/data/USA-road-d/USA-road-d.FLA.gr.gz
+    # Digest observed on first acquisition (not a publisher-published checksum;
+    # see python/lpq_tools/data/sources.py). Pinned so a later run detects any
+    # change to the file.
+    sha256: a42e4e71e3d46eaf9a1d33270aa69d52207b75521525774bde1ac4c8fe804d47
+    role: graph
+  - url: https://www.diag.uniroma1.it/~challenge9/data/USA-road-d/USA-road-d.FLA.co.gz
+    # Digest observed on first acquisition (not a publisher-published checksum;
+    # see python/lpq_tools/data/sources.py). Pinned so a later run detects any
+    # change to the file.
+    sha256: d81d48c37a02b7e92bc658de0c8c6b18bb81f8ce381f9ed5665b4f6d0cded131
+    role: coordinates
+
+# DIMACS lists both directions as separate arc records, so the file is already
+# paired and must not be paired again.
+directedness: directed
+self_loops: drop
+parallel_edges: keep
+
+# No 'weights' block: these graphs carry real weights, and synthesising over
+# them would discard the only real metric in the dataset collection.
+
+query_seed: 42
+query_count: 1000
+
+provenance:
+  collection: 9th DIMACS Implementation Challenge -- Shortest Paths
+  homepage: https://www.diag.uniroma1.it/~challenge9/download.shtml
+  approximate_nodes: 1070376
+  note: >
+    Node counts are the published figures and are recorded for orientation only;
+    the authoritative counts are computed during conversion and stored in
+    datasets/metadata/dimacs_fla.json.

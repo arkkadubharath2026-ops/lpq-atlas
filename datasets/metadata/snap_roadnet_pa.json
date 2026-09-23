@@ -1,0 +1,38 @@
+{
+  "dataset_id": "snap_roadnet_pa",
+  "source_path": "datasets/processed/staging/roadNet-PA.txt",
+  "source_format": "snap",
+  "processed_path": "datasets/processed/snap_roadnet_pa.lpqgraph",
+  "graph_checksum_fnv1a64": 18076285945588879189,
+  "weight_type": "uint32",
+  "node_count": 1088092,
+  "edge_count": 1541898,
+  "arc_count": 3083796,
+  "directed": false,
+  "density": 2.8341316726894417,
+  "min_weight": 1,
+  "max_weight": 1000,
+  "mean_weight": 500.20221117090756,
+  "stddev_weight": 288.41882678441726,
+  "max_path_cost_bound": 1088091000,
+  "min_out_degree": 1,
+  "max_out_degree": 9,
+  "mean_out_degree": 2.8341316726894417,
+  "stddev_out_degree": 1.0169297356137863,
+  "isolated_nodes": 0,
+  "has_coordinates": false,
+  "has_node_id_mapping": true,
+  "normalization": {
+    "directedness": "undirected",
+    "self_loops": "drop",
+    "parallel_edges": "keep",
+    "edges_listed": "both"
+  },
+  "weights": {
+    "synthesized": true,
+    "distribution": "uniform",
+    "minimum": 1,
+    "maximum": 1000,
+    "seed": 1002
+  }
+}

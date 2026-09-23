@@ -76,7 +76,10 @@ public:
 /// "LPQGRAPH" as a little-endian 64-bit value.
 inline constexpr std::uint64_t kGraphMagic = 0x485041524751504CULL;
 
-inline constexpr std::uint32_t kGraphFormatVersion = 1;
+/// Version 2 added the directedness field. Version 1 files cannot be read:
+/// they carry no directedness, and guessing one would make num_edges() report
+/// either double or half the truth with no way to tell which.
+inline constexpr std::uint32_t kGraphFormatVersion = 2;
 
 /// Identifies the weight type a file was written with, so a file cannot be
 /// loaded as the wrong one.
@@ -259,6 +262,7 @@ void write_binary_graph(std::ostream& os, const CsrGraph<W>& g,
     detail::put_u64_le(os, kGraphMagic);
     detail::put_u32_le(os, kGraphFormatVersion);
     detail::put_u32_le(os, static_cast<std::uint32_t>(weight_type_tag<W>()));
+    detail::put_u32_le(os, g.directedness() == Directedness::kUndirected ? 1U : 0U);
     detail::put_u64_le(os, static_cast<std::uint64_t>(g.num_nodes()));
     detail::put_u64_le(os, static_cast<std::uint64_t>(g.num_arcs()));
     detail::put_u32_le(os, mapping.empty() ? 0U : 1U);
@@ -316,8 +320,9 @@ template <WeightType W>
             "distances");
     }
 
-    const std::uint64_t node_count = detail::get_u64_le(is);
-    const std::uint64_t arc_count  = detail::get_u64_le(is);
+    const bool          undirected = detail::get_u32_le(is) != 0U;
+    const std::uint64_t node_count  = detail::get_u64_le(is);
+    const std::uint64_t arc_count   = detail::get_u64_le(is);
     if (node_count > kMaxNodeCount) {
         throw GraphIoError("graph file declares more nodes than NodeId can address");
     }
@@ -363,9 +368,11 @@ template <WeightType W>
     }
 
     GraphBuildOptions opts;
-    opts.directedness = Directedness::kDirected;  // arcs are already materialised
-    opts.parallel_edges = ParallelEdgePolicy::kKeep;
-    opts.self_loops     = SelfLoopPolicy::kKeep;
+    opts.directedness =
+        undirected ? Directedness::kUndirected : Directedness::kDirected;
+    opts.arcs_already_paired = true;  // both directions are already in the file
+    opts.parallel_edges      = ParallelEdgePolicy::kKeep;
+    opts.self_loops          = SelfLoopPolicy::kKeep;
     loaded.graph        = GraphBuilder<W>::build(static_cast<std::size_t>(node_count),
                                                  std::move(edges), opts, loaded.coordinates);
 
@@ -417,6 +424,23 @@ struct SnapReadOptions {
 
     SelfLoopPolicy     self_loops     = SelfLoopPolicy::kDrop;
     ParallelEdgePolicy parallel_edges = ParallelEdgePolicy::kKeep;
+
+    /// Set when the file already lists BOTH directions of every undirected
+    /// edge, so the reader must not pair them a second time.
+    ///
+    /// SNAP is not consistent about this and the file gives no indication
+    /// either way: `facebook_combined.txt` lists each edge once (88,234
+    /// records for 88,234 published edges), while `roadNet-PA.txt` lists both
+    /// (3,083,796 records for 1,541,898 published edges). Reading the second
+    /// as though it were the first produces a graph with twice the edges,
+    /// every one of them duplicated -- which is perfectly valid, runs
+    /// normally, and inflates every per-edge measurement taken on it.
+    ///
+    /// There is no way to infer this safely: a genuinely directed graph that
+    /// happens to be symmetric is indistinguishable from a doubly-listed
+    /// undirected one. So it is declared, and the dataset validator counts
+    /// reciprocal records to check the declaration against the file.
+    bool edges_listed_both_directions = false;
 };
 
 /// Reads a SNAP-style edge list: whitespace-separated "u v [w]", '#' comments.
@@ -475,9 +499,10 @@ template <WeightType W>
     }
 
     GraphBuildOptions opts;
-    opts.directedness   = options.directedness;
-    opts.self_loops     = options.self_loops;
-    opts.parallel_edges = options.parallel_edges;
+    opts.directedness        = options.directedness;
+    opts.self_loops          = options.self_loops;
+    opts.parallel_edges      = options.parallel_edges;
+    opts.arcs_already_paired = options.edges_listed_both_directions;
 
     LoadedGraph<W> loaded;
     loaded.mapping.original_id = std::move(original);
