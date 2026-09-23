@@ -1,7 +1,13 @@
-# Build
-build/
-out/
-cmake-build-*/
+# Build output.
+#
+# Anchored with a leading slash so these match ONLY at the repository root. An
+# unanchored `build/` matches a directory of that name at any depth, which had
+# been silently excluding all of scripts/build/ -- the Linux verification matrix
+# and the Graphify refresh scripts were never committed, even though CLAUDE.md
+# documents them as the way to run those steps. A fresh clone had neither.
+/build/
+/out/
+/cmake-build-*/
 _deps/
 CMakeUserPresets.json
 
