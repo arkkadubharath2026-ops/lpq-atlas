@@ -29,3 +29,53 @@ target_link_libraries(lpq_convert PRIVATE
     lpq::graph
     lpq::metrics
     lpq::compiler_settings)
+
+# ------------------------------------------------------------------------------
+# lpq_profile -- phase-level profile of the priority queue (PRD.md section 20).
+#
+# A SEPARATE target from lpq_benchmark, and the separation is the point. This
+# one compiles LPQ_ENABLE_PHASE_PROFILING=1, which puts a pair of timestamp
+# reads around every phase of every push and pop. That perturbs the code it
+# measures, so it must not be the binary that produces the project's timings.
+# lpq_benchmark stays free of probes; this answers a different question.
+#
+# It also replaces the global operator new to count allocations exactly, which
+# is another reason it cannot share a binary with the benchmark.
+# ------------------------------------------------------------------------------
+add_executable(lpq_profile lpq_profile.cpp)
+target_link_libraries(lpq_profile PRIVATE
+    lpq::algorithms
+    lpq::pq
+    lpq::lpq
+    lpq::verification
+    lpq::graph
+    lpq::metrics
+    lpq::compiler_settings)
+target_compile_definitions(lpq_profile PRIVATE LPQ_ENABLE_PHASE_PROFILING=1)
+target_compile_options(lpq_profile PRIVATE
+    "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wno-old-style-cast>")
+
+# ------------------------------------------------------------------------------
+# lpq_profile_noinstr -- the same source with the probes compiled out.
+#
+# This target exists to measure the instrumentation rather than assume it is
+# negligible. It runs the identical region over the identical queries with
+# LPQ_ENABLE_PHASE_PROFILING=0, so the ratio of its wall clock to lpq_profile's
+# IS the overhead the probes impose. Reporting phase shares without that ratio
+# would be reporting an instrument reading with no idea how much of it is the
+# instrument.
+#
+# It keeps the allocation counter, which costs an increment and needs no clock.
+# ------------------------------------------------------------------------------
+add_executable(lpq_profile_noinstr lpq_profile.cpp)
+target_link_libraries(lpq_profile_noinstr PRIVATE
+    lpq::algorithms
+    lpq::pq
+    lpq::lpq
+    lpq::verification
+    lpq::graph
+    lpq::metrics
+    lpq::compiler_settings)
+target_compile_definitions(lpq_profile_noinstr PRIVATE LPQ_ENABLE_PHASE_PROFILING=0)
+target_compile_options(lpq_profile_noinstr PRIVATE
+    "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wno-old-style-cast>")

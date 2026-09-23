@@ -38,6 +38,7 @@
 
 #include "lpq/common/error.hpp"
 #include "lpq/common/types.hpp"
+#include "lpq/metrics/phase_profiler.hpp"
 #include "lpq/pq/priority_queue.hpp"
 
 namespace lpq {
@@ -122,6 +123,9 @@ public:
             decrease_key(n, k);
             return;
         }
+        // After the delegation above, so a push that becomes a decrease-key is
+        // timed once rather than counted into this phase twice.
+        LPQ_PROFILE_SCOPE(QueuePhase::kPush);
         heap_.push_back(QueueEntry<Key>{n, k});
         const auto idx = static_cast<std::uint32_t>(heap_.size() - 1U);
         pos_[n]        = idx;
@@ -130,6 +134,7 @@ public:
 
     /// Removes and returns the minimum entry. Undefined when empty.
     QueueEntry<Key> pop() {
+        LPQ_PROFILE_SCOPE(QueuePhase::kPop);
         const QueueEntry<Key> best = heap_.front();
         pos_[best.node]            = kNotInHeap;
 
@@ -157,6 +162,7 @@ public:
             push(n, k);
             return;
         }
+        LPQ_PROFILE_SCOPE(QueuePhase::kPush);
         const std::uint32_t idx = pos_[n];
         cmp_.count();
         if (!KeyLess<Key>{}(k, heap_[idx].key)) {

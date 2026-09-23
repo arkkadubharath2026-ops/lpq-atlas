@@ -107,8 +107,25 @@ lpq_add_test(test_adaptation
 lpq_add_test(test_metrics
     SOURCES metrics/test_statistics.cpp metrics/test_json_and_records.cpp
             metrics/test_benchmark_harness.cpp
+            metrics/test_phase_profiler_disabled.cpp
     LIBS    lpq::metrics lpq::pq
     LABELS  "unit")
+
+# ------------------------------------------------------------------------------
+# The phase profiler needs two targets, because its whole contract is that the
+# same header behaves differently under two values of one macro.
+#
+# test_metrics above carries the DISABLED half: built like every ordinary
+# target, it proves the probes compile to nothing. This target carries the
+# enabled half. They cannot share an executable -- one macro, two values -- and
+# splitting them is the only way to test both halves of the contract rather than
+# whichever one the build happened to select.
+# ------------------------------------------------------------------------------
+lpq_add_test(test_phase_profiler
+    SOURCES metrics/test_phase_profiler.cpp
+    LIBS    lpq::metrics
+    LABELS  "unit")
+target_compile_definitions(test_phase_profiler PRIVATE LPQ_ENABLE_PHASE_PROFILING=1)
 
 lpq_add_test(test_priority_queues
     SOURCES pq/test_priority_queues.cpp

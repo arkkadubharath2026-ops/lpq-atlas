@@ -127,11 +127,24 @@ fewer entries per extraction. On the road networks the LPQ **already** examines
 fewer entries than the baseline it loses to, with no model at all. A perfect
 predictor could only reduce that number further — it cannot recover a 4.6×
 deficit, because the deficit is not made of comparisons. It is per-extraction
-overhead: candidate-window bookkeeping, the verification path, and the memory
-behaviour of the bucket substrate and its overflow ring.
+overhead. At the time this was written the composition of that overhead was a
+conjecture — candidate-window bookkeeping, the verification path, and the memory
+behaviour of the bucket substrate and its overflow ring. The first two were
+subsequently measured and confirmed; the third is still a hypothesis. See the
+note at the end of this section.
 
 Improving the model is therefore not the highest-value next step. Establishing
 *where the time actually goes* is.
+
+**That has since been measured.** `lpq-phase-profile.md` reports a phase-level
+profile over this same 100-query manifest and finds that verification and
+candidate-window maintenance together account for ≈76% of extraction time,
+that the queue performs **zero** allocations in steady state, and that the LPQ
+costs ≈12× the binary heap per extraction while performing 14% more extractions.
+The three-part attribution guessed at above is therefore confirmed in two of its
+parts and refuted in none — but note that the third part, memory behaviour,
+remains untested: the profile locates the cost without explaining its mechanism,
+and no cache or branch counter was read.
 
 ## What this does not show
 

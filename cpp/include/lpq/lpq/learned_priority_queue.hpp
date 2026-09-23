@@ -64,6 +64,7 @@
 #include "lpq/features/graph_features.hpp"
 #include "lpq/lpq/bucket_substrate.hpp"
 #include "lpq/lpq/candidate_manager.hpp"
+#include "lpq/metrics/phase_profiler.hpp"
 #include "lpq/models/predictor.hpp"
 #include "lpq/verification/correction_engine.hpp"
 #include "lpq/verification/verification_engine.hpp"
@@ -196,21 +197,27 @@ public:
     // --- PriorityQueueLike ---------------------------------------------------
 
     void push(NodeId node, KeyType key) {
+        LPQ_PROFILE_SCOPE(QueuePhase::kPush);
         substrate_.push(node, key, scorer_ == nullptr ? 0.0F : scorer_->score_of(node));
     }
 
     [[nodiscard]] QueueEntry<KeyType> pop() {
+        LPQ_PROFILE_SCOPE(QueuePhase::kPop);
         ++metrics_.extractions;
 
+        LPQ_PROFILE_BEGIN(traverse);
         const std::size_t bucket_size = substrate_.current_bucket_size();
         const auto        front       = substrate_.current_front();
+        LPQ_PROFILE_END(traverse, QueuePhase::kBucketTraversal);
 
         if (front.empty()) {
             ++metrics_.fallback_scans;
+            LPQ_PROFILE_SCOPE(QueuePhase::kFallbackScan);
             return substrate_.pop();
         }
 
         // --- Build the candidate window from the front, which cost nothing ---
+        LPQ_PROFILE_BEGIN(window);
         manager_.begin_extraction(substrate_.size());
         std::size_t offered = 0;
         for (const auto& e : front) {
@@ -225,8 +232,17 @@ public:
             ++offered;
         }
         metrics_.entries_examined += offered;
+        LPQ_PROFILE_END(window, QueuePhase::kWindowMaintenance);
 
         // --- Verify, expanding into the rest of the bucket if needed ---------
+        //
+        // The refill lambda reaches back into the bucket, so its cost lands in
+        // the verification phase rather than in bucket traversal. That is the
+        // honest attribution: the traversal only happens because verification
+        // asked for it, and separating them would need a probe inside a lambda
+        // called once per correction round, whose own cost would then be a
+        // significant fraction of what it measures.
+        LPQ_PROFILE_BEGIN(verify);
         std::size_t      cursor = offered;
         const QueueBound bound  = bound_for(cursor, bucket_size);
 
@@ -234,11 +250,15 @@ public:
             manager_, verifier_, bound, [this, &cursor, bucket_size](CandidateManager& m) {
                 return this->refill(m, cursor, bucket_size);
             });
+        LPQ_PROFILE_END(verify, QueuePhase::kVerificationScan);
 
         if (outcome.resolved()) {
             const NodeId  node = outcome.verification.node;
             const KeyType key  = static_cast<KeyType>(outcome.verification.key);
-            if (substrate_.remove_from_current_bucket(node, key)) {
+            LPQ_PROFILE_BEGIN(remove);
+            const bool removed = substrate_.remove_from_current_bucket(node, key);
+            LPQ_PROFILE_END(remove, QueuePhase::kRemoveFromBucket);
+            if (removed) {
                 ++metrics_.verified_extractions;
                 metrics_.entries_skipped += bucket_size > cursor ? (bucket_size - cursor) : 0;
                 return QueueEntry<KeyType>{node, key};
@@ -251,6 +271,7 @@ public:
         }
 
         ++metrics_.fallback_scans;
+        LPQ_PROFILE_SCOPE(QueuePhase::kFallbackScan);
         return substrate_.pop();
     }
 
