@@ -25,8 +25,10 @@ reading (and paying tokens for) every file.
 - `.graphifyignore` excludes build output, datasets, raw results, and model checkpoints,
   which are large and carry no architectural signal.
 
-**Prefer graph queries over broad `grep`/file sweeps** when answering questions about
-architecture, dependencies, or where something lives:
+**Using the graph is mandatory, not a preference.** Any question about the codebase —
+what a component is, what calls it, what it depends on, what a change would affect,
+where something lives, or whether a change has landed everywhere it must — is answered
+by querying the graph *first*, before reading or grepping:
 
 ```bash
 graphify query "how does LPQ verification interact with the authoritative queue" --budget 2000
@@ -36,8 +38,20 @@ graphify affected "PriorityQueue"                 # blast radius of a change
 graphify god-nodes                                # architectural hubs
 ```
 
-Targeted `Read`/`Grep` on a specific known file is still the right tool. The graph
-replaces *exploratory* searching, not precise lookups.
+Reading a file directly is still right for the *contents* of a file whose role in the
+answer the graph has already established. It is not a substitute for asking the graph a
+structural question, and it does not come first.
+
+The carve-out above is narrower than it reads, and it has been stretched before. Knowing
+a file's path is not the same as knowing what else reaches into it — which is exactly the
+question the graph answers cheaply and a file read does not answer at all. A single
+`graphify explain "BucketSubstrate"` established that the component has no incoming
+references outside its own header and its own test, and therefore that probes placed in
+`LearnedPriorityQueue` capture every path into it. No amount of targeted reading would
+have produced that argument.
+
+**If an argument is forming for why this particular task does not need the graph, that
+argument is the error, not the exception.**
 
 ### Keeping the graph fresh
 

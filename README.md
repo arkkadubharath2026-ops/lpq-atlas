@@ -271,28 +271,53 @@ Run tests:
 ctest --preset release
 ```
 
-Run a benchmark:
+Run a benchmark. `--pq all` measures every queue in one process over one query
+set, which is what makes the comparison paired:
 
 ```bash
 ./build/release/bin/lpq_benchmark \
     --algorithm dijkstra \
-    --pq binary_heap \
-    --dataset path/to/graph \
-    --queries path/to/queries.yaml
+    --pq all \
+    --dataset datasets/processed/dimacs_ny.lpqgraph \
+    --queries-file experiments/manifests/dimacs_ny_queries_100.yaml \
+    --repetitions 11 --warmup 3 --require-pinning \
+    --output results/raw/ny.json
 ```
 
-Run LPQ:
+Run a whole experiment from a manifest. This is the reproducible form: the
+matrix of algorithm x queue x mode comes from the file, and the run refuses to
+proceed unpinned.
 
 ```bash
 ./build/release/bin/lpq_benchmark \
-    --algorithm dijkstra \
-    --pq lpq \
-    --mode exact \
-    --dataset path/to/graph \
-    --queries path/to/queries.yaml
+    --experiment configs/experiments/dimacs_ny_exact_v1.yaml \
+    --output results/raw/dimacs_ny_exact_v1.json
 ```
 
-These commands are illustrative. The coding agent should establish the actual executable names and preserve them in the final README.
+Run approximate mode. The slack is required and must be positive; the runner
+checks every query against `1 + epsilon` using the trusted reference, and aborts
+if the guarantee is broken:
+
+```bash
+./build/release/bin/lpq_benchmark \
+    --algorithm dijkstra --pq lpq \
+    --mode approximate --epsilon 0.1 \
+    --dataset datasets/processed/dimacs_ny.lpqgraph \
+    --queries-file experiments/manifests/dimacs_ny_queries_100.yaml
+```
+
+Profile where the queue spends its time. This is a **separate binary**, because
+the probes perturb what they measure and must never be in the timed benchmark:
+
+```bash
+./build/release/bin/lpq_profile \
+    --dataset datasets/processed/dimacs_ny.lpqgraph \
+    --queries-file experiments/manifests/dimacs_ny_queries_100.yaml \
+    --pq lpq --repetitions 3
+```
+
+Every flag above is real; `lpq_benchmark --help` is the authority if this list
+falls behind.
 
 ## 9. How experiments should work
 
