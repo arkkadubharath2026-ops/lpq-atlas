@@ -1,0 +1,68 @@
+# An epsilon sweep is NOT expressible in this file, and that is deliberate.
+#
+# An experiment manifest carries ONE epsilon, because a manifest describes one
+# experiment and a record's approximation guarantee has to be a single number
+# that the runner can check every query against. A sweep is several runs of this
+# file with different `epsilon` values and different `experiment` names, which
+# keeps each results file internally consistent.
+#
+#   lpq_benchmark --experiment configs/experiments/dimacs_ny_eps_010_v1.yaml \
+#                 --output results/raw/dimacs_ny_eps_0.10.json
+#
+# ---------------------------------------------------------------------------
+# Read docs/experiments/approximate-mode.md before interpreting a run of this.
+# ---------------------------------------------------------------------------
+#
+# The short version: on THIS dataset, at the default geometry, the slack works.
+# Measured, 5 queries, window 2:32, derived bucket width: exact 12,561,849
+# comparisons against 6,988,117 at epsilon 0.1.
+#
+# The same is NOT true everywhere. On a small random graph whose derived bucket
+# width degenerates, every key in a bucket is equal, exact verification already
+# accepts, and epsilon changes nothing at all. A flat sweep is therefore a
+# statement about bucket width, not about approximation.
+experiment: dimacs_ny_eps_010_v1
+dataset: dimacs_ny
+
+algorithm:
+  - dijkstra
+
+# Every classical queue is listed so the exact baseline appears in the same
+# file, on the same query set, on the same core. They emit an explained
+# "not measured" row under approximate mode rather than exact timings wearing an
+# approximate label -- which is the point of listing them: the baseline for an
+# approximate run is a separate EXACT run, not a classical heap relabelled.
+pq:
+  - binary_heap
+  - lpq
+
+mode:
+  - approximate
+
+# The slack. A returned path may cost up to 1.10x the optimum, and the runner
+# checks every query against that bound using the trusted reference rather than
+# trusting the queue to police itself.
+epsilon: 0.1
+
+# The geometry is deliberately NOT pinned: on this dataset the derived bucket
+# width (37 = ceil(36946 / 1024)) and the default window already put the search
+# where the slack decides acceptances. Measured on dimacs_ny at those defaults,
+# epsilon 0.1 removed 44% of the queue comparisons (12,561,849 -> 6,988,117).
+#
+# Pinning a width here would measure a configuration this project does not
+# otherwise use, and would have to be justified by a tuning run that has not
+# been done. See docs/experiments/approximate-mode.md, which also records the
+# two regimes where the slack is inert -- degenerate buckets, and buckets so
+# wide the window cannot sample them -- so that a flat sweep is recognised as a
+# statement about bucket width rather than about approximation.
+
+query_count: 100
+repetitions: 11
+warmup: 3
+seed: 42
+
+collect:
+  runtime: true
+  pq_operations: true
+  ml_latency: false
+  hardware_counters: true

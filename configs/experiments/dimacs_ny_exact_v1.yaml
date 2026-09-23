@@ -1,0 +1,66 @@
+# The reference exact-mode matrix on the New York road network.
+#
+# This is the experiment behind docs/experiments/lpq-baseline-measurements.md
+# and lpq-phase-profile.md, written down so the run can be repeated rather than
+# reconstructed from a shell history.
+#
+# Run it with:
+#
+#   lpq_benchmark --experiment configs/experiments/dimacs_ny_exact_v1.yaml \
+#                 --output results/raw/dimacs_ny_exact_v1.json
+#
+# The runner measures every combination below in ONE pinned process over ONE
+# loaded graph and ONE query set. That is what makes the comparison paired:
+# per-query difficulty on a road network varies by orders of magnitude, so two
+# queues measured on different query sets would mostly be measuring the query
+# sets.
+experiment: dimacs_ny_exact_v1
+dataset: dimacs_ny
+
+algorithm:
+  - dijkstra
+
+# Every queue in the baseline matrix (PRD.md section 19). The learned queue is
+# listed last so the classical baselines are established before it in the
+# console summary.
+pq:
+  - binary_heap
+  - four_ary_heap
+  - pairing_heap
+  - fibonacci_heap
+  - radix_heap
+  - lpq
+
+mode:
+  - exact
+
+# Resolves to experiments/manifests/dimacs_ny_queries_100.yaml, which is a
+# verified exact prefix of the 1000-query manifest -- so this run and a longer
+# one measure nested query sets rather than unrelated ones.
+query_count: 100
+
+# Eleven measured repetitions after three discarded, which is enough for a
+# meaningful median absolute deviation while keeping the matrix to a few
+# minutes. The project reports median and MAD rather than mean and standard
+# deviation, because a single scheduler migration moves a mean substantially
+# and leaves a median intact.
+repetitions: 11
+warmup: 3
+seed: 42
+
+collect:
+  runtime: true
+  pq_operations: true
+
+  # No model is involved: the learned queue runs here with a constant scorer, so
+  # there is no inference latency to attribute. Asking for it would produce a
+  # field that is structurally zero and reads like a measurement.
+  ml_latency: false
+
+  # Requested deliberately, and expected to come back unmeasured on the
+  # development host: WSL2 exposes no CPU PMU, so cycles, cache misses and
+  # branch misses cannot be read there (docs/experiments/profiling.md). The
+  # runner reports them as not measured rather than estimating them. The flag
+  # stays true so that running this same manifest on a host that does have
+  # counters collects them without editing the experiment.
+  hardware_counters: true

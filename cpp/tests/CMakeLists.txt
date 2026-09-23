@@ -108,6 +108,7 @@ lpq_add_test(test_metrics
     SOURCES metrics/test_statistics.cpp metrics/test_json_and_records.cpp
             metrics/test_benchmark_harness.cpp
             metrics/test_phase_profiler_disabled.cpp
+            metrics/test_experiment_manifest.cpp
     LIBS    lpq::metrics lpq::pq
     LABELS  "unit")
 

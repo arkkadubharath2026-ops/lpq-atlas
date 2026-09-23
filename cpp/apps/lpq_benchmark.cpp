@@ -49,6 +49,7 @@
 #include "lpq/graph/graph_metadata.hpp"
 #include "lpq/graph/query_manifest.hpp"
 #include "lpq/metrics/benchmark_harness.hpp"
+#include "lpq/metrics/experiment_manifest.hpp"
 #include "lpq/metrics/hardware_info.hpp"
 #include "lpq/metrics/json_writer.hpp"
 #include "lpq/metrics/result_record.hpp"
@@ -82,7 +83,20 @@ struct Options {
 
     /// A query manifest to run instead of generating queries from a seed.
     std::string queries_file;
+
+    /// An experiment manifest (ESD.md section 22). When set, the runner
+    /// measures every combination of algorithm, queue and mode the manifest
+    /// lists, in this one process -- see the note in experiment_manifest.hpp on
+    /// why one process matters.
+    std::string experiment_file;
+
     std::string mode        = "exact";
+
+    /// Approximation slack for --mode approximate. A returned path may cost up
+    /// to (1 + epsilon) times the optimum; the runner checks every query
+    /// against that bound rather than trusting the queue to honour it.
+    double      epsilon     = 0.0;
+
     std::string output;
     std::string experiment_id = "adhoc";
 
@@ -127,7 +141,12 @@ void print_usage() {
   --graph <spec>         grid:RxC | path:N | star:N | random:N:P  (default grid:200x200)
   --dataset <path>       converted graph (.lpqgraph) to load instead of --graph
   --queries-file <path>  query manifest to run instead of generating queries
-  --mode <name>          exact (default)
+  --experiment <path>    experiment manifest; runs the whole algorithm x queue
+                         x mode matrix in one pinned process (ESD.md s22)
+  --mode <name>          exact (default) | approximate
+  --epsilon <e>          approximation slack for --mode approximate; a path may
+                         cost up to (1+e) x optimal. Required, and > 0, in that
+                         mode. Only the learned queue implements it.
   --queries <n>          number of source-target pairs (default 20)
   --repetitions <n>      measured repetitions per query (default 11)
   --warmup <n>           discarded warm-up repetitions (default 3)
@@ -169,6 +188,10 @@ void print_usage() {
             o.dataset = next_arg(argc, argv, i, "--dataset");
         } else if (a == "--queries-file") {
             o.queries_file = next_arg(argc, argv, i, "--queries-file");
+        } else if (a == "--experiment") {
+            o.experiment_file = next_arg(argc, argv, i, "--experiment");
+        } else if (a == "--epsilon") {
+            o.epsilon = std::stod(next_arg(argc, argv, i, "--epsilon"));
         } else if (a == "--mode") {
             o.mode = next_arg(argc, argv, i, "--mode");
         } else if (a == "--queries") {
@@ -220,6 +243,25 @@ void print_usage() {
     }
     if (o.algorithm != "dijkstra" && o.algorithm != "astar") {
         throw InvalidConfigError("unknown --algorithm: " + o.algorithm);
+    }
+    if (o.mode != "exact" && o.mode != "approximate") {
+        throw InvalidConfigError("unknown --mode: " + o.mode);
+    }
+
+    // The two directions of this check exist for the same reason: a run whose
+    // label and whose behaviour disagree produces results nobody can interpret
+    // afterwards. Approximate mode without slack is exact mode under a weaker
+    // label, and exact mode with slack is the opposite and worse -- results
+    // reported as exact that were allowed to be wrong.
+    if (o.mode == "approximate" && !(o.epsilon > 0.0)) {
+        throw InvalidConfigError(
+            "--mode approximate requires --epsilon greater than zero; with no slack it is "
+            "exact mode reported under a weaker guarantee than it actually provides");
+    }
+    if (o.mode == "exact" && o.epsilon != 0.0) {
+        throw InvalidConfigError(
+            "--epsilon is meaningless in exact mode and would be silently ignored, leaving "
+            "the command line claiming an approximation that was never applied");
     }
     return o;
 }
@@ -429,7 +471,15 @@ template <typename Queue>
                 width = 1;
             }
         }
-        return BenchLpq{static_cast<Dist>(width), window};
+        // The correctness policy is the difference between exact and
+        // approximate mode, and it is the ONLY difference: the substrate, the
+        // window and the scoring are identical, so a paired exact/approximate
+        // comparison isolates the effect of the slack rather than of two
+        // separately configured queues.
+        const CorrectnessPolicy policy = (o.mode == "approximate")
+                                             ? CorrectnessPolicy::approximate(o.epsilon)
+                                             : CorrectnessPolicy::exact();
+        return BenchLpq{static_cast<Dist>(width), window, policy};
     } else {
         (void)meta;
         (void)o;
@@ -496,7 +546,25 @@ ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query&
                 approximation_ratio<W>(candidate.dist[probe], reference.dist[probe]);
             rec.exact_match = costs_equal<W>(candidate.dist[probe], reference.dist[probe]);
 
-            if (!*rec.exact_match) {
+            // In exact mode any disagreement is a bug. In approximate mode a
+            // disagreement is the point, and what must be checked instead is
+            // that the guarantee held: the entire value of a bounded-approximate
+            // result is its bound, so a run that never verified the bound has
+            // measured the speed of an unspecified algorithm.
+            //
+            // The bound is checked here against the trusted reference rather
+            // than taken from the queue's own report. A queue that miscomputes
+            // its own slack would otherwise certify itself.
+            if (o.mode == "approximate") {
+                const double ratio = *rec.approximation_ratio;
+                if (ratio > 1.0 + o.epsilon) {
+                    std::cerr << "FATAL: " << rec.algorithm << " / " << pq_name
+                              << " violated its approximation guarantee on query " << q.source
+                              << "->" << q.target << ": ratio " << ratio << " exceeds 1 + "
+                              << o.epsilon << "\n";
+                    std::exit(2);
+                }
+            } else if (!*rec.exact_match) {
                 std::cerr << "FATAL: " << rec.algorithm << " / " << pq_name
                           << " disagreed with the reference on query " << q.source << "->"
                           << q.target << " (" << candidate.dist[probe] << " vs "
@@ -565,6 +633,14 @@ struct QueueSummary {
     std::uint64_t       total_pops        = 0;
     bool                any_unpinned      = false;
     std::size_t         noisy_queries     = 0;
+
+    /// Why this configuration produced no timings, when it produced none.
+    ///
+    /// Held on the summary as well as on each record because the console is
+    /// where a person actually looks. A configuration that silently contributes
+    /// no row leaves an empty table and no explanation, which is the failure
+    /// this field exists to prevent -- the same reason the records carry it.
+    std::string         unsupported_reason;
 };
 
 void print_console_summary(const std::map<std::string, QueueSummary>& summaries,
@@ -612,6 +688,17 @@ void print_console_summary(const std::map<std::string, QueueSummary>& summaries,
                     s->noisy_queries > 0 ? "  [NOISY]" : "");
     }
 
+    // Configurations that produced no timings are listed with their reason
+    // rather than left out. An absent row reads as an oversight; an explained
+    // one reads as a decision, and only one of those is true.
+    for (const auto& [name, s] : summaries) {
+        if (s.per_query_median_ns.empty()) {
+            std::printf("%-16s %13s   %s\n", name.c_str(), "not measured",
+                        s.unsupported_reason.empty() ? "no timings were produced"
+                                                     : s.unsupported_reason.c_str());
+        }
+    }
+
     std::cout << "\n  median ns   median across queries of each query's median timing\n"
                  "  q-MAD ns    MAD across queries -- workload heterogeneity, not noise\n"
                  "  q-spread    the same, relative to the median\n"
@@ -654,6 +741,62 @@ void print_console_summary(const std::map<std::string, QueueSummary>& summaries,
 int main(int argc, char** argv) {
     try {
         Options o = parse_args(argc, argv);
+
+        // --- an experiment manifest supplies the run parameters ---------------
+        //
+        // Applied before anything is loaded, so the rest of main() cannot tell
+        // whether its options came from the command line or from a manifest --
+        // which is what keeps the batch path from becoming a second, subtly
+        // different measurement path.
+        //
+        // The manifest's values overwrite the defaults rather than merging with
+        // flags, and a flag that would contradict the manifest is refused
+        // below: a run that reports the manifest's name must be the run the
+        // manifest describes.
+        ExperimentManifest experiment;
+        const bool         batch = !o.experiment_file.empty();
+        if (batch) {
+            experiment = read_experiment_manifest_file(o.experiment_file);
+
+            if (!o.dataset.empty() || o.graph_spec_given || !o.queries_file.empty()) {
+                throw InvalidConfigError(
+                    "--experiment supplies the dataset and query set; --dataset, --graph and "
+                    "--queries-file would contradict it and are refused rather than silently "
+                    "overridden");
+            }
+
+            o.dataset =
+                "datasets/processed/" + experiment.dataset + ".lpqgraph";
+            o.queries_file = experiment.queries_file.empty()
+                                 ? ("experiments/manifests/" + experiment.dataset + "_queries_" +
+                                    std::to_string(experiment.query_count) + ".yaml")
+                                 : experiment.queries_file;
+            o.repetitions   = static_cast<std::size_t>(experiment.repetitions);
+            o.warmup        = static_cast<std::size_t>(experiment.warmup);
+            o.seed          = experiment.seed;
+            o.heuristic     = experiment.heuristic;
+            o.experiment_id = experiment.experiment;
+            if (!experiment.epsilon.empty()) {
+                o.epsilon = std::stod(experiment.epsilon);
+            }
+            // Zero means the manifest did not pin the geometry, so the runner
+            // defaults stand. Written this way rather than as an unconditional
+            // assignment so that an unset field cannot silently set a window of
+            // zero, which would disable the candidate window entirely.
+            if (experiment.lpq_window_max != 0) {
+                o.lpq_window_min = static_cast<std::size_t>(experiment.lpq_window_min);
+                o.lpq_window_max = static_cast<std::size_t>(experiment.lpq_window_max);
+            }
+            if (experiment.lpq_bucket_width != 0) {
+                o.lpq_bucket_width = experiment.lpq_bucket_width;
+            }
+
+            // A batch run is the kind whose numbers get published, so it is not
+            // allowed to be unpinned. On a hybrid-core laptop an unpinned matrix
+            // measures the scheduler as much as the queues.
+            o.require_pinning = true;
+        }
+
         o.query_seed  = o.seed;
 
         if (!o.dataset.empty() && o.graph_spec_given) {
@@ -691,6 +834,24 @@ int main(int argc, char** argv) {
             for (const ManifestQuery& q : manifest.queries) {
                 queries.push_back(Query{q.source, o.single_target ? q.target : kInvalidNode});
             }
+            // An experiment manifest declares how many queries the experiment
+            // measures, and the query manifest it resolves to decides how many
+            // actually run. If those disagree, the results file names an
+            // experiment that was not the one performed -- and because the
+            // count below is taken from the queries rather than the
+            // declaration, nothing later in the run could notice.
+            //
+            // This is reachable: the query-manifest path is derived from the
+            // dataset id and the declared count, and the naming of those files
+            // is not enforced anywhere.
+            if (batch && experiment.query_count != queries.size()) {
+                throw InvalidConfigError(
+                    "experiment '" + experiment.experiment + "' declares " +
+                    std::to_string(experiment.query_count) + " queries but " + o.queries_file +
+                    " holds " + std::to_string(queries.size()) +
+                    "; the results would carry the experiment name and a different query set");
+            }
+
             // Taken from the manifest rather than left at the --queries
             // default, so a run cannot report having measured 20 queries while
             // having actually run the manifest's 1000.
@@ -706,7 +867,17 @@ int main(int argc, char** argv) {
         // estimate overshoots the true cost and A* silently returns non-optimal
         // paths. It is therefore derived from the graph rather than defaulted.
         double heuristic_scale = 1.0;
-        if (o.algorithm == "astar" && o.heuristic != "zero") {
+        // In batch mode the matrix decides whether A* runs at all, and o.algorithm
+        // still holds its default at this point. Asking the manifest instead of
+        // o.algorithm is what stops a matrix containing astar from reaching the
+        // search with an underived scale of 1.0 -- which would not fail, it
+        // would silently return non-optimal paths.
+        const bool needs_heuristic_scale =
+            (batch ? std::find(experiment.algorithms.begin(), experiment.algorithms.end(),
+                               "astar") != experiment.algorithms.end()
+                   : o.algorithm == "astar");
+
+        if (needs_heuristic_scale && o.heuristic != "zero") {
             if (!g.has_coordinates()) {
                 throw UnsupportedConfigurationError(
                     "--heuristic " + o.heuristic + " requires a graph with coordinates; "
@@ -731,24 +902,89 @@ int main(int argc, char** argv) {
                          "reproducible from the recorded commit alone.\n";
         }
 
-        std::vector<std::string> queue_names;
-        if (o.pq == "all") {
-            queue_names = {"binary_heap", "four_ary_heap", "pairing_heap", "fibonacci_heap",
-                           "radix_heap", "lpq"};
+        // --- the matrix to measure -------------------------------------------
+        //
+        // One list for both paths. A command-line run is simply a matrix with
+        // one algorithm and one mode, which keeps a single loop below rather
+        // than a batch branch that could drift from the interactive one.
+        std::vector<ExperimentRun> runs;
+        if (batch) {
+            runs = experiment.runs();
         } else {
-            queue_names = {o.pq};
+            std::vector<std::string> queue_names;
+            if (o.pq == "all") {
+                queue_names = {"binary_heap", "four_ary_heap", "pairing_heap", "fibonacci_heap",
+                               "radix_heap", "lpq"};
+            } else {
+                queue_names = {o.pq};
+            }
+            for (const std::string& name : queue_names) {
+                runs.push_back(ExperimentRun{o.algorithm, name, o.mode});
+            }
+        }
+
+        // Summaries are keyed by queue alone unless the matrix varies the
+        // algorithm too, in which case two rows would collide under one name
+        // and the second would overwrite the first.
+        const bool multi_algorithm =
+            std::any_of(runs.begin(), runs.end(), [&runs](const ExperimentRun& r) {
+                return r.algorithm != runs.front().algorithm;
+            });
+        const auto label_of = [multi_algorithm](const ExperimentRun& r) {
+            return multi_algorithm ? (r.algorithm + "/" + r.pq) : r.pq;
+        };
+
+        if (batch) {
+            std::cout << "experiment   : " << experiment.experiment << "\n"
+                      << "matrix       : " << runs.size() << " configurations ("
+                      << experiment.algorithms.size() << " algorithm x "
+                      << experiment.pqs.size() << " queue x " << experiment.modes.size()
+                      << " mode)\n";
+            if (experiment.collect.hardware_counters) {
+                // Requested is not the same as collected. Said here, before the
+                // run, so nobody reads the manifest afterwards and assumes the
+                // counters in it were gathered.
+                std::cout << "hw counters  : requested by the manifest; reported as not "
+                             "measured where the host exposes no PMU\n";
+            }
         }
 
         std::vector<ResultRecord>           records;
         std::map<std::string, QueueSummary> summaries;
 
-        for (const auto& name : queue_names) {
+        for (const auto& run : runs) {
+            const std::string name  = run.pq;
+            const std::string label = label_of(run);
+
+            // The per-run configuration the measurement actually reads. Set
+            // here rather than passed separately so that a matrix entry and an
+            // equivalent command line produce identical records.
+            o.algorithm = run.algorithm;
+            o.mode      = run.mode;
+
             QueueSummary qs;
-            qs.name = name;
+            qs.name = label;
+
+            // Only the learned queue has an approximation mechanism. A classical
+            // heap asked for approximate mode would run exactly, return exact
+            // answers, and emit records labelled "approximate" -- and those
+            // records would then sit in a results table next to genuinely
+            // approximate ones, faster than them, inviting the conclusion that
+            // approximation did not help. The row is emitted with its reason
+            // instead, so it is explained rather than absent or wrong.
+            const bool queue_supports_mode = (run.mode != "approximate") || (name == "lpq");
 
             for (const auto& q : queries) {
                 ResultRecord rec;
-                if (name == "binary_heap") {
+                if (!queue_supports_mode) {
+                    rec.pq                 = name;
+                    rec.algorithm          = run.algorithm;
+                    rec.mode               = run.mode;
+                    rec.unsupported_reason =
+                        name + " has no approximation mechanism; running it under --mode "
+                               "approximate would produce exact results carrying an "
+                               "approximate label";
+                } else if (name == "binary_heap") {
                     rec = measure_one<BinaryHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
                 } else if (name == "four_ary_heap") {
                     rec = measure_one<FourAryHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
@@ -781,10 +1017,15 @@ int main(int argc, char** argv) {
                     qs.total_pops += rec.counters.pq_pops;
                     qs.any_unpinned = qs.any_unpinned || !rec.timing.affinity.pinned;
                     qs.noisy_queries += rec.timing.noisy ? 1U : 0U;
+                } else if (qs.unsupported_reason.empty()) {
+                    // Every query in this configuration carries the same
+                    // reason, so the first is taken and the rest would only
+                    // repeat it.
+                    qs.unsupported_reason = rec.unsupported_reason;
                 }
                 records.push_back(std::move(rec));
             }
-            summaries[name] = std::move(qs);
+            summaries[label] = std::move(qs);
         }
 
         print_console_summary(summaries, meta, o);
