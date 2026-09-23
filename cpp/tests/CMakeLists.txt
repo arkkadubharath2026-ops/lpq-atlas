@@ -70,7 +70,7 @@ lpq_add_test(test_common
 lpq_add_test(test_graph
     SOURCES graph/test_csr_graph.cpp graph/test_graph_builder.cpp graph/test_graph_metadata.cpp
             graph/test_graph_io.cpp graph/test_weight_distributions.cpp
-            graph/test_query_manifest.cpp
+            graph/test_query_manifest.cpp graph/test_synthetic_graphs.cpp
     LIBS    lpq::graph
     LABELS  "unit")
 
