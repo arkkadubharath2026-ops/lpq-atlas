@@ -215,7 +215,8 @@ namespace detail {
 
 [[nodiscard]] inline bool em_known_pq(const std::string& q) {
     return q == "binary_heap" || q == "four_ary_heap" || q == "pairing_heap" ||
-           q == "fibonacci_heap" || q == "radix_heap" || q == "lpq";
+           q == "fibonacci_heap" || q == "radix_heap" || q == "lpq" ||
+           q == "lpq_model";
 }
 
 }  // namespace detail

@@ -10,11 +10,12 @@ network.** Held-out ROC AUC is 0.79 on `snap_facebook` and 0.53 on `dimacs_ny`,
 and the reason is structural: road networks have near-uniform degree, so
 degree-based features cannot separate their nodes.
 
-**Where the model does predict well, using it still makes the queue slightly
-worse.** On `snap_facebook`, with 22x the precision of a random ranker, the
-trained scorer increases queue comparisons by 0.68%. Fitting the stated target
-accurately turns out not to be the same thing as helping, and the gap between
-those two is the real result here.
+**Fitting the target is not the same as helping, in both directions.** The
+model increases queue comparisons slightly on both datasets (+0.09% on
+`dimacs_ny`, +0.68% on `snap_facebook`) — yet on `dimacs_ny` it makes the queue
+measurably *faster*. See `ablation-waterfall.md`, which measures that properly:
+a paired test at the full protocol, checked against matrix-position bias by
+rerunning with the order reversed.
 
 Everything below is measured. The classification scores are held out: a node is
 wholly in the training split or wholly in the test split, never both. The
@@ -120,23 +121,37 @@ manifests used above:
 | `dimacs_ny` | 177,580,603 | 177,732,559 | **+0.09%** |
 | `snap_facebook` | 798,334,612 | 803,764,660 | **+0.68%** |
 
-**The model makes the queue slightly worse on both datasets**, including the one
-where it ranks its own target with AUC 0.79 and 22x the precision of a random
-ranker.
+**The model does slightly more comparison work on both datasets**, including the
+one where it ranks its own target with AUC 0.79 and 22x the precision of a
+random ranker.
+
+More comparisons is not the same as slower, and this project has measured that
+distinction three separate ways. The wall-clock consequence was measured
+properly afterwards in `ablation-waterfall.md`: on `dimacs_ny` the model is
+about 4.8% FASTER despite the extra comparisons, confirmed against
+matrix-position bias by an order-reversed rerun. The `snap_facebook` timing
+remains unresolved — the numbers below came from five repetitions with no
+pairing and no order control, and do not meet that standard.
 
 The counts differ, so the scorer is demonstrably changing queue behaviour rather
 than being ignored -- the pop counts move too (3,534,412 to 3,531,956 on
 facebook). It is changing it in the wrong direction.
 
-No timing claim is made here. The measured medians were 34.4 ms against 31.9 ms
-on `dimacs_ny` and 2.15 ms against 2.62 ms on `snap_facebook`, but the
-across-query MAD was of the same order as the medians and every run was flagged
-noisy, so those differences are not separable from noise at five repetitions.
-The comparison counts are exact and are what the conclusion rests on.
+No timing claim is made **from these runs**. The measured medians were 34.4 ms
+against 31.9 ms on `dimacs_ny` and 2.15 ms against 2.62 ms on `snap_facebook`,
+but the across-query MAD was of the same order as the medians, every run was
+flagged noisy, and five repetitions with no pairing cannot separate that. The
+comparison counts above are exact and stand on their own.
 
-### Why this is not simply a bad model
+`ablation-waterfall.md` measures the `dimacs_ny` timing properly and finds a
+real, small speedup. The `snap_facebook` timing has not been remeasured to that
+standard and should not be quoted in either direction.
 
-A hypothesis, not a measurement, and labelled as such.
+### Why good prediction does not reduce examined entries
+
+A hypothesis, not a measurement, and labelled as such. Note that it explains the
+comparison counts only; the model turns out to reduce wall-clock on `dimacs_ny`
+anyway, and nothing here explains that.
 
 The scorer is asked for **P(this node is the first extraction from its bucket)**,
 marginalised over every query in the training set. The queue needs something

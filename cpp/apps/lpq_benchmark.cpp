@@ -266,15 +266,22 @@ void print_usage() {
     // otherwise; a model with any other queue would be loaded, built and never
     // consulted, leaving the command line claiming a learned component that
     // played no part.
-    if (o.pq == "lpq_model" && o.model.empty()) {
-        throw InvalidConfigError(
-            "--pq lpq_model requires --model. Without one the queue scores every node "
-            "identically, which is the control condition and is spelled --pq lpq");
-    }
-    if (!o.model.empty() && o.pq != "lpq_model") {
-        throw InvalidConfigError(
-            "--model only affects --pq lpq_model; with --pq " + o.pq +
-            " it would be loaded and never consulted");
+    //
+    // Both checks are deferred when an experiment manifest is in play: the
+    // manifest decides the queue list, and it is read after this point. main()
+    // re-applies them once it knows what the matrix contains, so an ablation
+    // ladder can carry lpq_model beside the classical queues in one run.
+    if (o.experiment_file.empty()) {
+        if (o.pq == "lpq_model" && o.model.empty()) {
+            throw InvalidConfigError(
+                "--pq lpq_model requires --model. Without one the queue scores every node "
+                "identically, which is the control condition and is spelled --pq lpq");
+        }
+        if (!o.model.empty() && o.pq != "lpq_model") {
+            throw InvalidConfigError(
+                "--model only affects --pq lpq_model; with --pq " + o.pq +
+                " it would be loaded and never consulted");
+        }
     }
     if (o.mode != "exact" && o.mode != "approximate") {
         throw InvalidConfigError("unknown --mode: " + o.mode);
@@ -809,6 +816,26 @@ int main(int argc, char** argv) {
         const bool         batch = !o.experiment_file.empty();
         if (batch) {
             experiment = read_experiment_manifest_file(o.experiment_file);
+
+            // The same two conditions the command-line path checks, applied
+            // once the matrix is known. A manifest listing lpq_model without a
+            // model would otherwise measure the control condition under a name
+            // that says a model was involved.
+            const bool matrix_has_model =
+                std::find(experiment.pqs.begin(), experiment.pqs.end(), "lpq_model") !=
+                experiment.pqs.end();
+            if (matrix_has_model && o.model.empty()) {
+                throw InvalidConfigError(
+                    "experiment '" + experiment.experiment +
+                    "' lists lpq_model, which requires --model. Without one that row would "
+                    "be the control condition wearing a name that says otherwise");
+            }
+            if (!o.model.empty() && !matrix_has_model) {
+                throw InvalidConfigError(
+                    "--model was given but experiment '" + experiment.experiment +
+                    "' lists no lpq_model row, so the model would be loaded and never "
+                    "consulted");
+            }
 
             if (!o.dataset.empty() || o.graph_spec_given || !o.queries_file.empty()) {
                 throw InvalidConfigError(

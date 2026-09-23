@@ -1,0 +1,71 @@
+# The ablation waterfall on the New York road network.
+#
+#   lpq_benchmark --experiment configs/experiments/dimacs_ny_ablation_v1.yaml \
+#                 --model models/exported/dimacs_ny_static.lpqmodel \
+#                 --output results/raw/dimacs_ny_ablation_v1.json
+#
+#   python -c "from lpq_tools.evaluation.results import read_results; \
+#              from lpq_tools.evaluation.ablation import build_waterfall, format_waterfall; \
+#              print(format_waterfall(build_waterfall(read_results( \
+#                'results/raw/dimacs_ny_ablation_v1.json'))))"
+#
+# The queue list below is a LADDER, not a set, and the order matters. Each rung
+# adds exactly one thing to the rung above it:
+#
+#   binary_heap   the classical baseline: comparison-ordered heap
+#   radix_heap    + bucketing by key, still entirely classical
+#   lpq           + the candidate window and verification engine, with a
+#                   constant scorer, so no prediction is involved
+#   lpq_model     + a trained model in place of the constant scorer
+#
+# Read that way, each comparison isolates one change. radix_heap against
+# binary_heap is what bucketing alone does. lpq against radix_heap is the cost
+# of the window and verification machinery with prediction held constant.
+# lpq_model against lpq is the contribution of prediction with the machinery
+# held constant.
+#
+# The whole ladder runs in ONE pinned process over ONE loaded graph and ONE
+# query set, which is what makes the per-query comparisons paired.
+#
+# The model must be supplied on the command line rather than named here. A
+# manifest names an experiment; a model file is an artifact of a particular
+# training run, and pinning a path to it in a versioned config would make the
+# experiment silently depend on a file that is not versioned (models/exported/
+# is git-ignored, because a model is regenerable from the training set and the
+# seed). The runner refuses the run if the matrix lists lpq_model and no model
+# is given, so the dependency cannot be forgotten.
+experiment: dimacs_ny_ablation_v1
+dataset: dimacs_ny
+
+algorithm:
+  - dijkstra
+
+pq:
+  - binary_heap
+  - radix_heap
+  - lpq
+  - lpq_model
+
+mode:
+  - exact
+
+query_count: 100
+repetitions: 11
+warmup: 3
+seed: 42
+
+collect:
+  runtime: true
+  pq_operations: true
+
+  # A model IS involved in one of the four rows, but StaticNodeScorer evaluates
+  # it once per node before the search rather than inside it, so there is no
+  # per-extraction inference latency to attribute. Asking for it would produce a
+  # field that is structurally zero and reads like a measurement of a fast model.
+  ml_latency: false
+
+  # Requested, and expected to come back unmeasured on the development host:
+  # WSL2 exposes no CPU PMU. The runner reports these as not measured rather
+  # than estimating them, and the flag stays true so the same manifest collects
+  # them on a host that has counters.
+  hardware_counters: true

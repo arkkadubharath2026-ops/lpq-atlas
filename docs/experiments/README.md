@@ -38,10 +38,23 @@ slack is provably inert.
 **[static-scorer-training.md](static-scorer-training.md)** — the first
 measurement with a model in it. The static features rank their target well on a
 social graph (held-out AUC 0.79, 22x the precision of a random ranker) and
-barely above chance on a road network (0.53, 1.12x). The finding that matters:
-**even where the model predicts well, using it makes the queue slightly worse** —
-+0.68% comparisons on `snap_facebook`, +0.09% on `dimacs_ny`. Fitting the stated
-target is not the same as helping.
+barely above chance on a road network (0.53, 1.12x). The model does slightly
+*more* comparison work on both — which, on this project's own evidence, says
+nothing about speed.
+
+**[ablation-waterfall.md](ablation-waterfall.md)** — the total attributed to its
+parts, one component at a time, all four rungs in one pinned process. The
+structural result: **bucketing alone wins 2.8x on comparisons, and the candidate
+window and verification engine give 2.5x of it back.** The pairwise
+LPQ-versus-binary-heap framing used everywhere else in this directory hides that,
+because the two effects partially cancel. The window and verification also cost
+24.5 ms per query and are slower on *every query measured*.
+
+It also carries the project's first positive result for the learned component:
+the trained model is about 4.8% faster than a constant scorer on `dimacs_ny`,
+confirmed against matrix-position bias by rerunning the ladder in reverse order.
+And a methodological finding worth heeding: **matrix position inflated that
+effect by 45%** before the order control caught it.
 
 **[profiling.md](profiling.md)** — why no hardware performance counters appear
 anywhere in this directory. WSL2 exposes no CPU PMU, so cycles, cache misses and
@@ -75,8 +88,14 @@ fewer comparisons while running 4.57× slower. A document reporting a reduction
 in comparisons is reporting a reduction in comparisons, and says so explicitly
 where it might be misread as a speedup.
 
-**A learned model has now been measured, and it did not help.** Most documents
+**A learned model has now been measured, and it helps a little.** Most documents
 here predate it and describe runs with a constant scorer, which was deliberate:
-it isolates the queue's machinery from prediction quality. `static-scorer-training.md`
-is the exception and reports the model end to end. Nothing in this directory
-shows the learned component improving the queue on any dataset.
+it isolates the queue's machinery from prediction quality. The measured benefit
+is about 4.8% on one dataset, against a 24.5 ms per-query cost for the machinery
+that prediction steers — so prediction recovers roughly 6.5% of what the
+candidate window and verification engine spend.
+
+**No timing magnitude here except in `ablation-waterfall.md` has been checked
+for matrix-position bias**, which was measured there to inflate an effect by
+45%. Structural conclusions rest on exact comparison counts and are unaffected;
+timing magnitudes elsewhere should be read as carrying that uncertainty.
