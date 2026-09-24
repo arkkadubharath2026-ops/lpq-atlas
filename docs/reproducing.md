@@ -89,6 +89,39 @@ The Linux matrix runs in a container:
 scripts/build/linux_checks.sh
 ```
 
+### Verified from a clean clone
+
+`scripts/reproduce/build_all.sh` has been run against a fresh `git clone` of
+this repository: 126 targets built and **831/831 tests passed**. That run is
+what found the four defects below, none of which is visible from a working tree
+that already builds.
+
+**Two prerequisites the script now checks for you.** Both were discovered the
+hard way.
+
+- **A C++20 compiler must be the one CMake picks.** The clean-clone run selected
+  `C:\MinGW\bin\g++`, which is GCC 6.3.0 from 2016 and first on `PATH`, while
+  the compiler this project builds with sat further down it. CMake reported that
+  failure from inside a `FindThreads` `try_compile`, twenty lines deep through
+  `FetchContent`, naming neither the compiler it had chosen nor the requirement
+  it failed. `build_all.sh` now probes for C++20 before configuring and, on
+  failure, prints the compiler's path, its version, and what to set:
+
+  ```bash
+  CXX=/path/to/modern/g++ CC=/path/to/modern/gcc scripts/reproduce/build_all.sh
+  ```
+
+- **Ninja is pinned rather than left to CMake's default.** On Windows outside a
+  Visual Studio developer shell that default is NMake Makefiles, and the
+  configure fails with `CMAKE_CXX_COMPILER not set`.
+
+**One platform limit that is not fixed, because it cannot be.** On Windows the
+build fails under a deep source path — googletest's populate stamp exceeds the
+260-character limit — with `Filename longer than 260 characters`, and CMake also
+warns that object paths approach `CMAKE_OBJECT_PATH_MAX`. Clone to a short path
+such as `C:\lpq`. Enabling long-path support in Windows is the other option and
+was not tested here.
+
 ## The one thing that cannot be reproduced here
 
 **No hardware performance counters.** The development host runs under WSL2,
