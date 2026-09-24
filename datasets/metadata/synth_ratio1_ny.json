@@ -1,0 +1,39 @@
+{
+  "dataset_id": "synth_ratio1_ny",
+  "source_path": "datasets/processed/dimacs_ny.lpqgraph",
+  "source_format": "binary",
+  "processed_path": "datasets/processed/synth_ratio1_ny.lpqgraph",
+  "graph_checksum_fnv1a64": 1348734285530779617,
+  "weight_type": "uint32",
+  "node_count": 264346,
+  "edge_count": 733846,
+  "arc_count": 733846,
+  "directed": true,
+  "density": 2.7760813479303641,
+  "min_weight": 1,
+  "max_weight": 1317,
+  "mean_weight": 1.9434104703166604,
+  "stddev_weight": 4.3921630694871121,
+  "max_path_cost_bound": 348142365,
+  "min_out_degree": 1,
+  "max_out_degree": 8,
+  "mean_out_degree": 2.7760813479303641,
+  "stddev_out_degree": 0.98136535641478506,
+  "isolated_nodes": 0,
+  "has_coordinates": true,
+  "has_node_id_mapping": false,
+  "normalization": {
+    "directedness": "directed",
+    "self_loops": "drop",
+    "parallel_edges": "keep",
+    "edges_listed": "once"
+  },
+  "weights": {
+    "synthesized": true,
+    "distribution": "heavy_tailed",
+    "minimum": 1,
+    "maximum": 100000,
+    "seed": 4242,
+    "alpha": 2
+  }
+}
