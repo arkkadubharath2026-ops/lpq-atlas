@@ -41,10 +41,15 @@ Read as a ladder rather than as a pairwise comparison, on `dimacs_ny`
 verification engine give 2.5× of it straight back.**
 
 The pairwise framing hides this. Against a binary heap the learned queue looks
-mildly favourable — 12.9% fewer comparisons — and that number is a large win
-from the substrate minus a large loss from the machinery on top of it. The
-learned queue is not narrowly beating a classical heap; it is squandering most
-of an advantage its own substrate had already won.
+mildly favourable on this graph — 12.9% fewer comparisons — and that number is a
+large win from the substrate minus a large loss from the machinery on top of it.
+The learned queue is not narrowly beating a classical heap; it is squandering
+most of an advantage its own substrate had already won.
+
+**And on this graph is doing real work in that sentence.** Measured across four
+road networks (§2a), the machinery's cost ranges from 1.001× to 11.141× and the
+net figure against a binary heap ranges from 0.266× to 3.687×. The 12.9% is a
+property of `dimacs_ny`, not of the design.
 
 Wall-clock, paired permutation test, Holm-corrected:
 
@@ -57,6 +62,73 @@ Wall-clock, paired permutation test, Holm-corrected:
 The window and verification engine cost ≈24.5 ms per query and are slower on
 **every query measured**. The trained model recovers ≈1.4 ms of that — about 6%
 of what the machinery it steers spends.
+
+## 2a. It does not generalise, and the first explanation of why was also wrong
+
+The ladder repeated on five road networks plus one constructed graph, identical
+protocol, exact counts, ordered by the variable that turned out to govern it:
+
+| dataset | nodes | max w | mean w | bucket w | **bw / mean w** | radix/binary | **lpq/radix** |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `snap_roadnet_pa` | 1,088,092 | 1,000 | 500.20 | 1 | **0.002** | 0.266× | **1.001×** |
+| `dimacs_ny` | 264,346 | 36,946 | 1293.30 | 37 | **0.029** | 0.352× | 2.472× |
+| `dimacs_col` | 435,666 | 137,384 | 3499.81 | 135 | **0.039** | 0.324× | 4.304× |
+| `dimacs_fla` | 1,070,376 | 214,013 | 2043.46 | 209 | **0.102** | 0.331× | 11.141× |
+| `synth_ratio1_ny` † | 264,346 | 1,317 | 1.94 | 2 | **1.029** | 0.083× | **215.545×** |
+| `snap_roadnet_ca` | 1,965,206 | 48,438 | 2.95 | 48 | **16.281** | 0.069× | **4282.402×** |
+
+† constructed to test the hypothesis, after the five natural datasets suggested it.
+
+**The 12.9% headline was a fact about `dimacs_ny`.** Across these graphs the
+machinery's isolated cost spans 1.001× to 4282×.
+
+### The explanation that failed, and why it is recorded
+
+With four datasets in hand the obvious explanatory variable was **bucket
+width** (`max_weight / 1024`), and the four rows then available were monotonic
+in it. That claim was written down together with a prediction for the dataset
+still running: `snap_roadnet_ca`, bucket width 48, should cost between
+`dimacs_ny`'s 2.472× and `dimacs_col`'s 4.304×.
+
+**It measured 4282.402×** — wrong by three orders of magnitude, at a bucket
+width sitting between the two graphs it was supposed to fall between.
+
+The pre-registration is the only reason this is a refutation rather than a
+footnote. Written after the fact, the natural move would have been to add a term
+and keep the theory.
+
+### The variable that survived a test
+
+`snap_roadnet_ca` differs in its weight *distribution*: mean edge weight **2.95**
+against a maximum of **48,438**. The substrate sizes buckets from the maximum, so
+its buckets are ~16× wider than a typical edge. A bucket is wide or narrow only
+relative to the spacing between consecutive keys, and that spacing is set by the
+typical edge weight, not the largest one.
+
+That variable was chosen after seeing the number it explains, so it was treated
+as a fit and given its own test. `synth_ratio1_ny` holds the `dimacs_ny`
+topology fixed and replaces only the weights, landing at ratio 1.029 where the
+two hypotheses disagree by two orders of magnitude. The predictions were
+committed before the run:
+
+| hypothesis | predicted | measured | off by |
+|---|---:|---:|---:|
+| bucket width | ~1.0× | 215.5× | **216×** |
+| bucket width ÷ mean weight | 167.8× (band 55.9–503.3×) | 215.5× | **1.28×** |
+
+Bucket width failed a second time, and in the opposite direction from its first
+failure. A variable that errs both ways is not noisy; it is the wrong variable.
+
+**What does generalise:** bucketing's advantage — `radix/binary` never exceeds
+0.352× on any graph measured, and improves to 0.069× on the most concentrated —
+and the direction of the machinery's cost, which is never below 1.0×. The window
+and verifier never reduce comparisons relative to the bucket queue they sit on.
+
+This makes the project's conclusion sharper rather than weaker. The learned
+design is **viable only where a bucket is far narrower than a typical edge,
+which is exactly where it also has nothing to contribute**: there every entry in
+a bucket carries effectively the same key, so verification succeeds trivially
+and the machinery is free because it is doing nothing.
 
 ## 3. Why: where the time actually goes
 
@@ -108,7 +180,43 @@ examines 13.2 entries per extraction on `dimacs_ny` against 225.9 on
 on road networks is the same property that leaves a static feature set with
 nothing to learn from.**
 
-## 5. Three results about methodology
+### The adaptive controller is the one place the machinery pays
+
+Measured end to end on `dimacs_ny`, 100 queries, exact mode, with the controller
+and online learner attached to a real search for the first time:
+
+| configuration | comparisons | pops |
+|---|---:|---:|
+| `lpq` | 177,580,603 | 13,841,954 |
+| `lpq_adaptive` | **116,608,480** | **13,841,954** |
+
+**The pop counts are identical to the unit**, so the two configurations
+performed the same search — same nodes settled, same order — and the 34%
+reduction is not bought by taking a different path through the graph. It is the
+same algorithmic outcome with a third less work inside the queue.
+
+This is the only measurement in this project where the learned machinery
+improves on its own baseline rather than giving back what bucketing won. It is
+one graph, at a favourable ratio of 0.029, with no wall-clock claim attached,
+and which of the controller's three levers produced it has not been separated.
+
+### A* is implemented, and helps the learned queue least
+
+| queue | Dijkstra | A* (euclidean) | A*/Dijkstra |
+|---|---:|---:|---:|
+| `binary_heap` | 203,801,439 | 93,314,351 | **0.458×** |
+| `radix_heap` | 71,839,857 | 32,916,478 | **0.458×** |
+| `lpq` | 177,580,603 | 119,548,206 | **0.673×** |
+
+A* removes 54% of comparisons from both classical queues and 33% from the
+learned one, so the machinery's isolated cost rises from 2.472× to **3.632×**
+under A*. This experiment was impossible until a format defect was fixed: the
+graph file stored a coordinate *flag* rather than a coordinate *system*, so
+every graph loaded from disk reported having no coordinates and every heuristic
+except `zero` was rejected. 826 tests passed throughout, because every A* test
+built its graph in memory.
+
+## 5. Four results about methodology
 
 These generalise beyond this system and are stated separately because they are
 reusable.
@@ -133,10 +241,26 @@ Retraining on a query set with zero overlap reduced the measured speedup from
 2.10 ms to 1.43 ms. **The leak did not create the effect, but it did inflate
 it**, and it would have been invisible in the reported numbers.
 
+**Identical work varied 2.3× in wall-clock across invocations.** Four
+approximate-mode runs at different epsilon produced byte-identical comparison
+*and* pop counts, and returned medians from 26.7 ms to 61.5 ms, while each run's
+own within-query noise stayed near 2-3%. Each invocation measured itself
+consistently and disagreed with the others. Only configurations run inside a
+single invocation may be compared on time; every cross-dataset table in this
+project compares exact counts for this reason.
+
 ## 6. What this does not show
 
-- **Two datasets measured end to end**, one road network and one social graph.
-  Four further prepared graphs were not measured.
+- **Five road networks, one social graph, one constructed graph.** No other
+  graph class. `snap_facebook` was not part of the generalisation sweep.
+- **The governing ratio is a six-point relationship with one validation point.**
+  It is monotonic over four orders of magnitude and it survived a discriminating
+  pre-registered test, but it is a summary of measurements rather than a model
+  derived from the substrate.
+- **Bucket width was not swept within a single natural graph** in the
+  generalisation sweep; each dataset contributes the one width the runner
+  derives. `synth_ratio1_ny` varies the weights on a fixed topology, which
+  begins that sweep and is not the whole of it.
 - **No hardware counters anywhere.** The development host runs under WSL2, which
   exposes no CPU PMU. Cycles, cache misses and branch misses are *not measured*
   and nothing is inferred to fill that gap. The hypothesis that the substrate's
@@ -148,9 +272,14 @@ it**, and it would have been invisible in the reported numbers.
 - **Dynamic features unevaluated.** Only static per-node features can be
   precomputed outside the timed loop; a model using queue or search-state
   features is a different design with a different cost and was not built.
-- **Approximate mode measured in comparisons only**, not wall-clock.
-- **A* not measured** with the learned queue.
-- **Adaptive controller not reachable** from the benchmark runner.
+- **Approximate mode saturates by epsilon = 0.01** on `dimacs_ny` and its
+  wall-clock column cannot be read as a speedup; where between 0 and 0.01 the
+  slack stops mattering is unmeasured.
+- **A\* measured with one heuristic on one graph.** `manhattan` and `haversine`
+  are implemented and were not run.
+- **The adaptive controller's 34% is unattributed.** It has three levers and the
+  measurement does not separate them, adapts within a query but never across
+  queries, and was run on one graph at a favourable ratio.
 
 ## 7. Honest positioning
 

@@ -128,13 +128,61 @@ Three configurations are refused rather than run:
   the wrong conclusion. They emit an explained row instead, in the console as
   well as in the JSON.
 
+## Wall-clock, and what trying to measure it revealed
+
+ESD.md §40 asks for measured approximation behaviour, and every number above is
+a comparison count. Wall-clock was measured afterwards, on `dimacs_ny`, 100
+queries, 11 repetitions, single core, one epsilon per invocation:
+
+| epsilon | comparisons | pops | median ns | within-query noise |
+|---:|---:|---:|---:|---:|
+| 0.01 | 103,645,894 | 13,841,858 | 26,735,500 | 3.1% |
+| 0.05 | 103,645,894 | 13,841,858 | 59,553,700 | 1.9% |
+| 0.10 | 103,645,894 | 13,841,858 | 61,475,250 | 2.2% |
+| 0.25 | 103,645,894 | 13,841,858 | 59,218,850 | 2.3% |
+
+Two things fall out, and the second matters more than the first.
+
+**Epsilon saturates immediately.** The comparison and pop counts are identical
+across a 25-fold range of slack — not close, identical to the unit. Whatever the
+slack buys on this graph, it has bought all of it by epsilon = 0.01. Anything
+larger is guarantee given away for nothing.
+
+**The rows are an accidental control on the measurement apparatus, and it
+fails.** Four invocations performed byte-identical work — same comparisons, same
+pops — and returned medians spanning **26.7 ms to 61.5 ms, a factor of 2.3**.
+The within-query noise column stays between 1.9% and 3.1% throughout, so each
+invocation measured itself consistently; the disagreement is entirely *between*
+invocations.
+
+That bounds what any wall-clock number in this project can carry:
+
+- Comparisons made **within one invocation** of the runner are sound. The queues
+  are interleaved inside one process and share whatever state the machine is in.
+- Comparisons made **across invocations** are not. A 2.3× gap arose here with no
+  algorithmic difference at all, which is larger than most effects this project
+  has reported.
+
+Every cross-dataset table in `generalisation.md` already compared exact
+comparison counts only and said so. This is the measurement that justifies that
+caution rather than merely asserting it.
+
+`--epsilon 0.0` under `--mode approximate` is refused: with no slack it is exact
+mode reported under a weaker guarantee than it actually provides.
+
 ## What this does not show
 
-- **No wall-clock was measured.** Every number here is a comparison count. The
-  phase profile (`lpq-phase-profile.md`) established that comparison count does
-  **not** predict runtime for this queue — it does 12.9% fewer comparisons than
-  the binary heap and is 4.57× slower — so nothing here may be read as a speedup.
-  A 44% reduction in comparisons is a reduction in comparisons.
+- **No speedup is claimed from the table above.** Comparison count does not
+  predict runtime for this queue — the phase profile established that it does
+  12.9% fewer comparisons than the binary heap on this graph and is 4.57× slower
+  — and the cross-invocation spread means the timing column cannot carry a
+  comparison either. A 44% reduction in comparisons is a reduction in
+  comparisons.
+- **The saturation point was not located.** Epsilon is inert between 0.01 and
+  0.25; where between 0 and 0.01 it stops mattering is unmeasured.
+- **One graph.** The generalisation sweep shows this queue's behaviour varies by
+  four orders of magnitude across datasets. There is no reason to expect the
+  saturation point to be a constant.
 - **Five queries on NY, ten on the random graph.** Enough for exact counts to be
   meaningful, nowhere near enough for a timing claim.
 - **The useful bucket-width range has been shown to exist, not mapped.** Whether

@@ -60,14 +60,29 @@ confirmed against matrix-position bias by rerunning the ladder in reverse order.
 And a methodological finding worth heeding: **matrix position inflated that
 effect by 45%** before the order control caught it.
 
-**[generalisation.md](generalisation.md)** — the same ladder on four road
-networks, and the document that **overturns this project's longest-standing
-claim**. "The learned queue does 12.9% fewer comparisons than a binary heap" is
-a fact about `dimacs_ny`; across four graphs that figure ranges from 0.266× to
-3.687×. What explains the spread is **bucket width**, not graph size — two
-graphs within 2% of each other in node count differ by 11× in machinery cost.
-Bucketing's own advantage does generalise, holding between 0.266× and 0.352×
-throughout.
+**[generalisation.md](generalisation.md)** — the same ladder on five road
+networks plus one constructed graph, and the document that **overturns this
+project's longest-standing claim**, then overturns its own first explanation.
+"The learned queue does 12.9% fewer comparisons than a binary heap" is a fact
+about `dimacs_ny`; across six graphs the machinery's isolated cost ranges from
+1.001× to 4282×. The first explanation offered — bucket width — was recorded as
+a prediction before the fifth dataset finished and was **wrong by three orders
+of magnitude**. The variable that survives is **bucket width ÷ mean edge
+weight**, which predicted a constructed test case's 215.5× to within 1.28× where
+bucket width alone was wrong by 216×. Bucketing's own advantage generalises
+throughout, and never loses.
+
+**[astar.md](astar.md)** — A\* measured with every queue, and the format defect
+that had made it **unreachable from a saved graph** for the life of the project
+without any test noticing. A\* removes 54% of comparisons from both classical
+queues and only 33% from the learned one, so the machinery's isolated cost rises
+from 2.472× to 3.632× under A\*.
+
+**[adaptive-controller.md](adaptive-controller.md)** — the controller and online
+learner running inside a real search for the first time. On `dimacs_ny` the
+adaptive configuration performs **34% fewer comparisons at identical pop
+counts** — the same search, a third less queue work. The first measurement in
+this project where the learned machinery improves on its own baseline.
 
 **[profiling.md](profiling.md)** — why no hardware performance counters appear
 anywhere in this directory. WSL2 exposes no CPU PMU, so cycles, cache misses and
@@ -78,11 +93,26 @@ project is inferred to fill that gap.
 
 - **The 12.9% figure was reported as a property of the design and is a property
   of one graph.** Every document here written before `generalisation.md` uses
-  it that way. Measured on four road networks the learned queue does 12.9%
-  *fewer* comparisons than a binary heap on `dimacs_ny` and **269% more** on
-  `dimacs_fla`. The `lpq/binary` framing should not be used at all: it is a
-  product of two effects that move in opposite directions and vary
+  it that way. Measured on six graphs the learned queue does 12.9% *fewer*
+  comparisons than a binary heap on `dimacs_ny` and roughly **295 times more**
+  on `snap_roadnet_ca`. The `lpq/binary` framing should not be used at all: it
+  is a product of two effects that move in opposite directions and vary
   independently.
+
+- **`generalisation.md`'s own first explanation was wrong, and was caught by its
+  own pre-registration.** It attributed the spread to bucket width and recorded
+  a prediction for `snap_roadnet_ca` before that dataset finished: 2.472× to
+  4.304×. The measured value was **4282.402×**. The replacement — bucket width
+  divided by mean edge weight — was then tested the same way on a constructed
+  dataset and survived, predicting 215.5× to within 1.28×. Both the failure and
+  the success are kept, in order, because the sequence is the evidence.
+
+- **Cross-invocation wall-clock comparisons anywhere in this directory are not
+  trustworthy, and now there is a number for it.** Four approximate-mode runs
+  performed byte-identical work — identical comparison *and* pop counts — and
+  returned medians spanning a factor of **2.3**, while each run's own
+  within-query noise stayed near 2–3%. Only queues compared inside a single
+  invocation may be compared on time.
 
 Recorded rather than quietly edited away, because a reader who saw the earlier
 claim needs to know it changed.
