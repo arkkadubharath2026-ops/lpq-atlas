@@ -63,13 +63,21 @@ the number, the obvious move would have been to add a term and keep the theory.
 `snap_roadnet_ca` differs from every other dataset in its **weight
 distribution**, not its size or its weight range:
 
-| dataset | max weight | mean weight | sd weight | bucket width | **bucket width ÷ mean weight** | lpq/radix |
+| dataset | max weight | mean weight | bucket width | **bucket width ÷ mean weight** | radix/binary | lpq/radix |
 |---|---:|---:|---:|---:|---:|---:|
-| `snap_roadnet_pa` | 1,000 | 500.20 | 288.42 | 1 | **0.002** | 1.001× |
-| `dimacs_ny` | 36,946 | 1,293.30 | 1,130.08 | 37 | **0.029** | 2.472× |
-| `dimacs_col` | 137,384 | 3,499.81 | 5,376.33 | 135 | **0.039** | 4.304× |
-| `dimacs_fla` | 214,013 | 2,043.46 | 2,918.78 | 209 | **0.102** | 11.141× |
-| `snap_roadnet_ca` | 48,438 | **2.95** | 36.31 | 48 | **16.281** | 4282.402× |
+| `snap_roadnet_pa` | 1,000 | 500.20 | 1 | **0.002** | 0.266× | 1.001× |
+| `dimacs_ny` | 36,946 | 1,293.30 | 37 | **0.029** | 0.352× | 2.472× |
+| `dimacs_col` | 137,384 | 3,499.81 | 135 | **0.039** | 0.324× | 4.304× |
+| `dimacs_fla` | 214,013 | 2,043.46 | 209 | **0.102** | 0.331× | 11.141× |
+| `synth_ratio1_ny` † | 1,317 | 1.94 | 2 | **1.029** | 0.083× | 215.545× |
+| `snap_roadnet_ca` | 48,438 | **2.95** | 48 | **16.281** | 0.069× | 4282.402× |
+
+† constructed afterwards to test this hypothesis; see the next section. The five
+natural datasets are the evidence the hypothesis was built from.
+
+Both outcome columns are monotonic in the ratio, in opposite directions: as
+buckets widen relative to a typical edge the learned machinery's cost rises and
+the radix heap's advantage improves. One mechanism moves both.
 
 `snap_roadnet_ca` has a mean edge weight of **2.95** and a maximum of **48,438**
 — a heavy tail, where almost every edge is tiny and a few are enormous. The
@@ -90,12 +98,12 @@ This also explains the `radix/binary` column's one outlier: `snap_roadnet_ca` is
 concentration of weights that ruins the learned machinery is ideal for a radix
 heap.
 
-## This explanation is fitted, and here is its test
+## This explanation was fitted, and here is the test it survived
 
-**The ratio above was chosen after seeing the number it explains.** That makes
+**The ratio above was chosen after seeing the number it explains.** That made
 it a fit, not a prediction, and the previous section is what a fit looks like
-when it fails. It is recorded as provisional until it survives a dataset chosen
-to break it.
+when it fails. It was recorded as provisional until it survived a dataset chosen
+to break it. It has now survived one.
 
 That dataset now exists. `synth_ratio1_ny` takes the `dimacs_ny` topology
 unchanged (264,346 nodes, 733,846 arcs) and replaces its weights with a
@@ -119,11 +127,35 @@ discriminates. Holding the topology fixed and changing only the weights also
 removes graph structure as a confound, which no pair of the five natural
 datasets does.
 
-**Recorded before the run. The result appears in the next section.**
+**Recorded before the run**, in commit `2cda21d`, so the prediction is checkable
+against the history rather than taken on trust.
 
 ### Result
 
-Measured `lpq/radix` on `synth_ratio1_ny`: **pending**.
+Measured `lpq/radix` on `synth_ratio1_ny`: **215.5×** (3,454,469,892 comparisons
+against the radix heap's 16,026,706).
+
+| hypothesis | predicted | measured | off by |
+|---|---:|---:|---:|
+| bucket width | ~1.0× | 215.5× | **216×** |
+| bucket width ÷ mean weight | 167.8× (band 55.9–503.3×) | 215.5× | **1.28×** |
+
+The ratio hypothesis **survives a test that could have killed it**, landing
+inside its pre-registered band and within 28% of its point prediction. The
+bucket-width hypothesis fails a second time, and fails in the opposite direction
+from the first: on `snap_roadnet_ca` it was a thousand times too low, here it is
+two hundred times too high. A variable that errs in both directions is not a
+noisy predictor, it is the wrong variable.
+
+The secondary prediction holds too. Concentrated weights should suit a radix
+heap, and `radix/binary` here is **0.083×** — close to `snap_roadnet_ca`'s
+0.069× and far below the 0.266–0.352× of the well-spread datasets. The same
+property that ruins the learned machinery helps the queue it is built on.
+
+This is one validation point, on a constructed dataset that shares its topology
+with `dimacs_ny`. It raises the ratio from a fit to a hypothesis with a
+successful prediction behind it. It does not make it a law, and the honest
+summary is in **What this does not show** below.
 
 ## What does generalise
 
