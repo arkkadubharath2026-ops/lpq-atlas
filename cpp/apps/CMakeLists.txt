@@ -11,6 +11,11 @@ target_link_libraries(lpq_benchmark PRIVATE
     lpq::pq
     lpq::graph
     lpq::metrics
+    lpq::lpq
+    lpq::verification
+    lpq::models
+    lpq::features
+    lpq::adaptation
     lpq::compiler_settings)
 
 # The runner parses argv and formats reports; -Wold-style-cast and -Wconversion

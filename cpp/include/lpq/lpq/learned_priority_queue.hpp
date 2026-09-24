@@ -64,6 +64,7 @@
 #include "lpq/features/graph_features.hpp"
 #include "lpq/lpq/bucket_substrate.hpp"
 #include "lpq/lpq/candidate_manager.hpp"
+#include "lpq/lpq/extraction_observer.hpp"
 #include "lpq/metrics/phase_profiler.hpp"
 #include "lpq/models/predictor.hpp"
 #include "lpq/verification/correction_engine.hpp"
@@ -194,6 +195,15 @@ public:
 
     void set_scorer(const Scorer* scorer) noexcept { scorer_ = scorer; }
 
+    /// Attaches something that watches extractions and may steer them.
+    ///
+    /// Null by default and left null in every non-adaptive configuration, so
+    /// the baseline pays one predictable branch per pop rather than a virtual
+    /// call. See extraction_observer.hpp on why this is an interface rather
+    /// than a direct dependency on the adaptation layer.
+    void set_observer(ExtractionObserver* observer) noexcept { observer_ = observer; }
+    [[nodiscard]] const ExtractionObserver* observer() const noexcept { return observer_; }
+
     // --- PriorityQueueLike ---------------------------------------------------
 
     void push(NodeId node, KeyType key) {
@@ -205,10 +215,30 @@ public:
         LPQ_PROFILE_SCOPE(QueuePhase::kPop);
         ++metrics_.extractions;
 
+        // The observer decides whether the learned path runs at all. A
+        // controller that has concluded prediction is not paying for itself
+        // retreats here, and the extraction takes the classical bucket scan --
+        // which is the fallback guarantee made adaptive rather than a new path.
+        const ExtractionPolicy policy =
+            observer_ != nullptr ? observer_->policy() : ExtractionPolicy{};
+
         LPQ_PROFILE_BEGIN(traverse);
         const std::size_t bucket_size = substrate_.current_bucket_size();
         const auto        front       = substrate_.current_front();
         LPQ_PROFILE_END(traverse, QueuePhase::kBucketTraversal);
+
+        if (!policy.use_learned_path) {
+            ++metrics_.fallback_scans;
+            LPQ_PROFILE_SCOPE(QueuePhase::kFallbackScan);
+            const QueueEntry<KeyType> entry = substrate_.pop();
+            if (observer_ != nullptr) {
+                // Reported so a retreat is visible to the controller as an
+                // extraction that skipped nothing, rather than as silence that
+                // would let it conclude the retreat had no cost.
+                observer_->on_extraction(0, 0, CorrectionOutcome{});
+            }
+            return entry;
+        }
 
         if (front.empty()) {
             ++metrics_.fallback_scans;
@@ -220,8 +250,17 @@ public:
         LPQ_PROFILE_BEGIN(window);
         manager_.begin_extraction(substrate_.size());
         std::size_t offered = 0;
+        // The policy's window is a CAP, not a replacement: the manager's own
+        // target already accounts for queue size, and a controller widening
+        // beyond it would be asking the window to hold entries the substrate
+        // never put in the front.
+        const std::size_t window_cap =
+            observer_ != nullptr
+                ? std::min<std::size_t>(manager_.target_window(), policy.window_size)
+                : manager_.target_window();
+
         for (const auto& e : front) {
-            if (offered >= manager_.target_window()) {
+            if (offered >= window_cap) {
                 break;
             }
             Candidate c;
@@ -260,7 +299,15 @@ public:
             LPQ_PROFILE_END(remove, QueuePhase::kRemoveFromBucket);
             if (removed) {
                 ++metrics_.verified_extractions;
-                metrics_.entries_skipped += bucket_size > cursor ? (bucket_size - cursor) : 0;
+                const std::uint64_t skipped =
+                    bucket_size > cursor ? (bucket_size - cursor) : 0;
+                metrics_.entries_skipped += skipped;
+                if (observer_ != nullptr) {
+                    observer_->on_extraction(
+                        skipped,
+                        static_cast<std::uint32_t>(outcome.verification.comparisons),
+                        outcome);
+                }
                 return QueueEntry<KeyType>{node, key};
             }
             // Unreachable unless the window and the bucket have diverged. Not
@@ -272,7 +319,15 @@ public:
 
         ++metrics_.fallback_scans;
         LPQ_PROFILE_SCOPE(QueuePhase::kFallbackScan);
-        return substrate_.pop();
+        const QueueEntry<KeyType> entry = substrate_.pop();
+        if (observer_ != nullptr) {
+            // Zero entries skipped: a fallback examined all of them. That is
+            // the signal the controller uses to retreat, so reporting anything
+            // else here would hide the cost of the path being taken.
+            observer_->on_extraction(
+                0, static_cast<std::uint32_t>(outcome.verification.comparisons), outcome);
+        }
+        return entry;
     }
 
     [[nodiscard]] QueueEntry<KeyType> top() const { return substrate_.top(); }
@@ -375,6 +430,9 @@ private:
     VerificationEngine verifier_;
     CorrectionEngine   corrector_;
     const Scorer*      scorer_ = nullptr;
+
+    /// Null in every non-adaptive configuration. See set_observer().
+    ExtractionObserver* observer_ = nullptr;
     LpqMetrics         metrics_{};
     std::uint64_t      verifier_comparisons_at_reset_ = 0;
 };

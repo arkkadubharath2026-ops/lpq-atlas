@@ -102,7 +102,8 @@ lpq_add_test(test_verification
 
 lpq_add_test(test_adaptation
     SOURCES adaptation/test_online_learner.cpp adaptation/test_adaptive_controller.cpp
-    LIBS    lpq::adaptation
+            adaptation/test_controller_observer.cpp
+    LIBS    lpq::adaptation lpq::lpq lpq::algorithms
     LABELS  "unit")
 
 lpq_add_test(test_metrics
@@ -156,3 +157,7 @@ lpq_add_test(test_differential
     SOURCES algorithms/test_differential.cpp
     LIBS    lpq::algorithms lpq::pq
     LABELS  "differential;fuzz;slow")
+
+# Header self-containment (ESD.md section 40). See the included file for why
+# each header is compiled alone, and why it is included twice.
+include("${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.header_selfcontained.cmake")

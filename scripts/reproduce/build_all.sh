@@ -18,9 +18,61 @@
 # =============================================================================
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
+# -----------------------------------------------------------------------------
+# The compiler is checked BEFORE configuring, because the failure it produces
+# otherwise is unreadable.
+#
+# A clean-clone run on the development host selected C:\MinGW\bin\g++, which is
+# GCC 6.3.0 from 2016 and first on PATH, while the compiler this project is
+# actually built with sits further down it. CMake reported
+# 'the current compiler "GNU" does not support CXX20' from inside a FindThreads
+# try_compile, buried in a twenty-line call stack through FetchContent -- which
+# names neither the compiler it chose nor the fact that another one would work.
+#
+# Checking here costs one compile of an empty translation unit and turns that
+# into a single actionable line.
+# -----------------------------------------------------------------------------
+say "checking the C++ compiler supports C++20"
+cxx_probe="$(mktemp -d)"
+trap 'rm -rf "$cxx_probe"' EXIT
+cat > "${cxx_probe}/probe.cpp" <<'PROBE'
+#include <version>
+#include <concepts>
+template <typename T> concept Addable = requires(T a) { a + a; };
+static_assert(Addable<int>);
+int main() { return 0; }
+PROBE
+if ! "${CXX:-c++}" -std=c++20 -c "${cxx_probe}/probe.cpp" -o "${cxx_probe}/probe.o" 2> "${cxx_probe}/err"; then
+    printf '    compiler tried: %s\n' "$(command -v "${CXX:-c++}" || echo "${CXX:-c++}")" >&2
+    printf '    version:        %s\n' "$("${CXX:-c++}" --version 2>/dev/null | head -1)" >&2
+    sed 's/^/    /' "${cxx_probe}/err" >&2
+    die "the C++ compiler on PATH does not support C++20. Set CXX to one that does, e.g.
+    CXX=/path/to/modern/g++ scripts/reproduce/build_all.sh
+  This project requires C++20 (concepts, <version>, if constexpr); an older
+  compiler fails much later inside a CMake try_compile with a message that
+  names neither the compiler nor the requirement."
+fi
+printf '    %s\n' "$("${CXX:-c++}" --version 2>/dev/null | head -1)"
+
 say "configuring ${BUILD_DIR}"
-cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release > /dev/null ||
-    die "cmake configure failed"
+# The generator is pinned rather than left to CMake's default. On Windows,
+# outside a Visual Studio developer shell, that default is NMake Makefiles, and
+# the configure fails with "CMAKE_CXX_COMPILER not set" -- which is exactly how
+# this script failed its first run from a clean clone. The `release` preset
+# already fixes the generator (Ninja) and resolves to ${REPO_ROOT}/build/release,
+# which is BUILD_DIR's default, so the preset is used whenever BUILD_DIR has not
+# been overridden.
+if [ "$BUILD_DIR" = "${REPO_ROOT}/build/release" ]; then
+    cmake -S "$REPO_ROOT" --preset release > /dev/null ||
+        die "cmake configure failed (preset 'release')"
+else
+    # LPQ_BUILD_DIR was overridden, so the preset's binaryDir would disagree
+    # with it. Ninja is still required by name for the same reason.
+    command -v ninja > /dev/null ||
+        die "ninja is required to configure a build outside the default directory"
+    cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release > /dev/null ||
+        die "cmake configure failed"
+fi
 
 say "building"
 # The status is captured rather than piped away: a build whose exit code is
