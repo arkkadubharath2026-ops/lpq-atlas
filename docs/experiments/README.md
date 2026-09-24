@@ -7,6 +7,10 @@ These are records, not a narrative. Each states its protocol, its host, and what
 it does not show. Where a figure is exact (a comparison count, an allocation
 count) it says so; where it is a measurement carrying noise it says that too.
 
+**The synthesis of everything here is
+[`experiments/paper/findings.md`](../../experiments/paper/findings.md).** Read
+that first if you want the conclusion; read these if you want to check it.
+
 ## The documents
 
 **[datasets.md](datasets.md)** — the six real graphs the project measures, where
@@ -71,6 +75,14 @@ claim needs to know it changed.
   is wrong: on `dimacs_ny` at the defaults the slack removes 44% of comparisons.
   The document now carries the corrected measurements and marks the superseded
   claim.
+
+- **The learned model was trained on the queries it was then benchmarked on.**
+  ESD.md section 30 forbids that, and it went unnoticed through the whole
+  training milestone. Retraining on a query set with zero overlap cut the
+  measured speedup from 2.10 ms to 1.43 ms: the leak inflated the effect by
+  about a third without creating it. `ablation-waterfall.md` carries both
+  numbers, and the reproduction pipeline now refuses to train on the benchmark
+  queries rather than merely warning about it.
 
 - **`lpq-baseline-measurements.md` attributed the per-extraction overhead to
   three causes**, one of which — the bucket substrate's memory behaviour — was a

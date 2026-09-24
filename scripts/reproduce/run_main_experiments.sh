@@ -64,9 +64,21 @@ done
 # -----------------------------------------------------------------------------
 say "collecting training sets"
 # -----------------------------------------------------------------------------
+# ESD.md section 30: test-query outcomes must never influence model parameters.
+#
+# The training labels come from a query set with a DIFFERENT seed to the one the
+# benchmark measures, verified to share no query with it. An earlier version of
+# this pipeline trained on the benchmark queries themselves, which inflated the
+# measured speedup by about a third (docs/experiments/ablation-waterfall.md).
+# The leak was invisible in every number it produced.
 for dataset in "${MAIN_DATASETS[@]}"; do
-    manifest="${REPO_ROOT}/experiments/manifests/${dataset}_queries_100.yaml"
-    [ -f "$manifest" ] || manifest="${REPO_ROOT}/experiments/manifests/${dataset}_queries.yaml"
+    manifest="${REPO_ROOT}/experiments/manifests/${dataset}_training_queries.yaml"
+    if [ ! -f "$manifest" ]; then
+        die "no disjoint training query set for ${dataset}: ${manifest}
+       Training on the benchmark queries would violate ESD.md section 30, so the
+       pipeline stops rather than falling back to them. Generate it with
+       lpq_tools.data.queries at a seed different from the benchmark's."
+    fi
 
     "$COLLECT" --dataset "${REPO_ROOT}/datasets/processed/${dataset}.lpqgraph" \
         --queries-file "$manifest" \
@@ -134,7 +146,11 @@ EXPECTED = {
     "binary_heap": 203_801_439,
     "radix_heap": 71_839_857,
     "lpq": 177_580_603,
-    "lpq_model": 177_732_559,
+    # The leakage-free model, trained on the disjoint query set. The earlier
+    # value here was 177_732_559, produced by a model trained on the benchmark
+    # queries themselves; this check caught the change when that was corrected,
+    # which is the behaviour it exists for.
+    "lpq_model": 177_732_303,
 }
 
 results = read_results(sys.argv[1])

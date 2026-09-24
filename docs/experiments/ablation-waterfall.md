@@ -38,7 +38,7 @@ reproduced to the unit across two independent runs in different orders.
 | `binary_heap` | 203,801,439 | 1.000× | 1.000× |
 | `radix_heap` | 71,839,857 | **0.352×** | 0.352× |
 | `lpq` | 177,580,603 | **2.472×** | 0.871× |
-| `lpq_model` | 177,732,559 | 1.001× | 0.872× |
+| `lpq_model` | 177,732,303 | 1.001× | 0.872× |
 
 **Bucketing alone achieves 2.8× fewer comparisons than the binary heap. Adding
 the candidate window and verification engine gives 2.5× of that straight back.**
@@ -99,6 +99,48 @@ It is worth noting what kind of result it is. The model does *more* comparisons
 and *less* work. Whatever it is buying is not a reduction in examined entries,
 and this project has no measurement of what it is — a mechanism is not offered
 here because none was measured.
+
+## The model was trained on the test queries, and the result survives anyway
+
+The measurements above were made with a model whose training labels came from
+**the same 100 queries the ablation benchmarks**. ESD.md section 30 forbids
+exactly that -- "never allow test-query outcomes to influence model parameters"
+-- and it went unnoticed until the specification was reopened to write up the
+findings.
+
+It was corrected rather than annotated. A training query set was generated with
+seed 917 against the same graph, verified to share **zero** queries with the
+benchmark set at seed 42, and the model retrained from scratch on it.
+
+| training queries | median difference | 95% CI | model faster on |
+|---|---:|---|---:|
+| leaked (identical to the test set) | +2,099,550 ns | [+892,200, +2,759,850] | 84% |
+| **disjoint (seed 917, zero overlap)** | **+1,427,450 ns** | **[+832,200, +2,128,800]** | **80%** |
+
+**Leakage inflated the effect by about a third and did not create it.** Both
+intervals exclude zero, on a large majority of queries either way. The
+comparison counts differ slightly too (177,732,303 against 177,732,559),
+confirming the retrained model is genuinely a different one rather than the same
+weights under another name.
+
+The classification scores barely moved: held-out AUC 0.5337 disjoint against
+0.5331 leaked, precision lift 1.12x both. That is expected rather than
+fortunate. The train/test split was already over *nodes* and the features are
+static per node, so overlapping queries could not inflate a per-node ranking
+score by much. The quantity leakage could plausibly have manufactured was the
+wall-clock effect -- the scorer being tuned on the exact queries it was then
+timed on -- and that is the one that was rechecked.
+
+Two caveats on the comparison. The disjoint training set is twice the size (200
+queries, 52.9M observations against 26.4M), so this is not a like-for-like swap
+of the same quantity of data. And the leaked figure here (2.10 ms) differs from
+the 2.96 ms reported earlier in this document from an identical configuration,
+which is ordinary run-to-run variation and a reminder that the magnitudes here
+are soft even when the direction is not.
+
+**Best current estimate: the trained model is roughly 4% faster than a constant
+scorer, on about 80% of queries, with the magnitude varying by matrix position
+and by run.**
 
 ## A methodological finding
 
