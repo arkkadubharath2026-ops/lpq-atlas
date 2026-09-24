@@ -60,6 +60,15 @@ confirmed against matrix-position bias by rerunning the ladder in reverse order.
 And a methodological finding worth heeding: **matrix position inflated that
 effect by 45%** before the order control caught it.
 
+**[generalisation.md](generalisation.md)** — the same ladder on four road
+networks, and the document that **overturns this project's longest-standing
+claim**. "The learned queue does 12.9% fewer comparisons than a binary heap" is
+a fact about `dimacs_ny`; across four graphs that figure ranges from 0.266× to
+3.687×. What explains the spread is **bucket width**, not graph size — two
+graphs within 2% of each other in node count differ by 11× in machinery cost.
+Bucketing's own advantage does generalise, holding between 0.266× and 0.352×
+throughout.
+
 **[profiling.md](profiling.md)** — why no hardware performance counters appear
 anywhere in this directory. WSL2 exposes no CPU PMU, so cycles, cache misses and
 branch misses are **not measured** on the development host, and no figure in this
@@ -67,8 +76,35 @@ project is inferred to fill that gap.
 
 ## Corrections
 
+- **The 12.9% figure was reported as a property of the design and is a property
+  of one graph.** Every document here written before `generalisation.md` uses
+  it that way. Measured on four road networks the learned queue does 12.9%
+  *fewer* comparisons than a binary heap on `dimacs_ny` and **269% more** on
+  `dimacs_fla`. The `lpq/binary` framing should not be used at all: it is a
+  product of two effects that move in opposite directions and vary
+  independently.
+
 Recorded rather than quietly edited away, because a reader who saw the earlier
 claim needs to know it changed.
+
+- **A\* was unmeasurable from a saved graph for the whole life of the project,
+  and nothing reported it.** The binary graph format stored a coordinate
+  *flag* rather than a coordinate *system*, so `read_binary_graph` restored the
+  coordinate array but left the system at `kNone`. `CsrGraph::has_coordinates()`
+  requires both, so every graph loaded from disk reported having no
+  coordinates, and `lpq_benchmark` rejected every heuristic except `zero`. A\*
+  was reachable only from a graph built in memory — which is exactly what the
+  unit tests did, which is why 826 passing tests never caught it. The
+  round-trip test asserted that the coordinate *array* survived; it never asked
+  the loaded *graph* whether it could use it. Fixed by storing the system
+  (format version 3); version 2 files still load, so no dataset needed
+  re-converting. Five regression tests now assert on the loaded graph.
+
+- **`--pq lpq_adaptive` was documented in `--help` but not dispatched.** The
+  queue alias, the observer attachment and the per-repetition controller reset
+  all existed; the branch that selects them did not, so the runner rejected the
+  value it advertised. Any earlier statement that the adaptive configuration
+  was "wired up" described code that could not be run.
 
 - **`approximate-mode.md` originally claimed epsilon was inert at the runner's
   default configuration.** That was generalised from one small random graph and

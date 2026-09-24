@@ -79,7 +79,23 @@ inline constexpr std::uint64_t kGraphMagic = 0x485041524751504CULL;
 /// Version 2 added the directedness field. Version 1 files cannot be read:
 /// they carry no directedness, and guessing one would make num_edges() report
 /// either double or half the truth with no way to tell which.
-inline constexpr std::uint32_t kGraphFormatVersion = 2;
+///
+/// Version 3 replaced the coordinate *flag* with the coordinate *system*.
+/// Version 2 stored only "are there coordinates", so a loaded graph got its
+/// coordinate array back but not its system, and CsrGraph::has_coordinates()
+/// requires both. Every graph written to disk therefore reported having no
+/// coordinates, which silently made every heuristic except `zero` unusable
+/// from a saved file -- A* was reachable only from an in-memory graph. The
+/// system has to be in the file because it cannot be recovered from the
+/// numbers: the same pair of doubles is a valid plane point and a valid
+/// lat/lon.
+inline constexpr std::uint32_t kGraphFormatVersion = 3;
+
+/// The oldest version this build can still read. Version 2 files are accepted
+/// because their coordinate flag is recoverable: every version-2 file this
+/// project produced took its coordinates from a DIMACS `.co` file, which
+/// lpq_convert labels geographic, so a set flag means kGeographic.
+inline constexpr std::uint32_t kMinReadableGraphFormatVersion = 2;
 
 /// Identifies the weight type a file was written with, so a file cannot be
 /// loaded as the wrong one.
@@ -244,10 +260,16 @@ template <WeightType W>
 // -----------------------------------------------------------------------------
 
 /// Writes a graph in the project's binary CSR format.
+///
+/// `coord_system` describes the supplied coordinates. When left at kNone it is
+/// taken from the graph. Writing coordinates whose system is kNone is refused
+/// rather than defaulted: that combination is exactly what version 2 stored,
+/// and it reads back as a graph that claims to have no coordinates.
 template <WeightType W>
 void write_binary_graph(std::ostream& os, const CsrGraph<W>& g,
-                        const NodeIdMapping&           mapping     = {},
-                        const std::vector<Coordinate>& coordinates = {}) {
+                        const NodeIdMapping&           mapping      = {},
+                        const std::vector<Coordinate>& coordinates  = {},
+                        CoordinateSystem               coord_system = CoordinateSystem::kNone) {
     if (!mapping.empty() && mapping.size() != g.num_nodes()) {
         throw GraphIoError("node id mapping has " + std::to_string(mapping.size()) +
                            " entries but the graph has " + std::to_string(g.num_nodes()) +
@@ -259,6 +281,18 @@ void write_binary_graph(std::ostream& os, const CsrGraph<W>& g,
                            " nodes");
     }
 
+    // An explicit argument wins; otherwise the graph is asked. A caller that
+    // supplies coordinates for a graph that has no system has not said what
+    // the numbers mean, and nothing downstream could recover it.
+    const CoordinateSystem system =
+        coord_system != CoordinateSystem::kNone ? coord_system : g.coordinate_system();
+    if (!coordinates.empty() && system == CoordinateSystem::kNone) {
+        throw GraphIoError(
+            "coordinates were supplied with no coordinate system; the file would read "
+            "back as a graph with no usable coordinates and every heuristic except "
+            "'zero' would silently become unavailable");
+    }
+
     detail::put_u64_le(os, kGraphMagic);
     detail::put_u32_le(os, kGraphFormatVersion);
     detail::put_u32_le(os, static_cast<std::uint32_t>(weight_type_tag<W>()));
@@ -266,7 +300,7 @@ void write_binary_graph(std::ostream& os, const CsrGraph<W>& g,
     detail::put_u64_le(os, static_cast<std::uint64_t>(g.num_nodes()));
     detail::put_u64_le(os, static_cast<std::uint64_t>(g.num_arcs()));
     detail::put_u32_le(os, mapping.empty() ? 0U : 1U);
-    detail::put_u32_le(os, coordinates.empty() ? 0U : 1U);
+    detail::put_u32_le(os, coordinates.empty() ? 0U : static_cast<std::uint32_t>(system));
     detail::put_u64_le(os, graph_checksum(g));
 
     // node_count + 1 offsets: each node's start, then the total arc count as
@@ -306,10 +340,11 @@ template <WeightType W>
         throw GraphIoError("not an LPQ graph file (bad magic number)");
     }
     const std::uint32_t version = detail::get_u32_le(is);
-    if (version != kGraphFormatVersion) {
+    if (version < kMinReadableGraphFormatVersion || version > kGraphFormatVersion) {
         throw GraphIoError("graph format version " + std::to_string(version) +
                            " cannot be read by this build, which writes version " +
-                           std::to_string(kGraphFormatVersion));
+                           std::to_string(kGraphFormatVersion) + " and reads back to " +
+                           std::to_string(kMinReadableGraphFormatVersion));
     }
 
     const std::uint32_t tag = detail::get_u32_le(is);
@@ -327,8 +362,25 @@ template <WeightType W>
         throw GraphIoError("graph file declares more nodes than NodeId can address");
     }
 
-    const bool has_mapping     = detail::get_u32_le(is) != 0U;
-    const bool has_coordinates = detail::get_u32_le(is) != 0U;
+    const bool          has_mapping = detail::get_u32_le(is) != 0U;
+    const std::uint32_t coord_field = detail::get_u32_le(is);
+
+    // Version 2 wrote a bare 0/1 flag. Every version-2 file this project
+    // produced took its coordinates from a DIMACS .co file, which lpq_convert
+    // labels geographic, so a set flag is kGeographic. Version 3 onward stores
+    // the system itself and nothing has to be inferred.
+    CoordinateSystem coord_system = CoordinateSystem::kNone;
+    if (coord_field != 0U) {
+        if (version == 2U) {
+            coord_system = CoordinateSystem::kGeographic;
+        } else if (coord_field <= static_cast<std::uint32_t>(CoordinateSystem::kGeographic)) {
+            coord_system = static_cast<CoordinateSystem>(coord_field);
+        } else {
+            throw GraphIoError("graph file declares unknown coordinate system " +
+                               std::to_string(coord_field));
+        }
+    }
+    const bool has_coordinates = coord_system != CoordinateSystem::kNone;
     const std::uint64_t stored_checksum = detail::get_u64_le(is);
 
     std::vector<std::uint64_t> offsets(static_cast<std::size_t>(node_count) + 1);
@@ -373,6 +425,9 @@ template <WeightType W>
     opts.arcs_already_paired = true;  // both directions are already in the file
     opts.parallel_edges      = ParallelEdgePolicy::kKeep;
     opts.self_loops          = SelfLoopPolicy::kKeep;
+    // Without this the coordinates load into the array but the graph reports
+    // has_coordinates() == false, because that asks for a system as well.
+    opts.coord_system        = coord_system;
     loaded.graph        = GraphBuilder<W>::build(static_cast<std::size_t>(node_count),
                                                  std::move(edges), opts, loaded.coordinates);
 
@@ -388,13 +443,14 @@ template <WeightType W>
 
 template <WeightType W>
 void write_binary_graph_file(const std::string& path, const CsrGraph<W>& g,
-                             const NodeIdMapping&           mapping     = {},
-                             const std::vector<Coordinate>& coordinates = {}) {
+                             const NodeIdMapping&           mapping      = {},
+                             const std::vector<Coordinate>& coordinates  = {},
+                             CoordinateSystem coord_system = CoordinateSystem::kNone) {
     std::ofstream os(path, std::ios::binary | std::ios::trunc);
     if (!os) {
         throw GraphIoError("cannot open '" + path + "' for writing");
     }
-    write_binary_graph(os, g, mapping, coordinates);
+    write_binary_graph(os, g, mapping, coordinates, coord_system);
     os.flush();
     if (!os) {
         throw GraphIoError("failed while writing graph to '" + path + "'");

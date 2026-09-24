@@ -131,13 +131,110 @@ TEST(BinaryGraph, RoundTripsCoordinates) {
     const std::vector<Coordinate> coords = {{1.5, -2.5}, {0.0, 0.0}, {1e9, -1e9}};
 
     auto s = binary_stream();
-    write_binary_graph<Weight>(s, original, {}, coords);
+    write_binary_graph<Weight>(s, original, {}, coords, CoordinateSystem::kEuclidean);
     s.seekg(0);
 
     const LoadedGraph<Weight> loaded = read_binary_graph<Weight>(s);
     ASSERT_EQ(loaded.coordinates.size(), 3U);
     EXPECT_EQ(loaded.coordinates[0].x, 1.5);
     EXPECT_EQ(loaded.coordinates[2].y, -1e9);
+}
+
+// -----------------------------------------------------------------------------
+// Regression: a saved graph must still KNOW it has coordinates.
+//
+// The test above asserted that the coordinate array survives the round trip,
+// and it did. What did not survive was the coordinate system, which
+// CsrGraph::has_coordinates() also requires -- so every graph loaded from disk
+// reported having no coordinates, and lpq_benchmark refused every heuristic
+// except `zero`. A* was reachable only from a graph built in memory, which is
+// exactly what the unit tests did and why nothing caught it.
+//
+// Asserting on the loaded GRAPH rather than on the loaded ARRAY is the whole
+// point of these cases.
+// -----------------------------------------------------------------------------
+
+TEST(BinaryGraph, ALoadedGraphKnowsItHasCoordinates) {
+    const CsrGraph<Weight>        original = lpq_test::path_graph<Weight>(3);
+    const std::vector<Coordinate> coords   = {{1.0, 2.0}, {3.0, 4.0}, {5.0, 6.0}};
+
+    auto s = binary_stream();
+    write_binary_graph<Weight>(s, original, {}, coords, CoordinateSystem::kGeographic);
+    s.seekg(0);
+
+    const LoadedGraph<Weight> loaded = read_binary_graph<Weight>(s);
+    EXPECT_TRUE(loaded.graph.has_coordinates());
+    EXPECT_EQ(loaded.graph.coordinate_system(), CoordinateSystem::kGeographic);
+    EXPECT_EQ(loaded.graph.coordinate(1).x, 3.0);
+}
+
+TEST(BinaryGraph, TheCoordinateSystemSurvivesTheRoundTrip) {
+    // Euclidean and geographic select different heuristics. Collapsing them to
+    // "has coordinates" would let a plane graph be read as a lat/lon one.
+    for (const CoordinateSystem system :
+         {CoordinateSystem::kEuclidean, CoordinateSystem::kGeographic}) {
+        const CsrGraph<Weight>        original = lpq_test::path_graph<Weight>(2);
+        const std::vector<Coordinate> coords   = {{0.0, 0.0}, {1.0, 1.0}};
+
+        auto s = binary_stream();
+        write_binary_graph<Weight>(s, original, {}, coords, system);
+        s.seekg(0);
+
+        EXPECT_EQ(read_binary_graph<Weight>(s).graph.coordinate_system(), system);
+    }
+}
+
+TEST(BinaryGraph, RefusesCoordinatesWithNoCoordinateSystem) {
+    // The combination that produced the bug. A graph built in memory without a
+    // system, handed a coordinate array, used to write a file that read back
+    // with unusable coordinates. It is now refused at the point of writing.
+    const CsrGraph<Weight>        g      = lpq_test::path_graph<Weight>(2);
+    const std::vector<Coordinate> coords = {{0.0, 0.0}, {1.0, 1.0}};
+
+    auto s = binary_stream();
+    EXPECT_THROW(write_binary_graph<Weight>(s, g, {}, coords), GraphIoError);
+}
+
+TEST(BinaryGraph, StillReadsVersion2FilesAndRecoversTheirSystem) {
+    // Every dataset already converted on disk is version 2. Those files must
+    // keep loading, and their coordinates must become usable rather than
+    // merely present -- otherwise the fix would require re-converting every
+    // dataset, and a stale file would silently lose its heuristics again.
+    const CsrGraph<Weight>        original = lpq_test::path_graph<Weight>(2);
+    const std::vector<Coordinate> coords   = {{11.0, 12.0}, {13.0, 14.0}};
+
+    auto s = binary_stream();
+    write_binary_graph<Weight>(s, original, {}, coords, CoordinateSystem::kGeographic);
+
+    // Rewrite the header as version 2 wrote it: version 2, and a bare 0/1
+    // coordinate flag in place of the system.
+    std::string bytes = s.str();
+    ASSERT_GE(bytes.size(), 32U);
+    bytes[8]  = 2;  // format version, little-endian u32 at offset 8
+    bytes[28] = 1;  // coordinate flag, little-endian u32 at offset 28
+
+    std::stringstream v2(bytes, std::ios::in | std::ios::out | std::ios::binary);
+    const LoadedGraph<Weight> loaded = read_binary_graph<Weight>(v2);
+
+    EXPECT_TRUE(loaded.graph.has_coordinates());
+    EXPECT_EQ(loaded.graph.coordinate_system(), CoordinateSystem::kGeographic);
+    EXPECT_EQ(loaded.graph.coordinate(0).x, 11.0);
+}
+
+TEST(BinaryGraph, AGraphCarryingItsOwnSystemNeedsNoArgument) {
+    // The system is taken from the graph when one is not passed explicitly.
+    const std::vector<Coordinate> coords = {{7.0, 8.0}, {9.0, 10.0}};
+    std::vector<InputEdge<Weight>> edges = {{0, 1, 5}};
+    GraphBuildOptions              opts;
+    opts.coord_system = CoordinateSystem::kEuclidean;
+    const CsrGraph<Weight> g = GraphBuilder<Weight>::build(2, std::move(edges), opts, coords);
+
+    auto s = binary_stream();
+    write_binary_graph<Weight>(s, g, {}, coords);
+    s.seekg(0);
+
+    EXPECT_EQ(read_binary_graph<Weight>(s).graph.coordinate_system(),
+              CoordinateSystem::kEuclidean);
 }
 
 TEST(BinaryGraph, RejectsAMappingOfTheWrongLength) {

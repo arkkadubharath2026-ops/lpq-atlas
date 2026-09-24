@@ -396,8 +396,15 @@ int main(int argc, char** argv) {
         if (out_path.has_parent_path()) {
             std::filesystem::create_directories(out_path.parent_path());
         }
+        // DIMACS .co files carry longitude/latitude, so the system is
+        // geographic. It has to be stated here: the coordinates are read into a
+        // bare array, and the graph the converter loaded does not carry a
+        // system of its own.
         write_binary_graph_file<Weight>(o.output, loaded.graph, loaded.mapping,
-                                        loaded.coordinates);
+                                        loaded.coordinates,
+                                        loaded.coordinates.empty()
+                                            ? CoordinateSystem::kNone
+                                            : CoordinateSystem::kGeographic);
 
         GraphMetadata m = compute_metadata(loaded.graph);
         m.dataset_id    = o.dataset_id;

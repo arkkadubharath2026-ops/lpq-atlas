@@ -54,6 +54,7 @@
 #include "lpq/metrics/hardware_info.hpp"
 #include "lpq/metrics/json_writer.hpp"
 #include "lpq/metrics/result_record.hpp"
+#include "lpq/adaptation/controller_observer.hpp"
 #include "lpq/features/graph_features.hpp"
 #include "lpq/lpq/learned_priority_queue.hpp"
 #include "lpq/models/logistic_predictor.hpp"
@@ -99,6 +100,11 @@ struct Options {
     /// identically -- the control condition that isolates the LPQ machinery
     /// from the value of its predictions.
     std::string model;
+
+    /// With --pq lpq_adaptive, also update the model online from verified
+    /// outcomes rather than only adapting the policy. Separating the two is the
+    /// ablation that says which of them does anything.
+    bool        adaptive_learning = false;
 
     std::string mode        = "exact";
 
@@ -146,7 +152,9 @@ void print_usage() {
                          (astar only; euclidean/manhattan/haversine need coordinates)
   --pq <name>            binary_heap | four_ary_heap | pairing_heap |
                          fibonacci_heap | radix_heap | lpq | lpq_model |
-                         all (default)
+                         lpq_adaptive | all (default)
+  --adaptive             with --pq lpq_adaptive: also update the model online
+                         from verified outcomes, not just the policy
   --model <path>         trained model for --pq lpq_model. Without it the
                          learned queue scores every node identically, which is
                          the control condition rather than a degraded mode.
@@ -204,6 +212,8 @@ void print_usage() {
             o.queries_file = next_arg(argc, argv, i, "--queries-file");
         } else if (a == "--experiment") {
             o.experiment_file = next_arg(argc, argv, i, "--experiment");
+        } else if (a == "--adaptive") {
+            o.adaptive_learning = true;
         } else if (a == "--model") {
             o.model = next_arg(argc, argv, i, "--model");
         } else if (a == "--epsilon") {
@@ -281,6 +291,13 @@ void print_usage() {
             throw InvalidConfigError(
                 "--model only affects --pq lpq_model; with --pq " + o.pq +
                 " it would be loaded and never consulted");
+        }
+        // Same reasoning as --model: a flag that is silently ignored produces a
+        // row labelled as though the learner ran when it did not.
+        if (o.adaptive_learning && o.pq != "lpq_adaptive") {
+            throw InvalidConfigError(
+                "--adaptive only affects --pq lpq_adaptive; with --pq " + o.pq +
+                " no online learner is attached and the flag would be ignored");
         }
     }
     if (o.mode != "exact" && o.mode != "approximate") {
@@ -489,6 +506,15 @@ using BenchLpq = LearnedPriorityQueue<W, ConstantNodeScorer>;
 using BenchScorer    = StaticNodeScorer<LogisticPredictor>;
 using BenchLpqStatic = LearnedPriorityQueue<W, BenchScorer>;
 
+/// The adaptive configuration.
+///
+/// The same queue type as the control -- what differs is that an observer is
+/// attached, so the controller can retreat to the classical path when
+/// prediction stops paying for itself. Sharing the type with the control is
+/// deliberate: it means a difference between the two rows is the adaptation and
+/// nothing else.
+using BenchLpqAdaptive = BenchLpq;
+
 /// Builds the queue for a measurement.
 ///
 /// Classical queues take no parameters, so the default does. The learned queue
@@ -568,6 +594,28 @@ ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query&
     Queue queue = make_queue<Queue>(meta, o);
     queue.reserve_nodes(g.num_nodes());
 
+    // --- adaptation, when this row is the adaptive one -----------------------
+    //
+    // The controller and learner are reset before every repetition rather than
+    // carried across them. Adaptation is stateful, so a controller that kept
+    // its state would make repetition N measure a different trajectory from
+    // repetition 1, and the harness would be averaging over configurations
+    // rather than over noise. Resetting keeps every repetition the same work.
+    //
+    // The consequence, stated because it bounds what this measures: adaptation
+    // here happens WITHIN a query and never across queries. Cross-query
+    // learning is a different experiment and is not measured.
+    AdaptiveController controller{ControllerConfig{}};
+    OnlineLearner      learner{OnlineLearningConfig{}};
+    ControllerObserver observer(controller,
+                                o.adaptive_learning ? &learner : nullptr);
+    const bool is_adaptive = (pq_name == "lpq_adaptive");
+    if constexpr (std::is_same_v<Queue, BenchLpq>) {
+        if (is_adaptive) {
+            queue.set_observer(&observer);
+        }
+    }
+
     if constexpr (std::is_same_v<Queue, BenchLpqStatic>) {
         // Built once per graph by the caller and pointed at here. The scorer
         // holds one float per node and its construction is O(n) model
@@ -582,6 +630,12 @@ ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query&
     // The exact call that will be timed, so validation and measurement cannot
     // diverge.
     auto run_once = [&]() {
+        if constexpr (std::is_same_v<Queue, BenchLpq>) {
+            if (is_adaptive) {
+                controller.reset();
+                learner.reset();
+            }
+        }
         return is_astar ? run_astar<Queue>(g, q.source, q.target, queue, o.heuristic,
                                            heuristic_scale)
                         : dijkstra<W, Queue>(g, q.source, queue, dopts);
@@ -1113,6 +1167,20 @@ int main(int argc, char** argv) {
                 } else if (name == "lpq") {
                     if constexpr (bucket_substrate_supports<W>()) {
                         rec = measure_one<BenchLpq>(g, meta, q, o, name, hw, heuristic_scale);
+                    } else {
+                        rec.pq                 = name;
+                        rec.unsupported_reason = bucket_substrate_unsupported_reason<W>();
+                    }
+                } else if (name == "lpq_adaptive") {
+                    // Same queue type as "lpq"; measure_one attaches the
+                    // controller when the row is named this. The distinction is
+                    // the observer, not the type, which is why BenchLpqAdaptive
+                    // is an alias rather than a separate instantiation -- two
+                    // instantiations would differ in code layout and the
+                    // comparison would not be like for like.
+                    if constexpr (bucket_substrate_supports<W>()) {
+                        rec = measure_one<BenchLpqAdaptive>(g, meta, q, o, name, hw,
+                                                            heuristic_scale);
                     } else {
                         rec.pq                 = name;
                         rec.unsupported_reason = bucket_substrate_unsupported_reason<W>();
