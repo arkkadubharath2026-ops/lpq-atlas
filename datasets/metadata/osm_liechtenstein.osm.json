@@ -1,0 +1,53 @@
+{
+  "dataset_id": "osm_liechtenstein",
+  "graph_checksum_fnv1a64": 14827194424919310611,
+  "graph_conversion": {
+    "arcs_before_scc": 60007,
+    "arcs_kept": 59358,
+    "bbox": [
+      9.4726329,
+      47.0521002,
+      9.6140941,
+      47.2546943
+    ],
+    "converter": "lpq_convert --format dimacs",
+    "extractor": "lpq_tools.data.osm",
+    "nodes_before_scc": 30346,
+    "nodes_dropped_outside_largest_scc": 401,
+    "nodes_kept": 29945,
+    "road_policy_version": 1,
+    "segments_missing_location": 0,
+    "turn_restrictions_modelled": false,
+    "ways_excluded": {
+      "access=no": 7,
+      "access=private": 115,
+      "area": 2,
+      "highway=bridleway": 4,
+      "highway=construction": 2,
+      "highway=cycleway": 450,
+      "highway=footway": 4667,
+      "highway=path": 1246,
+      "highway=pedestrian": 34,
+      "highway=platform": 9,
+      "highway=raceway": 3,
+      "highway=rest_area": 1,
+      "highway=steps": 364,
+      "highway=track": 1724,
+      "motor_vehicle=no": 52,
+      "motor_vehicle=private": 6,
+      "motorcar=no": 7,
+      "service=driveway": 1355,
+      "service=parking_aisle": 325
+    },
+    "ways_kept": 4067,
+    "ways_seen": 14440,
+    "weight_unit": "decimetre"
+  },
+  "licence": "ODbL 1.0 -- (c) OpenStreetMap contributors",
+  "osm_node_ids_path": "datasets/processed/osm_liechtenstein.osm_node_ids.u64",
+  "region": "Liechtenstein",
+  "snapshot_date": "2026-09-25",
+  "source_file": "liechtenstein-260925.osm.pbf",
+  "source_sha256": "64b24b4bdd663fd204219b671aa9455b34e391399e6c8ca4764e6411fa05c5a1",
+  "source_url": "https://download.geofabrik.de/europe/liechtenstein-260925.osm.pbf"
+}

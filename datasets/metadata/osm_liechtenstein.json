@@ -1,0 +1,35 @@
+{
+  "dataset_id": "osm_liechtenstein",
+  "source_path": "datasets/processed/staging/osm_liechtenstein.gr",
+  "source_format": "dimacs",
+  "processed_path": "datasets/processed/osm_liechtenstein.lpqgraph",
+  "graph_checksum_fnv1a64": 14827194424919310611,
+  "weight_type": "uint32",
+  "node_count": 29945,
+  "edge_count": 59358,
+  "arc_count": 59358,
+  "directed": true,
+  "density": 1.9822340958423776,
+  "min_weight": 1,
+  "max_weight": 7373,
+  "mean_weight": 151.65837797769467,
+  "stddev_weight": 201.52562280413815,
+  "max_path_cost_bound": 220777112,
+  "min_out_degree": 1,
+  "max_out_degree": 5,
+  "mean_out_degree": 1.9822340958423776,
+  "stddev_out_degree": 0.46391038090243053,
+  "isolated_nodes": 0,
+  "has_coordinates": true,
+  "has_node_id_mapping": false,
+  "normalization": {
+    "directedness": "directed",
+    "self_loops": "drop",
+    "parallel_edges": "keep",
+    "edges_listed": "once"
+  },
+  "weights": {
+    "synthesized": false,
+    "source": "dataset"
+  }
+}

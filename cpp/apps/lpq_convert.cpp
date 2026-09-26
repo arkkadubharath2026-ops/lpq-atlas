@@ -392,6 +392,21 @@ int main(int argc, char** argv) {
             loaded.checksum = graph_checksum(loaded.graph);
         }
 
+        // DIMACS .co files carry microdegrees, but the file labels these
+        // coordinates kGeographic, whose contract -- and HaversineHeuristic's --
+        // is DEGREES. Stored unconverted, the Haversine heuristic evaluated
+        // trigonometry on values in the millions: its derived scale stayed
+        // admissible but collapsed towards zero, silently turning A* into
+        // Dijkstra. Converted here, after any weight synthesis, so synthesized
+        // datasets keep exactly the weights they were built with. The arc
+        // checksum does not cover coordinates and is unchanged.
+        if (!o.coordinates.empty()) {
+            for (Coordinate& c : loaded.coordinates) {
+                c.x *= 1e-6;
+                c.y *= 1e-6;
+            }
+        }
+
         const std::filesystem::path out_path(o.output);
         if (out_path.has_parent_path()) {
             std::filesystem::create_directories(out_path.parent_path());

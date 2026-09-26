@@ -145,3 +145,12 @@ if(LPQ_BUILD_TESTS)
     # enable_testing() is called in the top-level CMakeLists, not here.
     add_subdirectory(tests)
 endif()
+
+# ------------------------------------------------------------------------------
+# Fuzz targets (LPQ Atlas spec D-07). Standalone drivers by default so they
+# build with any compiler; see cpp/fuzz/CMakeLists.txt for libFuzzer.
+# ------------------------------------------------------------------------------
+option(LPQ_BUILD_FUZZERS "Build the fuzz targets" ON)
+if(LPQ_BUILD_FUZZERS)
+    add_subdirectory(fuzz)
+endif()

@@ -1,0 +1,7 @@
+{
+  "dataset_id": "osm_liechtenstein",
+  "files": {
+    "liechtenstein-260925.osm.pbf": "64b24b4bdd663fd204219b671aa9455b34e391399e6c8ca4764e6411fa05c5a1"
+  },
+  "note": "Digests observed on first acquisition. These files were NOT verified against a published checksum -- they were accepted on trust and recorded here so that a later change is detected. Copy a digest into the dataset config's 'sha256' to pin it."
+}

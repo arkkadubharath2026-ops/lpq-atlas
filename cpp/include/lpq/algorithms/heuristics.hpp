@@ -50,9 +50,11 @@
 #ifndef LPQ_ALGORITHMS_HEURISTICS_HPP
 #define LPQ_ALGORITHMS_HEURISTICS_HPP
 
+#include <algorithm>
 #include <cmath>
 #include <concepts>
 #include <cstdint>
+#include <limits>
 #include <string>
 
 #include "lpq/common/error.hpp"
@@ -347,6 +349,63 @@ template <WeightType W>
                 best = ratio;
             }
             any = true;
+        }
+    }
+    return any && std::isfinite(best) ? best : 0.0;
+}
+
+/// Great-circle distance in metres between two lon/lat points (degrees).
+///
+/// The same formula HaversineHeuristic::estimate evaluates, so a scale derived
+/// from it bounds exactly the quantity the heuristic multiplies.
+[[nodiscard]] inline double haversine_metres(const Coordinate& a, const Coordinate& b) noexcept {
+    constexpr double kDegToRad = 3.14159265358979323846 / 180.0;
+    const double     lat1      = a.y * kDegToRad;
+    const double     lat2      = b.y * kDegToRad;
+    const double     sin_dlat  = std::sin((lat2 - lat1) * 0.5);
+    const double     sin_dlon  = std::sin((b.x - a.x) * kDegToRad * 0.5);
+    double h = sin_dlat * sin_dlat + std::cos(lat1) * std::cos(lat2) * sin_dlon * sin_dlon;
+    h        = h < 0.0 ? 0.0 : (h > 1.0 ? 1.0 : h);
+    return 2.0 * std::asin(std::sqrt(h)) * kEarthRadiusMetres;
+}
+
+/// Largest scale for which the Haversine heuristic stays admissible.
+///
+/// min over arcs of weight / great-circle length, the geographic counterpart
+/// of euclidean_admissible_scale. The two are NOT interchangeable: that one
+/// returns weight units per DEGREE, while HaversineHeuristic multiplies METRES,
+/// so handing it the Euclidean scale inflates every estimate by roughly five
+/// orders of magnitude and silently destroys optimality. Consistency follows
+/// from the triangle inequality on the sphere together with this bound on
+/// every arc.
+///
+/// Returns 0 when the graph has no geographic coordinates, when any coordinate
+/// lies outside the degree ranges, or when no arc has positive length.
+template <WeightType W>
+[[nodiscard]] inline double haversine_admissible_scale(const CsrGraph<W>& g) {
+    if (!g.has_coordinates() || g.coordinate_system() != CoordinateSystem::kGeographic) {
+        return 0.0;
+    }
+    // Degrees are the contract. A file whose coordinates are out of range was
+    // written in other units (older conversions kept DIMACS microdegrees), and
+    // a scale derived from it would be admissible but meaningless -- refused
+    // instead, so the caller reports it rather than running a useless A*.
+    for (const Coordinate& c : g.coordinates()) {
+        if (!(c.x >= -180.0 && c.x <= 180.0 && c.y >= -90.0 && c.y <= 90.0)) {
+            return 0.0;
+        }
+    }
+    double best = std::numeric_limits<double>::infinity();
+    bool   any  = false;
+    for (NodeId u = 0; u < g.num_nodes(); ++u) {
+        const auto& cu = g.coordinate(u);
+        for (const Arc<W>& a : g.out_arcs(u)) {
+            const double len = haversine_metres(cu, g.coordinate(a.target));
+            if (len <= 0.0) {
+                continue;
+            }
+            best = std::min(best, static_cast<double>(a.weight) / len);
+            any  = true;
         }
     }
     return any && std::isfinite(best) ? best : 0.0;

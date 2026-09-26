@@ -50,6 +50,12 @@ results/processed/
 results/figures/
 results/tables/
 
+# LPQ Atlas runtime artifacts: run/benchmark job directories and the
+# exported-array cache, all regenerable.
+results/atlas/
+# libFuzzer working corpora (CI)
+/corpus/
+
 # Graphify knowledge-graph output (regenerable from source)
 graphify-out/
 

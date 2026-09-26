@@ -1,0 +1,37 @@
+# OpenStreetMap road network of Monaco (LPQ Atlas spec D-01, section 10).
+#
+# A fixed, dated Geofabrik regional extract rather than a live Overpass query,
+# so the benchmark graph is reproducible: the URL names the snapshot date and
+# the digest pins the bytes. The road graph is extracted by
+# python/lpq_tools/data/osm.py under its documented road-access policy
+# (drivable highways, access=no/private excluded, one-way semantics, largest
+# strongly connected component, NO turn restrictions) and then converted by
+# lpq_convert like every other dataset.
+#
+# Weights are great-circle length in decimetres: routes are SHORTEST, not
+# fastest. The Haversine A* heuristic is admissible against them.
+dataset_id: osm_monaco
+description: >
+  OpenStreetMap drivable road network of Monaco (Geofabrik snapshot 2026-09-25).
+
+source_format: osm_pbf
+files:
+  - url: https://download.geofabrik.de/europe/monaco-260925.osm.pbf
+    # Digest observed on first acquisition (Geofabrik publishes an .md5, not a
+    # sha256). Pinned so any later change to the snapshot is detected.
+    sha256: e26aa50a1bf8191a64b19c037a6a4d4922f927e1477e2fbda8ab8f01be59dcbf
+    role: graph
+
+directedness: directed
+self_loops: drop
+parallel_edges: keep
+
+query_seed: 42
+query_count: 1000
+
+provenance:
+  collection: OpenStreetMap via Geofabrik regional extracts
+  homepage: https://download.geofabrik.de/europe/monaco.html
+  region: Monaco
+  snapshot_date: "2026-09-25"
+  licence: ODbL 1.0 -- (c) OpenStreetMap contributors

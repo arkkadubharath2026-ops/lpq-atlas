@@ -1,0 +1,46 @@
+# LPQ Atlas, full stack:   docker compose up --build
+# then open http://localhost:3000   (other host ports: ATLAS_WEB_PORT=3001 ATLAS_API_PORT=8001)
+#
+# The engine is compiled from source inside the api image (atlas/Dockerfile).
+# Host directories are mounted so datasets prepared here and on the host are
+# shared, and so the Research page reads the same stored results:
+#
+#   datasets/, experiments/   read-write  (Prepare writes graphs and query manifests)
+#   models/, results/         read-only   (trained artifacts, stored benchmark results)
+#
+# Runs, comparisons and benchmarks started in the UI go to the atlas-work volume,
+# kept apart from results/atlas/ used by a host-run API.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: atlas/Dockerfile
+      target: api
+    image: lpq-atlas-api:local
+    ports:
+      - "${ATLAS_API_PORT:-8000}:8000"
+    volumes:
+      - ./datasets:/app/datasets
+      - ./experiments:/app/experiments
+      - ./models:/app/models:ro
+      - ./results:/app/results:ro
+      - atlas-work:/data/atlas
+    environment:
+      ATLAS_MAX_JOBS: "2"
+
+  web:
+    build:
+      context: .
+      dockerfile: atlas/Dockerfile
+      target: web
+      args:
+        ATLAS_API_URL: http://api:8000
+    image: lpq-atlas-web:local
+    ports:
+      - "${ATLAS_WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  atlas-work:

@@ -8,6 +8,23 @@ The main idea is simple:
 
 The project targets research publication, so correctness, reproducibility, fair benchmarking, and honest measurement are as important as raw speed.
 
+## LPQ Atlas: the interactive system
+
+The engine now has a web front end, **LPQ Atlas** (built to [`specdoc.md`](specdoc.md)):
+choose an OpenStreetMap, DIMACS or SNAP graph, click a source and destination, run
+Dijkstra or A* over any classical heap or the learned queue, and replay the engine's real
+execution trace; compare two configurations on the same query; run the benchmark harness
+from the browser; inspect models, datasets and stored research results. Everything shown
+is produced by the C++ engine.
+
+Quick start: `docker compose up --build`, then open <http://localhost:3000>.
+
+* **How to use it (start here):** [INSTRUCTION_MANUAL.md](INSTRUCTION_MANUAL.md)
+* Technical guide and run instructions: [docs/atlas/README.md](docs/atlas/README.md)
+* Engine contract (`lpq_run`, trace schema): [docs/atlas/ENGINE_CONTRACT.md](docs/atlas/ENGINE_CONTRACT.md)
+* Discrepancy register and defects found while building: [docs/atlas/DISCREPANCIES.md](docs/atlas/DISCREPANCIES.md)
+* Revised abstract: [docs/atlas/ABSTRACT.md](docs/atlas/ABSTRACT.md)
+
 ## 1. Read these three files first
 
 You should have:

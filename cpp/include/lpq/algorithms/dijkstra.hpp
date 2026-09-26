@@ -45,6 +45,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "lpq/algorithms/search_observer.hpp"
 #include "lpq/algorithms/shortest_path_result.hpp"
 #include "lpq/common/clock.hpp"
 #include "lpq/common/numeric.hpp"
@@ -73,13 +74,19 @@ struct DijkstraOptions {
 /// here, so the benchmark runner can allocate it once per graph and reuse it
 /// across queries. Allocating a position map per query would make the
 /// measurement largely an allocator benchmark (PRD.md section 24).
-template <WeightType W, PriorityQueueLike Queue>
+///
+/// `observer` is the trace seam (search_observer.hpp). With the default
+/// NullSearchObserver every hook is compiled out, so the timed search is
+/// unchanged by its existence.
+template <WeightType W, PriorityQueueLike Queue, typename Observer = NullSearchObserver>
 [[nodiscard]] ShortestPathResult<W> dijkstra(const CsrGraph<W>& g, NodeId source, Queue& queue,
-                                             const DijkstraOptions& opts = {}) {
+                                             const DijkstraOptions& opts = {},
+                                             Observer* observer = nullptr) {
     using DistanceT = DistanceType<W>;
     static_assert(std::is_same_v<typename Queue::KeyType, DistanceT>,
                   "queue key type must match the graph's distance type");
 
+    (void)observer;  // unreferenced when Observer is the null observer
     ShortestPathResult<W> r;
     const std::size_t     n = g.num_nodes();
     r.initialise(n, source);
@@ -101,6 +108,9 @@ template <WeightType W, PriorityQueueLike Queue>
 
     queue.push(source, DistanceT{});
     count_event(r.counters.pq_pushes);
+    if constexpr (kObserved<Observer>) {
+        observer->on_source_pushed(source, 0.0);
+    }
 
     while (!queue.empty()) {
         if constexpr (kInstrumentationEnabled) {
@@ -112,21 +122,33 @@ template <WeightType W, PriorityQueueLike Queue>
         count_event(r.counters.pq_pops);
         const NodeId    u = entry.node;
         const DistanceT d = entry.key;
+        if constexpr (kObserved<Observer>) {
+            observer->on_pop(u, static_cast<double>(d), queue.size());
+        }
 
         if constexpr (!Queue::kSupportsDecreaseKey) {
             // Lazy deletion: discard superseded entries. See the header comment
             // for why the settled check is needed alongside the key check.
             if (r.settled[u] || d > r.dist[u]) {
                 count_event(r.counters.stale_pops);
+                if constexpr (kObserved<Observer>) {
+                    observer->on_stale_pop(u, static_cast<double>(d));
+                }
                 continue;
             }
         }
 
         r.settled[u] = true;
         count_event(r.counters.settled_nodes);
+        if constexpr (kObserved<Observer>) {
+            observer->on_settle(u, static_cast<double>(r.dist[u]));
+        }
 
         if (opts.target != kInvalidNode && u == opts.target) {
             r.termination = SearchTermination::kTargetReached;
+            if constexpr (kObserved<Observer>) {
+                observer->on_target_reached(u, static_cast<double>(r.dist[u]));
+            }
             if (opts.measure_time) {
                 r.runtime_ns = elapsed_ns_since(start);
             }
@@ -139,7 +161,21 @@ template <WeightType W, PriorityQueueLike Queue>
         for (const Arc<W>& a : g.out_arcs(u)) {
             count_event(r.counters.relaxations);
             const DistanceT candidate = saturating_add<W>(d, a.weight);
+            if constexpr (kObserved<Observer>) {
+                observer->on_edge_examined(u, a.target, static_cast<double>(a.weight),
+                                           static_cast<double>(candidate));
+            }
             if (candidate < r.dist[a.target]) {
+                if constexpr (kObserved<Observer>) {
+                    const double old = r.dist[a.target] == kUnreachable<W>
+                                           ? -1.0
+                                           : static_cast<double>(r.dist[a.target]);
+                    observer->on_edge_relaxed(u, a.target, old, static_cast<double>(candidate),
+                                              static_cast<double>(candidate),
+                                              Queue::kSupportsDecreaseKey
+                                                  ? QueueUpdate::kDecreaseKey
+                                                  : QueueUpdate::kPush);
+                }
                 r.dist[a.target]   = candidate;
                 r.parent[a.target] = u;
                 count_event(r.counters.successful_relaxations);

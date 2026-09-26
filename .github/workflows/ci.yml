@@ -1,0 +1,126 @@
+# LPQ Atlas continuous integration (spec D-06, section 38).
+#
+#   engine   configure, build and test the C++ engine from source (no checked-in
+#            build state), run the Python research tooling tests and the
+#            API <-> engine contract tests against the freshly built binaries
+#   fuzz     clang + libFuzzer + ASan/UBSan, a bounded run per target
+#   web      lint, typecheck, unit tests and a production build of the UI
+#   e2e      the real stack on the OSM Monaco extract (acquired and converted by
+#            the project's own pipeline), driven by Playwright
+name: ci
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the engine embeds the commit for provenance
+      - name: Toolchain
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++-13
+      - uses: actions/cache@v4
+        with:
+          path: build/release/_deps
+          key: deps-${{ runner.os }}-${{ hashFiles('cmake/**', 'CMakeLists.txt') }}
+      - name: Configure
+        run: CXX=g++-13 CC=gcc-13 cmake --preset release
+      - name: Build
+        run: cmake --build build/release
+      - name: C++ tests
+        run: ctest --test-dir build/release -j 4 --output-on-failure
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            python/requirements-dev.txt
+            atlas/api/requirements.txt
+      - name: Python dependencies
+        run: pip install -r python/requirements-dev.txt -r atlas/api/requirements.txt
+      - name: Research tooling tests
+        working-directory: python
+        run: python -m pytest -q
+      - name: API contract tests
+        working-directory: atlas/api
+        run: python -m pytest -q
+
+  fuzz:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Toolchain
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang-18
+      - name: Build libFuzzer targets
+        run: |
+          CXX=clang++-18 CC=clang-18 cmake -S . -B build/fuzz -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLPQ_BUILD_TESTS=OFF -DLPQ_BUILD_APPS=OFF \
+            -DLPQ_BUILD_BENCHMARKS=OFF -DLPQ_FUZZ_ENGINE=libfuzzer
+          cmake --build build/fuzz --target fuzz_graph_binary fuzz_model_load fuzz_experiment_manifest fuzz_queue_ops
+      - name: Fuzz (bounded)
+        run: |
+          for t in fuzz_graph_binary fuzz_model_load fuzz_experiment_manifest fuzz_queue_ops; do
+            mkdir -p corpus/$t
+            find build/fuzz -name "$t" -type f -executable -exec {} corpus/$t -max_total_time=60 -seed=20260926 \;
+          done
+
+  web:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: atlas/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: atlas/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-24.04
+    needs: [engine, web]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Toolchain
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++-13
+      - name: Build engine
+        run: |
+          CXX=g++-13 CC=gcc-13 cmake --preset release -DLPQ_BUILD_TESTS=OFF -DLPQ_BUILD_FUZZERS=OFF
+          cmake --build build/release
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r python/requirements.txt -r atlas/api/requirements.txt
+      - name: Prepare the OSM Monaco dataset (pinned snapshot, checksum-verified)
+        run: python scripts/data/prepare_datasets.py osm_monaco
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: atlas/web/package-lock.json
+      - name: Build UI
+        working-directory: atlas/web
+        run: npm ci && npm run build && npx playwright install --with-deps chromium
+      - name: End-to-end
+        run: |
+          python -m uvicorn atlas_api.app:app --app-dir atlas/api --port 8000 &
+          (cd atlas/web && npx next start -p 3000 &)
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8000/api/health && curl -sf http://127.0.0.1:3000/ >/dev/null && break; sleep 2; done
+          cd atlas/web && npx playwright test

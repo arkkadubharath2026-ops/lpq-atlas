@@ -64,6 +64,7 @@
 #include <type_traits>
 
 #include "lpq/algorithms/heuristics.hpp"
+#include "lpq/algorithms/search_observer.hpp"
 #include "lpq/algorithms/shortest_path_result.hpp"
 #include "lpq/common/clock.hpp"
 #include "lpq/common/error.hpp"
@@ -85,9 +86,14 @@ struct AstarOptions {
 ///
 /// The returned `dist` array holds true path costs (g), directly comparable
 /// with Dijkstra's. Only settled entries are final.
-template <WeightType W, PriorityQueueLike Queue, typename Heuristic>
+///
+/// `observer` is the trace seam (search_observer.hpp); with the default it is
+/// compiled out and the search is unchanged.
+template <WeightType W, PriorityQueueLike Queue, typename Heuristic,
+          typename Observer = NullSearchObserver>
 [[nodiscard]] ShortestPathResult<W> astar(const CsrGraph<W>& g, NodeId source, Queue& queue,
-                                          Heuristic& h, const AstarOptions& opts = {}) {
+                                          Heuristic& h, const AstarOptions& opts = {},
+                                          Observer* observer = nullptr) {
     using DistanceT = DistanceType<W>;
     static_assert(std::is_same_v<typename Queue::KeyType, DistanceT>,
                   "queue key type must match the graph's distance type");
@@ -99,6 +105,7 @@ template <WeightType W, PriorityQueueLike Queue, typename Heuristic>
                   "a lazy-deletion monotone queue (such as the radix heap) requires a "
                   "consistent heuristic; f may otherwise decrease between extractions");
 
+    (void)observer;  // unreferenced when Observer is the null observer
     ShortestPathResult<W> r;
     const std::size_t     n = g.num_nodes();
     r.initialise(n, source);
@@ -120,6 +127,20 @@ template <WeightType W, PriorityQueueLike Queue, typename Heuristic>
 
     queue.push(source, h.estimate(source));
     count_event(r.counters.pq_pushes);
+    if constexpr (kObserved<Observer>) {
+        observer->on_source_pushed(source, static_cast<double>(h.estimate(source)));
+    }
+
+    // Reports a discarded entry. A lambda so the three stale sites below stay
+    // one line each; with the null observer it is an empty inline call.
+    const auto report_stale = [&](NodeId node, DistanceT key) {
+        if constexpr (kObserved<Observer>) {
+            observer->on_stale_pop(node, static_cast<double>(key));
+        } else {
+            (void)node;
+            (void)key;
+        }
+    };
 
     while (!queue.empty()) {
         if constexpr (kInstrumentationEnabled) {
@@ -130,6 +151,9 @@ template <WeightType W, PriorityQueueLike Queue, typename Heuristic>
         const QueueEntry<DistanceT> entry = queue.pop();
         count_event(r.counters.pq_pops);
         const NodeId u = entry.node;
+        if constexpr (kObserved<Observer>) {
+            observer->on_pop(u, static_cast<double>(entry.key), queue.size());
+        }
 
         if constexpr (!Queue::kSupportsDecreaseKey) {
             // Lazy deletion. The stale test is on g, not on the popped key:
@@ -139,6 +163,7 @@ template <WeightType W, PriorityQueueLike Queue, typename Heuristic>
             if constexpr (Heuristic::kIsConsistent) {
                 if (r.settled[u]) {
                     count_event(r.counters.stale_pops);
+                    report_stale(u, entry.key);
                     continue;
                 }
             }
@@ -149,6 +174,7 @@ template <WeightType W, PriorityQueueLike Queue, typename Heuristic>
                                            : DistanceT{};
             if (g_at_pop > r.dist[u]) {
                 count_event(r.counters.stale_pops);
+                report_stale(u, entry.key);
                 continue;
             }
         } else {
@@ -157,6 +183,7 @@ template <WeightType W, PriorityQueueLike Queue, typename Heuristic>
                 // entry per node, so this can only fire via re-insertion.
                 if (r.settled[u]) {
                     count_event(r.counters.stale_pops);
+                    report_stale(u, entry.key);
                     continue;
                 }
             }
@@ -164,11 +191,17 @@ template <WeightType W, PriorityQueueLike Queue, typename Heuristic>
 
         r.settled[u] = true;
         count_event(r.counters.settled_nodes);
+        if constexpr (kObserved<Observer>) {
+            observer->on_settle(u, static_cast<double>(r.dist[u]));
+        }
 
         // Early exit on EXTRACTION. See the header comment: stopping at
         // discovery yields paths that are usually, but not always, optimal.
         if (u == opts.target) {
             r.termination = SearchTermination::kTargetReached;
+            if constexpr (kObserved<Observer>) {
+                observer->on_target_reached(u, static_cast<double>(r.dist[u]));
+            }
             if (opts.measure_time) {
                 r.runtime_ns = elapsed_ns_since(start);
             }
@@ -182,7 +215,14 @@ template <WeightType W, PriorityQueueLike Queue, typename Heuristic>
         for (const Arc<W>& a : g.out_arcs(u)) {
             count_event(r.counters.relaxations);
             const DistanceT candidate = saturating_add<W>(gu, a.weight);
+            if constexpr (kObserved<Observer>) {
+                observer->on_edge_examined(u, a.target, static_cast<double>(a.weight),
+                                           static_cast<double>(candidate));
+            }
             if (candidate < r.dist[a.target]) {
+                [[maybe_unused]] const double old_distance =
+                    r.dist[a.target] == kUnreachable<W> ? -1.0
+                                                        : static_cast<double>(r.dist[a.target]);
                 r.dist[a.target]   = candidate;
                 r.parent[a.target] = u;
                 count_event(r.counters.successful_relaxations);
@@ -195,6 +235,14 @@ template <WeightType W, PriorityQueueLike Queue, typename Heuristic>
                 }
 
                 const DistanceT key = saturating_add_distances<W>(candidate, h.estimate(a.target));
+                if constexpr (kObserved<Observer>) {
+                    observer->on_edge_relaxed(u, a.target, old_distance,
+                                              static_cast<double>(candidate),
+                                              static_cast<double>(key),
+                                              Queue::kSupportsDecreaseKey
+                                                  ? QueueUpdate::kDecreaseKey
+                                                  : QueueUpdate::kPush);
+                }
                 if constexpr (Queue::kSupportsDecreaseKey) {
                     queue.decrease_key(a.target, key);
                     count_event(r.counters.pq_decrease_keys);

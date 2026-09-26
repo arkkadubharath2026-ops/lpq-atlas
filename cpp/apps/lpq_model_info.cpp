@@ -24,10 +24,15 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 #include "lpq/common/error.hpp"
 #include "lpq/features/feature_vector.hpp"
+#include "lpq/features/graph_features.hpp"
+#include "lpq/graph/graph_io.hpp"
+#include "lpq/graph/graph_metadata.hpp"
+#include "lpq/lpq/learned_priority_queue.hpp"
 #include "lpq/models/linear_predictor.hpp"
 #include "lpq/models/logistic_predictor.hpp"
 #include "lpq/models/serialization.hpp"
@@ -37,7 +42,10 @@ namespace {
 
 [[noreturn]] void usage_and_exit(int code) {
     std::cout << "lpq_model_info -- inspect a model file\n\n"
-                 "  --model <file>   the model to read (required)\n";
+                 "  --model <file>   the model to read (required)\n"
+                 "  --dataset <file> with --nodes: a converted graph to score nodes on\n"
+                 "  --nodes <a,b,..> print each node's static features and the score the\n"
+                 "                   learned queue's StaticNodeScorer gives it (logistic)\n";
     std::exit(code);
 }
 
@@ -58,8 +66,48 @@ void print_linear(const Model& model) {
     std::printf("bias: %.9g\n", static_cast<double>(model.bias()));
 }
 
+/// Features and scores exactly as lpq_run computes them: the same GraphFeatures
+/// and the same StaticNodeScorer::build, read back per node. There is
+/// deliberately no second implementation of either.
+void print_node_scores(const LogisticPredictor& model, const std::string& dataset,
+                       const std::string& node_list) {
+    using W            = std::uint32_t;
+    const auto  loaded = read_binary_graph_file<W>(dataset);
+    const auto& g      = loaded.graph;
+    const auto  meta   = compute_metadata(g);
+    const GraphFeatures                 features(g, meta);
+    StaticNodeScorer<LogisticPredictor> scorer;
+    scorer.build(features, model);
+
+    std::stringstream ss(node_list);
+    std::string       item;
+    while (std::getline(ss, item, ',')) {
+        if (item.empty() || item.find_first_not_of("0123456789") != std::string::npos) {
+            throw InvalidConfigError("--nodes expects comma-separated node ids");
+        }
+        const auto u = static_cast<NodeId>(std::stoull(item));
+        if (u >= g.num_nodes()) {
+            throw InvalidConfigError("node " + item + " is not in the graph");
+        }
+        const NodeStaticFeatures& f = features.node(u);
+        const auto p = [u](const char* name, float v) {
+            std::printf("node.%u.%s: %.9g\n", static_cast<unsigned>(u), name,
+                        static_cast<double>(v));
+        };
+        p("out_degree", f.out_degree);
+        p("min_adjacent_weight", f.min_adjacent_weight);
+        p("mean_adjacent_weight", f.mean_adjacent_weight);
+        p("max_adjacent_weight", f.max_adjacent_weight);
+        p("adjacent_weight_spread", f.weight_spread);
+        p("degree_relative_to_mean", f.degree_relative_to_mean);
+        p("score", scorer.score_of(u));
+    }
+}
+
 int run(int argc, char** argv) {
     std::string path;
+    std::string dataset;
+    std::string nodes;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--help" || a == "-h") {
@@ -70,6 +118,10 @@ int run(int argc, char** argv) {
                 throw InvalidConfigError("--model requires a value");
             }
             path = argv[++i];
+        } else if (a == "--dataset" && i + 1 < argc) {
+            dataset = argv[++i];
+        } else if (a == "--nodes" && i + 1 < argc) {
+            nodes = argv[++i];
         } else {
             throw InvalidConfigError("unknown argument: " + a);
         }
@@ -101,9 +153,14 @@ int run(int argc, char** argv) {
         case ModelKind::kLinear:
             print_linear(LinearPredictor::load(in));
             break;
-        case ModelKind::kLogistic:
-            print_linear(LogisticPredictor::load(in));
+        case ModelKind::kLogistic: {
+            const LogisticPredictor model = LogisticPredictor::load(in);
+            print_linear(model);
+            if (!dataset.empty()) {
+                print_node_scores(model, dataset, nodes);
+            }
             break;
+        }
         default:
             // Not an error: the file is valid and this tool simply does not
             // print that family yet. Saying so is better than pretending the

@@ -1,0 +1,37 @@
+# OpenStreetMap road network of Liechtenstein (LPQ Atlas spec D-01, section 10).
+#
+# A fixed, dated Geofabrik regional extract rather than a live Overpass query,
+# so the benchmark graph is reproducible: the URL names the snapshot date and
+# the digest pins the bytes. The road graph is extracted by
+# python/lpq_tools/data/osm.py under its documented road-access policy
+# (drivable highways, access=no/private excluded, one-way semantics, largest
+# strongly connected component, NO turn restrictions) and then converted by
+# lpq_convert like every other dataset.
+#
+# Weights are great-circle length in decimetres: routes are SHORTEST, not
+# fastest. The Haversine A* heuristic is admissible against them.
+dataset_id: osm_liechtenstein
+description: >
+  OpenStreetMap drivable road network of Liechtenstein (Geofabrik snapshot 2026-09-25).
+
+source_format: osm_pbf
+files:
+  - url: https://download.geofabrik.de/europe/liechtenstein-260925.osm.pbf
+    # Digest observed on first acquisition (Geofabrik publishes an .md5, not a
+    # sha256). Pinned so any later change to the snapshot is detected.
+    sha256: 64b24b4bdd663fd204219b671aa9455b34e391399e6c8ca4764e6411fa05c5a1
+    role: graph
+
+directedness: directed
+self_loops: drop
+parallel_edges: keep
+
+query_seed: 42
+query_count: 1000
+
+provenance:
+  collection: OpenStreetMap via Geofabrik regional extracts
+  homepage: https://download.geofabrik.de/europe/liechtenstein.html
+  region: Liechtenstein
+  snapshot_date: "2026-09-25"
+  licence: ODbL 1.0 -- (c) OpenStreetMap contributors

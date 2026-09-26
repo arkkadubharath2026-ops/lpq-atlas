@@ -161,3 +161,10 @@ lpq_add_test(test_differential
 # Header self-containment (ESD.md section 40). See the included file for why
 # each header is compiled alone, and why it is included twice.
 include("${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.header_selfcontained.cmake")
+
+# Trace correctness for the LPQ Atlas visualiser (spec section 42): observing a
+# search must not change it, and its events must replay to the engine's result.
+lpq_add_test(test_trace
+    SOURCES trace/test_trace.cpp
+    LIBS    lpq::lpq lpq::verification lpq::algorithms lpq::pq
+    LABELS  "unit")

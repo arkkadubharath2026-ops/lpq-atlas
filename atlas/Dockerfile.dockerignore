@@ -1,0 +1,17 @@
+# Build context for atlas/Dockerfile (the repository root). Large or generated
+# data is mounted at run time by compose.yaml, never baked into an image.
+build/
+datasets/raw/
+datasets/processed/
+datasets/staging/
+models/
+results/
+graphify-out/
+corpus/
+**/node_modules/
+**/.next/
+**/__pycache__/
+**/.pytest_cache/
+atlas/web/test-results/
+atlas/web/playwright-report/
+.venv/

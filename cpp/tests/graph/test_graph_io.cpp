@@ -9,7 +9,9 @@
 
 #include <cstdint>
 #include <sstream>
+#include <streambuf>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "lpq/common/rng.hpp"
@@ -334,6 +336,92 @@ TEST(BinaryGraph, StructuralValidationDetectsACorruptedArcTarget) {
     std::stringstream corrupted = corrupt_one_byte(g, 5, 0x40);
 
     EXPECT_THROW((void)read_binary_graph<Weight>(corrupted), InvalidGraphError);
+}
+
+// -----------------------------------------------------------------------------
+// Headers that promise more than the file holds (found by fuzz_graph_binary)
+// -----------------------------------------------------------------------------
+
+// libFuzzer seed oom-25be6d29aa4b47d1ab92fd4784e1f121e575b9f7: a valid header
+// declaring 0x27000000 (654,311,424) nodes in a 72-byte file. The reader sized
+// its offset array from the header and requested 5,234,491,400 bytes before
+// reading a single offset.
+std::string header_claiming_654_million_nodes() {
+    static constexpr unsigned char kSeed[] = {
+        0x4c, 0x50, 0x51, 0x47, 0x52, 0x41, 0x50, 0x48, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x1f, 0x00, 0x00, 0x00, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0xae, 0x52, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xae, 0x52,
+    };
+    return std::string(reinterpret_cast<const char*>(kSeed), sizeof(kSeed));
+}
+
+// Asserting only GraphIoError would not catch the defect on a machine with the
+// memory to spare: the old reader allocated the 5 GB, zero-filled it, and THEN
+// failed on the short read. The header must be refused as such, up front.
+TEST(BinaryGraph, AHeaderClaimingMoreNodesThanTheFileHoldsIsRejectedBeforeAllocating) {
+    auto s = binary_stream();
+    s << header_claiming_654_million_nodes();
+    s.seekg(0);
+    try {
+        (void)read_binary_graph<Weight>(s);
+        FAIL() << "a 72-byte file declaring 654 million nodes was accepted";
+    } catch (const GraphIoError& e) {
+        EXPECT_NE(std::string(e.what()).find("bytes can hold"), std::string::npos) << e.what();
+    }
+}
+
+// node_count 0, arc_count 2^62, and a matching single offset: consistent with
+// itself, impossible for a 60-byte file. It used to reach edges.reserve(2^62)
+// and escape as std::length_error, which callers catching LpqError miss.
+TEST(BinaryGraph, AnArcCountNearTwoToTheSixtyFourIsAGraphIoError) {
+    const std::uint64_t huge = std::uint64_t{1} << 62;
+    auto s = binary_stream();
+    detail::put_u64_le(s, kGraphMagic);
+    detail::put_u32_le(s, kGraphFormatVersion);
+    detail::put_u32_le(s, static_cast<std::uint32_t>(weight_type_tag<Weight>()));
+    detail::put_u32_le(s, 0U);     // directed
+    detail::put_u64_le(s, 0U);     // node_count
+    detail::put_u64_le(s, huge);   // arc_count
+    detail::put_u32_le(s, 0U);     // no mapping
+    detail::put_u32_le(s, 0U);     // no coordinates
+    detail::put_u64_le(s, 0U);     // checksum
+    detail::put_u64_le(s, huge);   // offsets[0] == arc_count
+    s.seekg(0);
+    EXPECT_THROW((void)read_binary_graph<Weight>(s), GraphIoError);
+}
+
+// A stream that cannot seek, like a pipe: std::streambuf's default seekoff
+// reports failure, so the reader cannot learn the size up front and must grow
+// its arrays only as bytes arrive. (Under libFuzzer's allocation limit the old
+// reader failed this too; on an ordinary build it merely allocated 5 GB first,
+// which these assertions cannot observe.)
+class UnseekableBuffer : public std::streambuf {
+public:
+    explicit UnseekableBuffer(std::string bytes) : bytes_(std::move(bytes)) {
+        setg(bytes_.data(), bytes_.data(), bytes_.data() + bytes_.size());
+    }
+
+private:
+    std::string bytes_;
+};
+
+TEST(BinaryGraph, AnUnseekableStreamWithALyingHeaderFailsAtTheFirstShortRead) {
+    UnseekableBuffer buffer(header_claiming_654_million_nodes());
+    std::istream     is(&buffer);
+    EXPECT_THROW((void)read_binary_graph<Weight>(is), GraphIoError);
+}
+
+TEST(BinaryGraph, AnUnseekableStreamStillReadsAValidGraph) {
+    const CsrGraph<Weight> g = lpq_test::grid_graph<Weight>(4, 4);
+    auto s = binary_stream();
+    write_binary_graph<Weight>(s, g);
+
+    UnseekableBuffer buffer(s.str());
+    std::istream     is(&buffer);
+    const LoadedGraph<Weight> loaded = read_binary_graph<Weight>(is);
+    EXPECT_EQ(loaded.checksum, graph_checksum(g));
 }
 
 TEST(BinaryGraph, ReportsAMissingFile) {

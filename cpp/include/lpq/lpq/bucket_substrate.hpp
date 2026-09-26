@@ -424,7 +424,18 @@ private:
     /// Each step advances the base by one bucket width, so the total work over
     /// a whole search is bounded by the key range divided by the width rather
     /// than by the number of extractions.
+    ///
+    /// Invariant maintained here: every overflow key lies at or beyond the end
+    /// of the window, base + kBucketCount * width. The window slides forward
+    /// as the base advances, and an overflow entry the window now covers is
+    /// re-filed into its bucket at that moment. Without this, an entry parked
+    /// in the overflow list while the window was further back stayed there as
+    /// the window caught up, later pushes with LARGER keys landed in buckets,
+    /// and extraction returned them first -- non-optimal distances in exact
+    /// mode whenever the bucket width was too small for the key range (found
+    /// by fuzz_queue_ops; regression tests in test_bucket_substrate.cpp).
     void advance_to_non_empty() {
+        absorb_overflow();
         std::size_t steps = 0;
         while (buckets_[cursor_].empty()) {
             if (steps == kBucketCount) {
@@ -438,7 +449,43 @@ private:
             cursor_                = (cursor_ + 1) & kBucketMask;
             base_ += width_;
             ++steps;
+            if (absorb_overflow()) {
+                // Something just landed in a bucket ahead of the cursor; the
+                // lap that would justify a full redistribution starts again.
+                steps = 0;
+            }
         }
+    }
+
+    /// Re-files every overflow entry the window now covers (see above).
+    ///
+    /// O(1) when nothing is covered, which is every call in a configuration
+    /// whose width spans the key range; otherwise one pass over the overflow
+    /// list. Each entry leaves the list once.
+    /// Returns whether any entry was re-filed.
+    bool absorb_overflow() {
+        if (overflow_bound_ == kNoBound) {
+            return false;
+        }
+        const KeyType window_end = base_ + static_cast<KeyType>(kBucketCount) * width_;
+        if (overflow_bound_ >= window_end) {
+            return false;
+        }
+        std::vector<Entry> pending;
+        pending.swap(overflow_);
+        overflow_bound_ = kNoBound;
+        for (const Entry& e : pending) {
+            if (e.key < window_end) {
+                --size_;  // push() re-counts it
+                push(e.node, e.key, e.score);
+            } else {
+                overflow_.push_back(e);
+                if (overflow_bound_ == kNoBound || e.key < overflow_bound_) {
+                    overflow_bound_ = e.key;
+                }
+            }
+        }
+        return true;
     }
 
     /// Scans the current bucket, refreshes its bound, and returns the index of
@@ -488,7 +535,9 @@ private:
         const std::size_t moved = pending.size();
         size_ -= moved;  // push() re-counts them
         for (const Entry& e : pending) {
-            push(e.node, e.key);
+            // The score is carried over: re-filing without it would silently
+            // reset every overflowed entry's learned score to zero.
+            push(e.node, e.key, e.score);
         }
     }
 

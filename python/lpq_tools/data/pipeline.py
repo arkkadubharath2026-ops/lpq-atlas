@@ -74,7 +74,7 @@ class PreparationResult:
 def _validate_inputs(
     config: DatasetConfig, graph_source: Path, coordinate_source: Path | None
 ) -> list[ValidationReport]:
-    reports = [validate_raw_file(graph_source, config.source_format)]
+    reports = [validate_raw_file(graph_source, config.converter_format)]
     if not reports[0].ok:
         raise PipelineError(
             f"{config.dataset_id}: {graph_source.name} failed validation:\n  "
@@ -151,7 +151,7 @@ def _converter_command(
         "--input",
         rel(graph_source),
         "--format",
-        config.source_format,
+        config.converter_format,
         "--output",
         rel(graph_path),
         "--metadata",
@@ -234,13 +234,25 @@ def prepare_dataset(
     # -- normalize (part one): expand compressed archives ---------------------
     # Raw files stay exactly as published; the expansion lands in staging.
     graph_raw = paths.raw / config.graph_file.filename
-    graph_source = decompress(graph_raw, paths.staging, force=force)
-
     coordinate_source: Path | None = None
-    if config.coordinate_file is not None:
-        coordinate_source = decompress(
-            paths.raw / config.coordinate_file.filename, paths.staging, force=force
+    osm_report: dict[str, Any] | None = None
+    osm_ids: Path | None = None
+    if config.source_format == "osm_pbf":
+        # OSM: extract the road graph (documented policy in osm.py) into a
+        # DIMACS pair in staging. The PBF itself is never modified.
+        from lpq_tools.data.osm import extract_road_graph
+
+        say(f"{config.dataset_id}: extracting the road graph from {graph_raw.name}")
+        graph_source, coordinate_source, osm_ids, report = extract_road_graph(
+            graph_raw, paths.staging / config.dataset_id
         )
+        osm_report = report.as_dict()
+    else:
+        graph_source = decompress(graph_raw, paths.staging, force=force)
+        if config.coordinate_file is not None:
+            coordinate_source = decompress(
+                paths.raw / config.coordinate_file.filename, paths.staging, force=force
+            )
 
     # -- validate -------------------------------------------------------------
     say(f"{config.dataset_id}: validating")
@@ -313,6 +325,32 @@ def prepare_dataset(
     if int(metadata.get("node_count", -1)) != header.node_count:
         raise PipelineError(
             f"{config.dataset_id}: metadata node count disagrees with the graph file"
+        )
+
+    # -- OSM provenance (spec section 10.2) ------------------------------------
+    if osm_report is not None and osm_ids is not None:
+        from lpq_tools.utilities.hashing import sha256_file
+
+        ids_target = paths.processed / f"{config.dataset_id}.osm_node_ids.u64"
+        ids_target.write_bytes(osm_ids.read_bytes())
+        write_json(
+            paths.metadata / f"{config.dataset_id}.osm.json",
+            {
+                "dataset_id": config.dataset_id,
+                "source_url": config.graph_file.url,
+                "source_file": config.graph_file.filename,
+                "source_sha256": sha256_file(graph_raw),
+                "region": config.provenance.get("region"),
+                "snapshot_date": config.provenance.get("snapshot_date"),
+                "licence": config.provenance.get("licence"),
+                "graph_conversion": {
+                    "extractor": "lpq_tools.data.osm",
+                    "converter": "lpq_convert --format dimacs",
+                    **osm_report,
+                },
+                "osm_node_ids_path": rel_root(ids_target),
+                "graph_checksum_fnv1a64": header.checksum,
+            },
         )
 
     # -- generate query manifest ---------------------------------------------

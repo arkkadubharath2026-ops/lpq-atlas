@@ -1,0 +1,9 @@
+# LPQ Atlas orchestration API. The research stack it reuses is pinned in
+# python/requirements.txt; these are the web layer's own dependencies.
+#
+#   fastapi   request validation (pydantic), routing, SSE streaming responses
+#   uvicorn   the ASGI server that runs it
+#   httpx     required by fastapi.testclient for the API contract tests
+fastapi==0.118.0
+uvicorn==0.37.0
+httpx==0.28.1

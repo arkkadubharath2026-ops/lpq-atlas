@@ -1,0 +1,30 @@
+{
+  "command": [
+    "build/release/bin/lpq_convert.exe",
+    "--input",
+    "datasets/processed/staging/osm_liechtenstein.gr",
+    "--format",
+    "dimacs",
+    "--output",
+    "datasets/processed/osm_liechtenstein.lpqgraph",
+    "--metadata",
+    "datasets/metadata/osm_liechtenstein.json",
+    "--dataset-id",
+    "osm_liechtenstein",
+    "--directedness",
+    "directed",
+    "--self-loops",
+    "drop",
+    "--parallel-edges",
+    "keep",
+    "--default-weight",
+    "1",
+    "--edges-listed",
+    "once",
+    "--coordinates",
+    "datasets/processed/staging/osm_liechtenstein.co"
+  ],
+  "converter": "build/release/bin/lpq_convert.exe",
+  "dataset_id": "osm_liechtenstein",
+  "stdout": "osm_liechtenstein: 29945 nodes, 59358 arcs, checksum 0xcdc4c6c588f7c113"
+}

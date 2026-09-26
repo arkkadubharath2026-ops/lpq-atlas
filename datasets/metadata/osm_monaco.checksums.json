@@ -1,0 +1,7 @@
+{
+  "dataset_id": "osm_monaco",
+  "files": {
+    "monaco-260925.osm.pbf": "e26aa50a1bf8191a64b19c037a6a4d4922f927e1477e2fbda8ab8f01be59dcbf"
+  },
+  "note": "Digests observed on first acquisition. These files were NOT verified against a published checksum -- they were accepted on trust and recorded here so that a later change is detected. Copy a digest into the dataset config's 'sha256' to pin it."
+}

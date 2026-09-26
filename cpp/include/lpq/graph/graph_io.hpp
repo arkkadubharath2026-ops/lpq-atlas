@@ -47,12 +47,14 @@
 #ifndef LPQ_GRAPH_GRAPH_IO_HPP
 #define LPQ_GRAPH_GRAPH_IO_HPP
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <istream>
 #include <limits>
+#include <optional>
 #include <ostream>
 #include <sstream>
 #include <string>
@@ -231,6 +233,31 @@ template <WeightType W>
     }
 }
 
+/// Bytes one arc occupies on disk: a 32-bit target and the weight as
+/// put_weight writes it.
+template <WeightType W>
+[[nodiscard]] constexpr std::uint64_t arc_record_bytes() noexcept {
+    return 4U + ((std::is_same_v<W, double> || std::is_same_v<W, std::uint64_t>) ? 8U : 4U);
+}
+
+/// Bytes between the read position and the end of `is`, or nullopt when the
+/// stream cannot say (a pipe). The read position is left where it was.
+[[nodiscard]] inline std::optional<std::uint64_t> remaining_bytes(std::istream& is) {
+    const std::streampos here = is.tellg();
+    if (here == std::streampos(-1)) {
+        is.clear();
+        return std::nullopt;
+    }
+    is.seekg(0, std::ios::end);
+    const std::streampos end = is.tellg();
+    is.clear();
+    is.seekg(here);
+    if (end == std::streampos(-1) || end < here) {
+        return std::nullopt;
+    }
+    return static_cast<std::uint64_t>(end - here);
+}
+
 }  // namespace detail
 
 /// Checksums a graph's arc payload.
@@ -383,19 +410,47 @@ template <WeightType W>
     const bool has_coordinates = coord_system != CoordinateSystem::kNone;
     const std::uint64_t stored_checksum = detail::get_u64_le(is);
 
-    std::vector<std::uint64_t> offsets(static_cast<std::size_t>(node_count) + 1);
-    for (std::uint64_t& o : offsets) {
-        o = detail::get_u64_le(is);
+    // Every array below is sized from the header, so the header is checked
+    // against the bytes actually present BEFORE anything is allocated. Trusting
+    // it let a 72-byte file declaring 654 million nodes request 5 GB
+    // (fuzz_graph_binary), and an arc count near 2^64 escape as std::length_error
+    // instead of a GraphIoError. node_count <= 2^32 keeps the node term below
+    // 2^38; the arc term is compared by division so it cannot overflow.
+    const std::uint64_t node_bytes =
+        (node_count + 1U) * 8U + node_count * ((has_mapping ? 8U : 0U) + (has_coordinates ? 16U : 0U));
+    const std::optional<std::uint64_t> left = detail::remaining_bytes(is);
+    if (left && (node_bytes > *left ||
+                 arc_count > (*left - node_bytes) / detail::arc_record_bytes<W>())) {
+        throw GraphIoError("graph file declares " + std::to_string(node_count) + " nodes and " +
+                           std::to_string(arc_count) + " arcs, more than its remaining " +
+                           std::to_string(*left) + " bytes can hold: it is truncated or corrupt");
     }
-    if (!offsets.empty() && offsets.back() != arc_count) {
+    // A stream that cannot report its size (a pipe) grows its arrays only as
+    // bytes actually arrive, so a lying header fails at the first short read.
+    const auto reservation = [&left](std::uint64_t declared) {
+        constexpr std::uint64_t kUnverifiedCap = std::uint64_t{1} << 20;
+        return static_cast<std::size_t>(left ? declared : std::min(declared, kUnverifiedCap));
+    };
+
+    std::vector<std::uint64_t> offsets;
+    offsets.reserve(reservation(node_count + 1U));
+    for (std::uint64_t i = 0; i <= node_count; ++i) {
+        offsets.push_back(detail::get_u64_le(is));
+    }
+    if (offsets.back() != arc_count) {
         throw GraphIoError("graph file's final offset disagrees with its declared arc count");
+    }
+    if (offsets.front() != 0U ||
+        std::adjacent_find(offsets.begin(), offsets.end(),
+                           [](std::uint64_t a, std::uint64_t b) { return b < a; }) != offsets.end()) {
+        throw GraphIoError("graph file's offsets do not start at 0 and increase monotonically");
     }
 
     // Rebuilt through the ordinary builder rather than by assigning the arrays
     // directly, so a file cannot install a CSR structure that the builder's
     // validation would have rejected.
     std::vector<InputEdge<W>> edges;
-    edges.reserve(static_cast<std::size_t>(arc_count));
+    edges.reserve(reservation(arc_count));
     for (std::uint64_t u = 0; u + 1 < offsets.size(); ++u) {
         for (std::uint64_t i = offsets[u]; i < offsets[u + 1]; ++i) {
             const NodeId target = detail::get_u32_le(is);
@@ -406,16 +461,18 @@ template <WeightType W>
 
     LoadedGraph<W> loaded;
     if (has_mapping) {
-        loaded.mapping.original_id.resize(static_cast<std::size_t>(node_count));
-        for (std::uint64_t& id : loaded.mapping.original_id) {
-            id = detail::get_u64_le(is);
+        loaded.mapping.original_id.reserve(reservation(node_count));
+        for (std::uint64_t u = 0; u < node_count; ++u) {
+            loaded.mapping.original_id.push_back(detail::get_u64_le(is));
         }
     }
     if (has_coordinates) {
-        loaded.coordinates.resize(static_cast<std::size_t>(node_count));
-        for (Coordinate& c : loaded.coordinates) {
+        loaded.coordinates.reserve(reservation(node_count));
+        for (std::uint64_t u = 0; u < node_count; ++u) {
+            Coordinate c;
             c.x = detail::get_f64_le(is);
             c.y = detail::get_f64_le(is);
+            loaded.coordinates.push_back(c);
         }
     }
 

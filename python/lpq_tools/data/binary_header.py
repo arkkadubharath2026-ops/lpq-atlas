@@ -7,7 +7,7 @@ the file on disk is the one the metadata record describes -- node count, arc
 count, weight type, directedness and the stored checksum -- and that is entirely
 in the first fifty bytes.
 
-The header layout (format version 2), all little-endian:
+The header layout (format versions 2 and 3), all little-endian:
 
     u64  magic       "LPQGRAPH"
     u32  version
@@ -16,7 +16,8 @@ The header layout (format version 2), all little-endian:
     u64  node count
     u64  arc count
     u32  has node-id mapping
-    u32  has coordinates
+    u32  coordinates: v2 a 0/1 flag; v3 the coordinate system
+         (0 none, 1 euclidean, 2 geographic)
     u64  checksum (FNV-1a over the arc payload)
 """
 
@@ -32,7 +33,14 @@ GRAPH_MAGIC = 0x485041524751504C
 #: Must track ``kGraphFormatVersion``. A mismatch is reported rather than
 #: tolerated: a header whose fields have moved would be read as plausible
 #: nonsense.
-GRAPH_FORMAT_VERSION = 2
+GRAPH_FORMAT_VERSION = 3
+
+#: The oldest version still readable (``kMinReadableGraphFormatVersion``).
+#: Version 3 changed only the MEANING of the coordinate word -- a flag became
+#: the coordinate system -- not the layout, so both read identically here.
+MIN_GRAPH_FORMAT_VERSION = 2
+
+_COORDINATE_SYSTEMS = {0: "none", 1: "euclidean", 2: "geographic"}
 
 _WEIGHT_TYPES = {1: "uint32", 2: "uint64", 3: "double"}
 
@@ -54,6 +62,7 @@ class BinaryGraphHeader:
     has_mapping: bool
     has_coordinates: bool
     checksum: int
+    coordinate_system: str = "none"
 
     @property
     def edge_count(self) -> int:
@@ -81,11 +90,17 @@ def read_binary_graph_header(path: Path) -> BinaryGraphHeader:
 
     if magic != GRAPH_MAGIC:
         raise BinaryGraphError(f"{path}: not an LPQ graph file (bad magic number)")
-    if version != GRAPH_FORMAT_VERSION:
+    if not MIN_GRAPH_FORMAT_VERSION <= version <= GRAPH_FORMAT_VERSION:
         raise BinaryGraphError(
             f"{path}: graph format version {version}, but this tooling reads "
-            f"version {GRAPH_FORMAT_VERSION}"
+            f"versions {MIN_GRAPH_FORMAT_VERSION} to {GRAPH_FORMAT_VERSION}"
         )
+    if version == 2:
+        # graph_io.hpp: every v2 file with coordinates took them from a DIMACS
+        # .co file, which lpq_convert labels geographic.
+        coordinate_system = "geographic" if has_coordinates else "none"
+    else:
+        coordinate_system = _COORDINATE_SYSTEMS.get(has_coordinates, "unknown")
     if weight_tag not in _WEIGHT_TYPES:
         raise BinaryGraphError(f"{path}: unknown weight type tag {weight_tag}")
 
@@ -99,4 +114,5 @@ def read_binary_graph_header(path: Path) -> BinaryGraphHeader:
         has_mapping=has_mapping != 0,
         has_coordinates=has_coordinates != 0,
         checksum=checksum,
+        coordinate_system=coordinate_system,
     )

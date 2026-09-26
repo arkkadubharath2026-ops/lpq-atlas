@@ -30,7 +30,7 @@ from typing import Any, Iterable
 import yaml
 
 #: Source formats ``lpq_convert`` understands.
-_FORMATS = ("snap", "dimacs", "binary")
+_FORMATS = ("snap", "dimacs", "binary", "osm_pbf")
 
 #: Weight families ``weight_distributions.hpp`` understands. Duplicated here so
 #: a typo is caught while reading the config rather than after a download.
@@ -155,6 +155,16 @@ class DatasetConfig:
             if remote.role == "coordinates":
                 return remote
         return None
+
+    @property
+    def converter_format(self) -> str:
+        """The format ``lpq_convert`` is given.
+
+        An OSM snapshot is not converted directly: ``lpq_tools.data.osm``
+        extracts its road graph into DIMACS first, so it reaches the one
+        converter every other dataset uses.
+        """
+        return "dimacs" if self.source_format == "osm_pbf" else self.source_format
 
     @property
     def unpinned_files(self) -> tuple[RemoteFile, ...]:

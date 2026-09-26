@@ -1,0 +1,35 @@
+{
+  "dataset_id": "osm_monaco",
+  "source_path": "datasets/processed/staging/osm_monaco.gr",
+  "source_format": "dimacs",
+  "processed_path": "datasets/processed/osm_monaco.lpqgraph",
+  "graph_checksum_fnv1a64": 16866336453424606105,
+  "weight_type": "uint32",
+  "node_count": 5692,
+  "edge_count": 8495,
+  "arc_count": 8495,
+  "directed": true,
+  "density": 1.4924455375966268,
+  "min_weight": 4,
+  "max_weight": 2312,
+  "mean_weight": 110.94973513831665,
+  "stddev_weight": 137.0943976657135,
+  "max_path_cost_bound": 13157592,
+  "min_out_degree": 1,
+  "max_out_degree": 4,
+  "mean_out_degree": 1.4924455375966268,
+  "stddev_out_degree": 0.54532368973307277,
+  "isolated_nodes": 0,
+  "has_coordinates": true,
+  "has_node_id_mapping": false,
+  "normalization": {
+    "directedness": "directed",
+    "self_loops": "drop",
+    "parallel_edges": "keep",
+    "edges_listed": "once"
+  },
+  "weights": {
+    "synthesized": false,
+    "source": "dataset"
+  }
+}

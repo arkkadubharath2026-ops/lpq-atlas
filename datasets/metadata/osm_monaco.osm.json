@@ -1,0 +1,50 @@
+{
+  "dataset_id": "osm_monaco",
+  "graph_checksum_fnv1a64": 16866336453424606105,
+  "graph_conversion": {
+    "arcs_before_scc": 9465,
+    "arcs_kept": 8495,
+    "bbox": [
+      7.4053929,
+      43.7232244,
+      7.4423019,
+      43.7519682
+    ],
+    "converter": "lpq_convert --format dimacs",
+    "extractor": "lpq_tools.data.osm",
+    "nodes_before_scc": 6375,
+    "nodes_dropped_outside_largest_scc": 683,
+    "nodes_kept": 5692,
+    "road_policy_version": 1,
+    "segments_missing_location": 0,
+    "turn_restrictions_modelled": false,
+    "ways_excluded": {
+      "access=no": 3,
+      "access=private": 56,
+      "highway=construction": 1,
+      "highway=corridor": 5,
+      "highway=elevator": 3,
+      "highway=footway": 1818,
+      "highway=path": 39,
+      "highway=pedestrian": 67,
+      "highway=platform": 13,
+      "highway=raceway": 10,
+      "highway=steps": 467,
+      "motor_vehicle=no": 6,
+      "motor_vehicle=private": 21,
+      "motorcar=no": 1,
+      "service=driveway": 66,
+      "service=parking_aisle": 31
+    },
+    "ways_kept": 1048,
+    "ways_seen": 3655,
+    "weight_unit": "decimetre"
+  },
+  "licence": "ODbL 1.0 -- (c) OpenStreetMap contributors",
+  "osm_node_ids_path": "datasets/processed/osm_monaco.osm_node_ids.u64",
+  "region": "Monaco",
+  "snapshot_date": "2026-09-25",
+  "source_file": "monaco-260925.osm.pbf",
+  "source_sha256": "e26aa50a1bf8191a64b19c037a6a4d4922f927e1477e2fbda8ab8f01be59dcbf",
+  "source_url": "https://download.geofabrik.de/europe/monaco-260925.osm.pbf"
+}

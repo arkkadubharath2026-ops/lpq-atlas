@@ -446,7 +446,7 @@ def test_checked_in_configs_produce_valid_converter_commands(workspace, converte
             paths.metadata / "out.json",
         )
         assert "--format" in command
-        assert config.source_format in command
+        assert config.converter_format in command
         if config.weights is not None:
             assert "--weights" in command
             assert config.weights.distribution in command

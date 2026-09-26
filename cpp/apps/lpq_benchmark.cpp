@@ -57,6 +57,7 @@
 #include "lpq/adaptation/controller_observer.hpp"
 #include "lpq/features/graph_features.hpp"
 #include "lpq/lpq/learned_priority_queue.hpp"
+#include "lpq/lpq/queue_config.hpp"
 #include "lpq/models/logistic_predictor.hpp"
 #include "lpq/pq/binary_heap.hpp"
 #include "lpq/pq/fibonacci_heap.hpp"
@@ -535,17 +536,8 @@ template <typename Queue>
         // so a bucket holds entries of genuinely similar key rather than
         // everything. Derived from the maximum weight because that is what
         // determines how far a key can jump in one relaxation.
-        std::uint64_t width = o.lpq_bucket_width;
-        if (width == 0) {
-            const auto span = static_cast<std::uint64_t>(
-                meta.max_weight > 0.0 ? meta.max_weight : 1.0);
-            constexpr auto kBuckets =
-                static_cast<std::uint64_t>(BenchLpq::Substrate::kBucketCount);
-            width = (span + kBuckets - 1U) / kBuckets;
-            if (width == 0) {
-                width = 1;
-            }
-        }
+        const std::uint64_t width = derive_bucket_width(
+            meta, BenchLpq::Substrate::kBucketCount, o.lpq_bucket_width);
         // The correctness policy is the difference between exact and
         // approximate mode, and it is the ONLY difference: the substrate, the
         // window and the scoring are identical, so a paired exact/approximate
@@ -1016,7 +1008,12 @@ int main(int argc, char** argv) {
                     "--heuristic " + o.heuristic + " requires a graph with coordinates; "
                     "use --heuristic zero");
             }
-            heuristic_scale = euclidean_admissible_scale(g);
+            // Each heuristic needs the scale for the unit it measures in: the
+            // Euclidean scale is weight per coordinate unit, the Haversine one
+            // weight per metre. Mixing them overestimates by orders of
+            // magnitude and returns non-optimal paths without failing.
+            heuristic_scale = (o.heuristic == "haversine") ? haversine_admissible_scale(g)
+                                                           : euclidean_admissible_scale(g);
             if (!(heuristic_scale > 0.0)) {
                 throw UnsupportedConfigurationError(
                     "no admissible heuristic scale could be derived for this graph");

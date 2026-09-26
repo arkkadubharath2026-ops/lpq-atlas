@@ -114,6 +114,43 @@ add_executable(lpq_model_info lpq_model_info.cpp)
 target_link_libraries(lpq_model_info PRIVATE
     lpq::models
     lpq::features
+    lpq::graph
+    lpq::lpq
+    lpq::verification
     lpq::compiler_settings)
 target_compile_options(lpq_model_info PRIVATE
+    "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wno-old-style-cast>")
+
+# ------------------------------------------------------------------------------
+# lpq_run -- one query, machine-readable result and optional execution trace.
+#
+# The contract the LPQ Atlas web layer drives (docs/atlas/ENGINE_CONTRACT.md).
+# It links exactly what lpq_benchmark links and instantiates the same queue
+# types, so an interactive run and a benchmark row execute the same code.
+# ------------------------------------------------------------------------------
+add_executable(lpq_run lpq_run.cpp)
+target_link_libraries(lpq_run PRIVATE
+    lpq::algorithms
+    lpq::pq
+    lpq::graph
+    lpq::metrics
+    lpq::lpq
+    lpq::verification
+    lpq::models
+    lpq::features
+    lpq::adaptation
+    lpq::compiler_settings)
+target_compile_options(lpq_run PRIVATE
+    "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wno-old-style-cast>")
+
+# ------------------------------------------------------------------------------
+# lpq_export -- flat arrays (coordinates, CSR) for the web layer, written by the
+# one reader of the .lpqgraph format.
+# ------------------------------------------------------------------------------
+add_executable(lpq_export lpq_export.cpp)
+target_link_libraries(lpq_export PRIVATE
+    lpq::graph
+    lpq::metrics
+    lpq::compiler_settings)
+target_compile_options(lpq_export PRIVATE
     "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wno-old-style-cast>")

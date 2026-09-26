@@ -131,6 +131,67 @@ TEST(BucketSubstrate, HandlesKeysBeyondTheRingSpan) {
     EXPECT_TRUE(q.empty());
 }
 
+// Regression: fuzz_queue_ops, random stream seed 20260926 (LPQ Atlas). The
+// test above only reaches the overflow list after a full empty lap. Here the
+// window slides forward WITHOUT an empty lap until it covers the parked
+// overflow key, and a later, larger key is pushed into a bucket. The substrate
+// returned 1600 before 1500 -- in a search, a non-optimal distance in exact
+// mode.
+TEST(BucketSubstrate, AnOverflowKeyTheWindowCatchesUpWithIsNotOvertaken) {
+    Substrate q(1);
+    q.push(1, 0);
+    q.push(2, 1500);  // offset 1500 >= kBucketCount: parked in the overflow list
+    EXPECT_EQ(q.pop().key, 0U);
+    q.push(3, 600);
+    EXPECT_EQ(q.pop().key, 600U);  // the window now ends at 600 + 1024 > 1500
+    q.push(4, 1600);               // lands in a bucket
+    EXPECT_EQ(q.pop().key, 1500U);
+    EXPECT_EQ(q.pop().key, 1600U);
+    EXPECT_TRUE(q.empty());
+}
+
+TEST(BucketSubstrate, RefilingFromTheOverflowListKeepsTheScore) {
+    Substrate q(1);
+    q.set_front_size(4);
+    q.push(1, 0, 0.1F);
+    q.push(2, 5000, 0.9F);  // overflows
+    EXPECT_EQ(q.pop().key, 0U);
+    const auto front = q.current_front();  // re-files the overflow entry
+    ASSERT_EQ(front.size(), 1U);
+    EXPECT_EQ(front[0].node, 2U);
+    EXPECT_FLOAT_EQ(front[0].score, 0.9F);
+}
+
+TEST(BucketSubstrate, StaysOrderedWhenTheWidthIsFarBelowTheKeyRange) {
+    // Dijkstra's monotone usage with keys jumping far beyond the window, for
+    // widths that force the overflow path constantly.
+    for (const std::uint64_t width : {1U, 2U, 3U, 7U, 16U}) {
+        for (std::uint64_t seed = 1; seed <= 30; ++seed) {
+            Rng                        rng(seed * 7919 + width);
+            Substrate                  q(width);
+            std::vector<std::uint64_t> ref;  // kept sorted
+            std::uint64_t              floor = 0;
+            for (int i = 0; i < 3000; ++i) {
+                if (!ref.empty() && rng.next_unit() < 0.45) {
+                    const auto e = q.pop();
+                    ASSERT_EQ(e.key, ref.front()) << "width " << width << " seed " << seed;
+                    ref.erase(ref.begin());
+                    floor = e.key;
+                } else {
+                    const std::uint64_t key = floor + rng.next_in_range(0, 20000);
+                    q.push(static_cast<NodeId>(i), key);
+                    ref.insert(std::upper_bound(ref.begin(), ref.end(), key), key);
+                }
+                ASSERT_EQ(q.size(), ref.size());
+            }
+            while (!ref.empty()) {
+                ASSERT_EQ(q.pop().key, ref.front());
+                ref.erase(ref.begin());
+            }
+        }
+    }
+}
+
 TEST(BucketSubstrate, JumpsAcrossAHugeEmptyKeyRange) {
     // Stepping a bucket at a time across a sparse key range would be a loop
     // over the range rather than over the data.
