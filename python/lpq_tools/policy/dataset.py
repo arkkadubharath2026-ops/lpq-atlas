@@ -383,8 +383,10 @@ def load_graphs(
     """Loads profile + metadata for each dataset and assigns topology groups.
 
     Checks that guard against a stale or mismatched profile: node/arc counts must
-    equal the recorded graph shape, and the profile checksum must equal the
-    metadata's ``graph_checksum_fnv1a64`` when the latter exists.
+    agree with the metadata and with the shape recorded in the result files (whose
+    ``graph_edges`` is the edge count, so either the arc count or the metadata
+    edge count is accepted), and the profile checksum must equal the metadata's
+    ``graph_checksum_fnv1a64`` when the latter exists.
 
     Topology groups are the union of (a) the declared base and (b) datasets with
     identical node and arc counts (conservative: it can only remove training data).
@@ -395,11 +397,21 @@ def load_graphs(
         prof_path = pdir / f"{ds}.lpqprofile"
         prof = load_profile(prof_path)
         meta, meta_path = _read_metadata(mdir, ds)
+        for field_, got in (("node_count", prof.nodes), ("arc_count", prof.arcs)):
+            if field_ in meta and int(meta[field_]) != got:
+                raise PolicyFormatError(
+                    f"{prof_path}: profile {field_.split('_')[0]}s={got} but {meta_path} says "
+                    f"{field_}={meta[field_]} (stale profile?)")
         if shapes and ds in shapes and shapes[ds] != (0, 0):
-            if (prof.nodes, prof.arcs) != shapes[ds]:
+            rec_nodes, rec_edges = shapes[ds]
+            # result records say graph_edges: the EDGE count (half the arcs of an
+            # undirected graph), so accept either the arc count or the metadata edge count
+            ok_edges = {prof.arcs} | ({int(meta["edge_count"])} if "edge_count" in meta else set())
+            if rec_nodes != prof.nodes or rec_edges not in ok_edges:
                 raise PolicyFormatError(
                     f"{prof_path}: profile has nodes/arcs {(prof.nodes, prof.arcs)} but the result "
-                    f"records for {ds} say {shapes[ds]} (stale profile or wrong dataset id)")
+                    f"records for {ds} say nodes/edges {shapes[ds]} (stale profile or wrong "
+                    f"dataset id)")
         cs = meta.get("graph_checksum_fnv1a64")
         if cs is not None and prof.checksum and int(cs) != prof.checksum:
             raise PolicyFormatError(
@@ -417,10 +429,15 @@ def load_graphs(
             a = parent[a]
         return a
 
+    def rank(a: str) -> tuple[bool, str]:
+        # a real graph names its topology group in preference to a derived variant
+        return (a.startswith("derived_"), a)
+
     def union(a: str, b: str) -> None:
         ra, rb = find(a), find(b)
         if ra != rb:
-            parent[max(ra, rb)] = min(ra, rb)
+            keep, drop = sorted((ra, rb), key=rank)
+            parent[drop] = keep
 
     by_shape: dict[tuple[int, int], list[str]] = defaultdict(list)
     for ds, gi in infos.items():

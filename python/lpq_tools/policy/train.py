@@ -90,6 +90,7 @@ class TrainingGraph:
     profile: WeightProfile
     x: tuple[float, ...]
     y: dict[int, float]  # width -> log geometric-mean paired ratio vs radix
+    derived: bool = False  # declared to be derived from another dataset's topology
 
 
 def make_training_graphs(
@@ -99,7 +100,7 @@ def make_training_graphs(
     for ds, rows in sorted(table.by_dataset(algorithm).items()):
         gi = infos[ds]
         out.append(TrainingGraph(ds, gi.topology, gi.profile, tuple(features(gi.profile)),
-                                 {w: r.y for w, r in rows.items()}))
+                                 {w: r.y for w, r in rows.items()}, gi.declared_derived))
     return out
 
 
@@ -121,7 +122,8 @@ def fit_ridge(x: np.ndarray, y: np.ndarray, lam: float) -> tuple[float, np.ndarr
     z = (x - mu) / sd
     yc = y - y.mean()
     a = z.T @ z + lam * np.eye(p)
-    beta = np.linalg.solve(a, z.T @ yc) if p else np.zeros(0)
+    # lstsq: minimum-norm solution, so a constant column (zero in z) cannot make lam=0 singular
+    beta = np.linalg.lstsq(a, z.T @ yc, rcond=None)[0] if p else np.zeros(0)
     coef = beta / sd
     intercept = float(y.mean() - coef @ mu)
     return intercept, coef
