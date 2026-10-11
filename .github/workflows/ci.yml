@@ -154,4 +154,8 @@ jobs:
           if ($bad -gt 0) { exit 1 }
       - name: doctor (read-only)
         shell: powershell
+        # Point the doctor at the interpreter setup-python just installed, so it
+        # does not have to find it among the launcher and Store-alias candidates.
+        env:
+          LPQ_SETUP_PYTHON: ${{ env.pythonLocation }}\python.exe
         run: powershell -ExecutionPolicy Bypass -File scripts\setup\doctor.ps1
