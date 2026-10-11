@@ -533,7 +533,14 @@ private:
                 continue;
             }
             const std::size_t steps = (next - cursor_) & mask_;
-            bucket_bound_[cursor_]  = kNoBound;
+            // Reset the bound of the bucket being LEFT. When next == cursor_ --
+            // which happens right after redistribute_overflow() has refilled the
+            // bucket the cursor already sits on -- that bucket is the one being
+            // ARRIVED at, its bound was just recorded by push(), and wiping it
+            // lets a later push record a bound above a key already queued.
+            if (next != cursor_) {
+                bucket_bound_[cursor_] = kNoBound;
+            }
             cursor_                 = next;
             base_ += static_cast<KeyType>(steps) * width_;
             // The window moved. Anything it now covers is later than the bucket

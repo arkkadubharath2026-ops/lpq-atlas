@@ -89,7 +89,7 @@ lpq_add_test(test_models
 
 lpq_add_test(test_lpq
     SOURCES lpq/test_candidate_manager.cpp lpq/test_bucket_substrate.cpp
-            lpq/test_learned_priority_queue.cpp
+            lpq/test_learned_priority_queue.cpp lpq/test_bucket_ring_and_direct.cpp
     LIBS    lpq::lpq lpq::verification lpq::algorithms lpq::pq
     LABELS  "unit")
 
