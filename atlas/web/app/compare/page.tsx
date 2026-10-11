@@ -286,10 +286,10 @@ function rows(a: RunResult, b: RunResult, unit?: string): Row[] {
     ["Pushes", a.counters?.pq_pushes ?? null, b.counters?.pq_pushes ?? null, int],
     ["Pops", a.counters?.pq_pops ?? null, b.counters?.pq_pops ?? null, int],
     ["Comparisons (incl. verification)", a.counters?.pq_comparisons ?? null, b.counters?.pq_comparisons ?? null, int],
-    ["Verification comparisons", a.lpq?.verification.comparisons ?? null, b.lpq?.verification.comparisons ?? null, int],
-    ["Candidate entries examined", a.lpq?.metrics.entries_examined ?? null, b.lpq?.metrics.entries_examined ?? null, int],
-    ["Fallback scans", a.lpq?.metrics.fallback_scans ?? null, b.lpq?.metrics.fallback_scans ?? null, int],
-    ["Fallback rate", a.lpq?.metrics.fallback_rate ?? null, b.lpq?.metrics.fallback_rate ?? null, (v) => fmtPct(v, 2)],
+    ["Verification comparisons", a.lpq?.verification?.comparisons ?? null, b.lpq?.verification?.comparisons ?? null, int],
+    ["Candidate entries examined", a.lpq?.metrics?.entries_examined ?? null, b.lpq?.metrics?.entries_examined ?? null, int],
+    ["Fallback scans", a.lpq?.metrics?.fallback_scans ?? null, b.lpq?.metrics?.fallback_scans ?? null, int],
+    ["Fallback rate", a.lpq?.metrics?.fallback_rate ?? null, b.lpq?.metrics?.fallback_rate ?? null, (v) => fmtPct(v, 2)],
     ["Score precomputation (outside timing)", a.lpq?.scorer_build_ns ?? null, b.lpq?.scorer_build_ns ?? null, ns],
   ];
   return out;

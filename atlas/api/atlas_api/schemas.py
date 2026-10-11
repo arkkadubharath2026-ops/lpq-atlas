@@ -7,7 +7,7 @@ against the registry before use and never passed through as paths.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -22,12 +22,18 @@ Queue = Literal[
     "lpq",
     "lpq_model",
     "lpq_adaptive",
+    "lpq_optimized",
 ]
 Policy = Literal["exact", "approximate"]
 TraceLevel = Literal["none", "summary", "visual", "full"]
 _ID = r"^[a-z0-9_]{1,64}$"
 
 LEARNED = {"lpq", "lpq_model", "lpq_adaptive"}
+# The engine-configured, exact, ML-assisted queue. It is deliberately not in
+# LEARNED: LEARNED gates the research knobs (approximate mode, window, bucket
+# width), and this queue accepts none of them -- the engine chooses its own
+# configuration, and it has no approximation mechanism.
+OPTIMIZED = "lpq_optimized"
 
 
 class EngineConfig(BaseModel):
@@ -46,6 +52,22 @@ class EngineConfig(BaseModel):
     @model_validator(mode="after")
     def _combinations(self) -> EngineConfig:
         learned = self.queue in LEARNED
+        if self.queue == OPTIMIZED:
+            if (
+                self.correctness_policy != "exact"
+                or self.epsilon != 0.0
+                or self.model_id
+                or self.adaptive_learning
+                or self.lpq_window is not None
+                or self.lpq_bucket_width is not None
+            ):
+                raise ValueError(
+                    "lpq_optimized is exact-only and chooses its own configuration: it takes no "
+                    "model, approximate mode, adaptive learning, window or bucket width"
+                )
+            if self.algorithm == "dijkstra" and self.heuristic != "auto":
+                raise ValueError("a heuristic only applies to A*")
+            return self
         if self.algorithm == "dijkstra" and self.heuristic != "auto":
             raise ValueError("a heuristic only applies to A*")
         if self.queue == "lpq_model" and not self.model_id:
@@ -97,6 +119,54 @@ class ComparisonRequest(BaseModel):
     max_events: int | None = Field(None, ge=1, le=5_000_000)
     repetitions: int = Field(5, ge=1, le=50)
     warmup: int = Field(1, ge=0, le=10)
+
+
+LaneId = Annotated[str, Field(pattern=_ID)]
+
+
+class LaneSpec(BaseModel):
+    """One lane of a fair comparison: an algorithm paired with a priority queue."""
+
+    id: LaneId
+    algorithm: Algorithm
+    queue: Queue
+    label: str | None = Field(None, max_length=80)
+
+    @model_validator(mode="after")
+    def _lane(self) -> LaneSpec:
+        if self.queue == "lpq_model":
+            raise ValueError("a comparison lane cannot use lpq_model: it needs a user-chosen model")
+        return self
+
+
+class LaneComparisonRequest(BaseModel):
+    """Several (algorithm, queue) lanes timed on the SAME graph, source and target.
+
+    Fairness is enforced here rather than left to the client: one repetition and
+    warm-up count for every lane, tracing off, an exact policy, and a single
+    heuristic shared by every A* lane.
+    """
+
+    dataset_id: str = Field(pattern=_ID)
+    source_node: int = Field(ge=0)
+    target_node: int = Field(ge=0)
+    lanes: list[LaneSpec] = Field(min_length=2, max_length=8)
+    heuristic: Heuristic = "auto"
+    repetitions: int = Field(7, ge=3, le=51)
+    warmup: int = Field(2, ge=2, le=10)
+    order_seed: int | None = Field(None, ge=0, le=2**63 - 1)
+
+    @model_validator(mode="after")
+    def _lanes(self) -> LaneComparisonRequest:
+        ids = [lane.id for lane in self.lanes]
+        if len(set(ids)) != len(ids):
+            raise ValueError("lane ids must be unique")
+        pairs = [(lane.algorithm, lane.queue) for lane in self.lanes]
+        if len(set(pairs)) != len(pairs):
+            raise ValueError("each (algorithm, queue) pair may appear in one lane only")
+        if self.heuristic != "auto" and not any(lane.algorithm == "astar" for lane in self.lanes):
+            raise ValueError("a heuristic only applies when some lane uses A*")
+        return self
 
 
 class BenchmarkRequest(BaseModel):

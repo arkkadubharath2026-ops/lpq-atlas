@@ -8,6 +8,7 @@ is a hand-maintained list of datasets.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -42,7 +43,7 @@ ALGORITHMS = [
     },
 ]
 
-QUEUES = [
+QUEUES: list[dict[str, Any]] = [
     {"id": "binary_heap", "name": "Binary heap", "family": "classical", "decrease_key": False},
     {"id": "four_ary_heap", "name": "4-ary heap", "family": "classical", "decrease_key": False},
     {"id": "pairing_heap", "name": "Pairing heap", "family": "classical", "decrease_key": True},
@@ -74,6 +75,20 @@ QUEUES = [
         "scorer": "constant_control_no_model",
         "description": "The control-scorer LPQ with the adaptive controller attached; optional "
         "online learning of the policy model from verified outcomes.",
+    },
+    {
+        "id": "lpq_optimized",
+        "name": "Optimized (ML-assisted)",
+        "family": "learned",
+        "exact": True,
+        "requires_model": False,
+        "scorer": "engine_selected",
+        "description": (
+            "A priority queue that uses a learned hint to keep the next nodes to visit in "
+            "small buckets, and checks every hint against an exact fallback, so the answer is "
+            "always the exact shortest distance. The engine picks its own configuration: "
+            "there is no model file or setting to choose."
+        ),
     },
 ]
 
@@ -336,6 +351,53 @@ def _model_info(path_s: str, _mtime: float, info_tool: str) -> dict[str, Any]:
     return out
 
 
+@lru_cache(maxsize=8)
+def _engine_help_queues(tool: str, _mtime: float) -> frozenset[str] | None:
+    """Queue ids named in the ``--pq`` entry of ``lpq_run --help``, or None if unreadable.
+
+    lpq_run has no machine-readable listing, and its help text is the engine's own
+    statement of what it accepts. Keyed by binary mtime, so a rebuild is noticed.
+    """
+    try:
+        proc = subprocess.run(  # noqa: S603 -- registry tool path, one fixed flag
+            [tool, "--help"], capture_output=True, text=True, timeout=15, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    lines = (proc.stdout + proc.stderr).splitlines()
+    block: list[str] = []
+    for i, line in enumerate(lines):
+        if line.strip().startswith("--pq"):
+            block.append(line)
+            for nxt in lines[i + 1 :]:
+                if nxt.strip().startswith("--") or not nxt.strip():
+                    break
+                block.append(nxt)
+            break
+    if not block:
+        return None
+    text = " ".join(block)
+    return frozenset(q["id"] for q in QUEUES if re.search(rf"(?<![\w-]){q['id']}(?![\w-])", text))
+
+
+def engine_queue_ids(settings: Settings) -> frozenset[str] | None:
+    """Queues the installed lpq_run says it accepts; None when that cannot be determined."""
+    try:
+        tool = settings.tool("lpq_run")
+        return _engine_help_queues(str(tool), tool.stat().st_mtime)
+    except (FileNotFoundError, OSError):
+        return None
+
+
+def queues_with_availability(settings: Settings) -> list[dict[str, Any]]:
+    """The queue registry plus ``engine_available``: True, False, or None when unknown."""
+    supported = engine_queue_ids(settings)
+    return [
+        {**q, "engine_available": None if supported is None else q["id"] in supported}
+        for q in QUEUES
+    ]
+
+
 def capabilities(settings: Settings) -> dict[str, Any]:
     tools = {}
     for name in ("lpq_run", "lpq_benchmark", "lpq_export", "lpq_model_info"):
@@ -344,8 +406,10 @@ def capabilities(settings: Settings) -> dict[str, Any]:
             tools[name] = True
         except FileNotFoundError:
             tools[name] = False
+    supported = engine_queue_ids(settings)
     return {
         "engine_tools": tools,
+        "engine_queues": None if supported is None else sorted(supported),
         "trace_levels": ["none", "summary", "visual", "full"],
         "max_trace_events": settings.max_trace_events,
         "max_concurrent_jobs": settings.max_concurrent_jobs,

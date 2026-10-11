@@ -1,8 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type RunBody } from "./api";
+import { api, type LaneComparisonBody, type RunBody } from "./api";
 import { Replay, type TraceEvent } from "./trace";
-import type { Dataset, Job, RunResult } from "./types";
+import type { Dataset, Job, LaneComparisonResult, RunResult } from "./types";
 
 /** Dataset metadata plus, for mappable datasets, its node coordinates. */
 export function useDatasetGeometry(datasetId: string | null) {
@@ -210,4 +210,63 @@ export function useRun() {
   }, [job]);
 
   return { phase, job, state, events, result, error, submit, load, cancel };
+}
+
+export type LanePhase = "idle" | "submitting" | "running" | "done" | "failed";
+
+/** Submits a lane comparison and polls it. Lane-level failures arrive inside the result. */
+export function useLaneComparison() {
+  const [phase, setPhase] = useState<LanePhase>("idle");
+  const [job, setJob] = useState<Job | null>(null);
+  const [result, setResult] = useState<LaneComparisonResult | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const alive = useRef(true);
+  const jobId = useRef<string | null>(null);
+
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+
+  const submit = useCallback(async (body: LaneComparisonBody) => {
+    setPhase("submitting");
+    setError(null);
+    setResult(null);
+    setJob(null);
+    try {
+      const created = await api.createLaneComparison(body);
+      jobId.current = created.id;
+      setJob(created);
+      setPhase("running");
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 400));
+        if (!alive.current || jobId.current !== created.id) return;
+        const j = await api.laneComparison(created.id);
+        setJob(j);
+        if (j.state === "COMPLETED") {
+          setResult(j.result);
+          setPhase(j.result ? "done" : "failed");
+          if (!j.result) setError(new Error("The comparison finished without a result."));
+          return;
+        }
+        if (j.state === "FAILED" || j.state === "CANCELLED") {
+          setError(new Error(j.error?.message ?? `Comparison ${j.state.toLowerCase()}.`));
+          setPhase("failed");
+          return;
+        }
+      }
+    } catch (e) {
+      if (!alive.current) return;
+      setError(e);
+      setPhase("failed");
+    }
+  }, []);
+
+  const cancel = useCallback(async () => {
+    if (jobId.current) await api.cancelLaneComparison(jobId.current).catch(() => undefined);
+  }, []);
+
+  return { phase, job, result, error, submit, cancel };
 }

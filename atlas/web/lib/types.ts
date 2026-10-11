@@ -83,6 +83,9 @@ export interface QueueInfo {
   scorer?: string;
   requires_model?: boolean;
   description?: string;
+  /** True/false when the installed engine says whether it provides this queue; null if unknown. */
+  engine_available?: boolean | null;
+  exact?: boolean;
 }
 
 export interface SplitReport {
@@ -329,4 +332,120 @@ export interface Note {
   id: string;
   title: string;
   markdown: string;
+}
+
+// ---- Quick Compare (POST /api/lane-comparisons) -------------------------------
+// Every figure below is produced by the API from the engine's own output; the UI
+// only formats it. `speedup_vs_vanilla` is vanilla median / lane median.
+
+export type LaneVerdict = "faster" | "slower" | "same" | "reference" | "unavailable";
+export type LaneEffectKind = "vanilla" | "queue" | "ml";
+
+export interface LaneTiming {
+  median_ns: number;
+  mad_ns: number;
+  relative_mad: number | null;
+  min_ns: number | null;
+  max_ns: number | null;
+  samples_ns: number[];
+  repetitions: number | null;
+  warmup: number | null;
+  noisy: boolean | null;
+  pinned: boolean | null;
+  core: number | null;
+  warnings: string[];
+}
+
+export interface LaneCounts {
+  pops: number | null;
+  pushes: number | null;
+  decrease_keys: number | null;
+  comparisons: number | null;
+  settled_nodes: number | null;
+  stale_pops: number | null;
+  edges_examined: number | null;
+  edges_relaxed: number | null;
+  peak_queue_size: number | null;
+}
+
+export interface LaneResult {
+  id: string;
+  label: string | null;
+  algorithm: "dijkstra" | "astar";
+  queue: string;
+  family: string | null;
+  run_index: number;
+  run_id: string;
+  status: "ok" | "error";
+  error: { category: string; message: string } | null;
+  timing: LaneTiming | null;
+  counts?: LaneCounts;
+  distance?: number | null;
+  reachable?: boolean;
+  path_hops?: number | null;
+  heuristic_used?: string | null;
+  lpq?: Record<string, unknown> | null;
+  matches_reference: boolean | null;
+  effect: LaneEffectKind;
+  vanilla_lane_id: string | null;
+  speedup_vs_vanilla: number | null;
+  verdict: LaneVerdict;
+  within_noise: boolean | null;
+  rank: number | null;
+  vs_fastest: number | null;
+}
+
+export interface LaneEffect {
+  kind: "algorithm" | "queue" | "ml" | "ml_vs_best_classical";
+  lane_id: string;
+  versus_lane_id: string;
+  speedup: number | null;
+  verdict: LaneVerdict;
+}
+
+export interface LaneComparisonResult {
+  schema_version: number;
+  dataset_id: string;
+  source_node: number;
+  target_node: number;
+  measurement: {
+    repetitions: number;
+    warmup: number;
+    tracing: string;
+    execution: string;
+    run_order: string[];
+    order_seed: number;
+    all_pinned: boolean;
+    cores: number[];
+    clock: string;
+    machine: { os: string; arch: string };
+    elapsed_s: number;
+    contended_lanes: string[];
+  };
+  heuristic: { requested: string; used_by_astar_lanes: string | null; shared: boolean };
+  lanes: LaneResult[];
+  path: number[];
+  fastest: {
+    lane_id: string;
+    median_ns: number;
+    tied_with: string[];
+    clear_win: boolean;
+  } | null;
+  correctness: {
+    checked_lanes: number;
+    failed_lanes: string[];
+    references_agree: boolean;
+    all_lanes_same_distance: boolean | null;
+    all_match_reference: boolean | null;
+    mismatching_lanes: string[];
+    reference_distance: number | null;
+    reachable: boolean | null;
+  };
+  effects: LaneEffect[];
+  noise_rule: string;
+  vanilla_queue: string;
+}
+
+export interface LaneComparisonJob extends Job {
+  result: LaneComparisonResult | null;
 }

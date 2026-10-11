@@ -127,8 +127,9 @@ export default function BenchmarksPage() {
             {queues.map((q) => (
               <label key={q.id} className="check">
                 <input type="checkbox" checked={selected.includes(q.id)} onChange={() => toggle(q.id)}
-                  disabled={q.requires_model && dsModels.length === 0} />
+                  disabled={(q.requires_model && dsModels.length === 0) || q.engine_available === false} />
                 {q.name}{q.requires_model && dsModels.length === 0 ? <span className="dim small"> (no model for this dataset)</span> : null}
+                {q.engine_available === false ? <span className="dim small"> (not in this engine build)</span> : null}
               </label>
             ))}
             {selected.includes("lpq_model") ? (

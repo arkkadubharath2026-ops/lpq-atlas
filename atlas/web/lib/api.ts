@@ -4,6 +4,7 @@ import type {
   Dataset,
   EngineConfig,
   Job,
+  LaneComparisonJob,
   ModelInfo,
   Note,
   QueueInfo,
@@ -75,6 +76,17 @@ export interface RunBody extends EngineConfig {
   max_events?: number;
   repetitions: number;
   warmup: number;
+}
+
+export interface LaneComparisonBody {
+  dataset_id: string;
+  source_node: number;
+  target_node: number;
+  lanes: { id: string; algorithm: "dijkstra" | "astar"; queue: string; label?: string }[];
+  heuristic?: "auto" | "zero" | "haversine" | "euclidean";
+  repetitions?: number;
+  warmup?: number;
+  order_seed?: number;
 }
 
 export const api = {
@@ -164,6 +176,10 @@ export const api = {
   createComparison: (body: unknown) => post<Job>("/api/comparisons", body),
   comparison: (id: string) => request<Job>(`/api/comparisons/${id}`),
   comparisons: () => request<Job[]>("/api/comparisons"),
+  createLaneComparison: (body: LaneComparisonBody) =>
+    post<Job>("/api/lane-comparisons", body),
+  laneComparison: (id: string) => request<LaneComparisonJob>(`/api/lane-comparisons/${id}`),
+  cancelLaneComparison: (id: string) => post<Job>(`/api/lane-comparisons/${id}/cancel`, {}),
   createBenchmark: (body: unknown) => post<Job>("/api/benchmarks", body),
   benchmarks: () => request<Job[]>("/api/benchmarks"),
   benchmark: (id: string) => request<Job>(`/api/benchmarks/${id}`),
