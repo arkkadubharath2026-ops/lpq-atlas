@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <bit>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -47,6 +48,7 @@
 #include "lpq/lpq/extraction_observer.hpp"
 #include "lpq/lpq/learned_priority_queue.hpp"
 #include "lpq/lpq/pooled_bucket_queue.hpp"
+#include "lpq/lpq/queue_autotune.hpp"
 #include "lpq/lpq/queue_policy.hpp"
 #include "lpq/pq/priority_queue.hpp"
 #include "lpq_test/differential.hpp"
@@ -1979,6 +1981,100 @@ TEST(QueuePolicy, QuantilesAreOrderedAndWithinTheWeightRange) {
     EXPECT_LE(p.p50, p.p90);
     EXPECT_LE(p.p90, p.p99);
     EXPECT_LE(p.p99, p.max_weight);
+}
+
+
+// =============================================================================
+// 6. Autotuner: decision rule and cache
+// =============================================================================
+
+TEST(Autotune, ReferenceIsAlwaysRadixAndEveryMeasurementIsKept) {
+    Rng rng(5600001);
+    const Graph g = weighted_grid(rng, 40, 40, 1, 300, false);
+    const GraphMetadata meta = compute_metadata(g);
+    ProfileSource src;
+    const WeightProfile p = load_or_compute_profile("", 0, g, meta, src);
+    AutotuneConfig cfg;
+    cfg.sample_queries = 4;
+    cfg.repetitions    = 1;
+    const AutotuneResult r = QueueAutotuner<Weight>(cfg).tune(g, p, 300);
+    ASSERT_EQ(r.measured.size(), cfg.widths.size() + 1);  // radix + every feasible width
+    EXPECT_EQ(r.measured.front().width, 0U);               // the reference
+    EXPECT_DOUBLE_EQ(r.measured.front().geomean_ratio, 1.0);
+    EXPECT_GT(r.calibration_ns, 0U);
+    EXPECT_FALSE(r.reason.empty());
+    // Whatever it chose must be a valid exact queue geometry.
+    if (r.choice.kind == QueueKind::kPooledBucket) {
+        EXPECT_TRUE(std::has_single_bit(r.choice.ring));
+        EXPECT_GE(r.choice.width, 1U);
+    }
+}
+
+TEST(Autotune, ADemandingThresholdKeepsRadix) {
+    Rng rng(5600002);
+    const Graph g = weighted_grid(rng, 30, 30, 1, 200, false);
+    const GraphMetadata meta = compute_metadata(g);
+    ProfileSource src;
+    const WeightProfile p = load_or_compute_profile("", 0, g, meta, src);
+    AutotuneConfig cfg;
+    cfg.sample_queries = 3;
+    cfg.repetitions    = 1;
+    cfg.required_ratio = 0.0;  // nothing can beat radix by 100%
+    const AutotuneResult r = QueueAutotuner<Weight>(cfg).tune(g, p, 200);
+    EXPECT_EQ(r.choice.kind, QueueKind::kRadixHeap);
+}
+
+TEST(Autotune, InfeasibleGeometriesFallBackToRadixWithAReason) {
+    Rng rng(5600003);
+    const Graph g = weighted_grid(rng, 10, 10, 1, 9, false);
+    const GraphMetadata meta = compute_metadata(g);
+    ProfileSource src;
+    const WeightProfile p = load_or_compute_profile("", 0, g, meta, src);
+    AutotuneConfig cfg;
+    cfg.widths = {1};
+    const AutotuneResult r = QueueAutotuner<Weight>(cfg).tune(g, p, 1ULL << 40);  // ring far beyond the cap
+    EXPECT_EQ(r.choice.kind, QueueKind::kRadixHeap);
+    EXPECT_NE(r.reason.find("no feasible"), std::string::npos);
+}
+
+TEST(Autotune, CacheRoundTripsAndIsRefusedForAnyMismatch) {
+    AutotuneConfig cfg;
+    AutotuneResult r;
+    r.choice.kind            = QueueKind::kPooledBucket;
+    r.choice.width           = 2;
+    r.choice.ring            = 32768;
+    r.choice.predicted_ratio = 0.83;
+    r.reason                 = "measured 0.83x";
+    r.calibration_ns         = 12345;
+    r.measured               = {{0, 1.0, 0.0}, {1, 0.86, 0.91}, {2, 0.83, 1.0}};
+    const auto path = (std::filesystem::temp_directory_path() / "lpq_autotune_rt.lpqtune").string();
+    std::remove(path.c_str());
+    autotune_cache_store(path, r, 111, 222, "dijkstra", cfg);
+
+    AutotuneResult got;
+    ASSERT_TRUE(autotune_cache_load(path, 111, 222, "dijkstra", cfg, got));
+    EXPECT_TRUE(got.from_cache);
+    EXPECT_EQ(got.choice.kind, QueueKind::kPooledBucket);
+    EXPECT_EQ(got.choice.width, 2U);
+    EXPECT_EQ(got.choice.ring, 32768U);
+    EXPECT_EQ(got.measured.size(), 3U);
+    EXPECT_NEAR(got.measured[2].geomean_ratio, 0.83, 1e-12);
+
+    AutotuneResult none;
+    EXPECT_FALSE(autotune_cache_load(path, 999, 222, "dijkstra", cfg, none)) << "other graph";
+    EXPECT_FALSE(autotune_cache_load(path, 111, 333, "dijkstra", cfg, none)) << "other machine";
+    EXPECT_FALSE(autotune_cache_load(path, 111, 222, "astar", cfg, none)) << "other algorithm";
+    AutotuneConfig stricter = cfg;
+    stricter.required_ratio = 0.5;
+    EXPECT_FALSE(autotune_cache_load(path, 111, 222, "dijkstra", stricter, none)) << "other settings";
+    EXPECT_FALSE(autotune_cache_load("/nonexistent/x.lpqtune", 111, 222, "dijkstra", cfg, none));
+    std::remove(path.c_str());
+}
+
+TEST(Autotune, MachineKeyDiffersAcrossCpus) {
+    EXPECT_NE(machine_key("Intel(R) Xeon(R) Processor @ 2.80GHz", 4),
+              machine_key("AMD Ryzen 7 5800X", 16));
+    EXPECT_EQ(machine_key("x", 4), machine_key("x", 4));
 }
 
 }  // namespace

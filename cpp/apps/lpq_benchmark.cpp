@@ -60,6 +60,7 @@
 #include "lpq/lpq/classical_bucket_queue.hpp"
 #include "lpq/lpq/learned_priority_queue.hpp"
 #include "lpq/lpq/pooled_bucket_queue.hpp"
+#include "lpq/lpq/queue_autotune.hpp"
 #include "lpq/lpq/queue_policy.hpp"
 #include "lpq/lpq/queue_config.hpp"
 #include "lpq/models/logistic_predictor.hpp"
@@ -1312,6 +1313,51 @@ int main(int argc, char** argv) {
         const QueueSelectionPolicy policy =
             o.policy.empty() ? QueueSelectionPolicy{} : QueueSelectionPolicy::load(o.policy);
 
+        // lpq_optimized resolves ONCE per graph and algorithm, before any query is
+        // measured: an explicit policy wins; otherwise Dijkstra is autotuned on
+        // this graph and machine (cached beside the graph); A* uses the radix heap.
+        struct ResolvedOptimized {
+            QueueChoice   choice;
+            std::string   method;
+            std::uint64_t calibration_ns = 0;
+        };
+        std::map<std::string, ResolvedOptimized> resolved_optimized;
+        const auto resolve_optimized = [&](const std::string& algorithm) -> const ResolvedOptimized& {
+            const auto found = resolved_optimized.find(algorithm);
+            if (found != resolved_optimized.end()) {
+                return found->second;
+            }
+            ResolvedOptimized r;
+            const std::uint64_t step = static_cast<std::uint64_t>(
+                algorithm == "astar" ? 2.0 * profile.max_weight : profile.max_weight);
+            if (!o.policy.empty()) {
+                r.choice = policy.choose(profile, step);
+                r.method = "policy";
+            } else if (algorithm == "dijkstra" && !o.dataset.empty()) {
+                const AutotuneConfig tcfg;
+                const std::uint64_t  machine = machine_key(hw.cpu_model, hw.logical_cores);
+                const std::string    cache =
+                    std::filesystem::path(o.dataset).replace_extension(".lpqtune").string();
+                AutotuneResult tuned;
+                if (autotune_cache_load(cache, graph_checksum, machine, algorithm, tcfg, tuned)) {
+                    r.method = "autotune_cached";
+                } else {
+                    tuned = QueueAutotuner<W>(tcfg).tune(g, profile, step);
+                    autotune_cache_store(cache, tuned, graph_checksum, machine, algorithm, tcfg);
+                    r.method         = "autotune";
+                    r.calibration_ns = tuned.calibration_ns;
+                }
+                r.choice        = tuned.choice;
+                r.choice.reason = tuned.reason;
+            } else {
+                r.choice.reason = algorithm == "astar"
+                    ? "A* resolves to the radix heap (pooled queues did not beat it under A*)"
+                    : "no dataset file to cache a calibration against: radix heap";
+                r.method = "default";
+            }
+            return resolved_optimized.emplace(algorithm, std::move(r)).first->second;
+        };
+
         // --- the configurations to measure ------------------------------------
         //
         // A matrix row becomes one spec with the command-line geometry. With
@@ -1383,7 +1429,9 @@ int main(int argc, char** argv) {
                                                 "that says a model was involved");
             }
 
-            QueueChoice chosen;
+            QueueChoice   chosen;
+            std::string   resolved_method;
+            std::uint64_t resolved_calibration_ns = 0;
             ResultRecord rec;
             if (!queue_supports_mode) {
                 rec.pq                 = name;
@@ -1430,9 +1478,10 @@ int main(int argc, char** argv) {
                 // row keeps the name lpq_optimized, and the record says what it
                 // resolved to, so a result obtained by choosing the radix heap
                 // can never be read as a result of the learned queue.
-                const std::uint64_t step = static_cast<std::uint64_t>(
-                    o.algorithm == "astar" ? 2.0 * profile.max_weight : profile.max_weight);
-                chosen = policy.choose(profile, step);
+                const ResolvedOptimized& resolved = resolve_optimized(o.algorithm);
+                chosen          = resolved.choice;
+                resolved_method = resolved.method;
+                resolved_calibration_ns = resolved.calibration_ns;
                 if (chosen.kind == QueueKind::kRadixHeap) {
                     if constexpr (radix_heap_supports<W>()) {
                         rec = measure_one<RadixHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
@@ -1523,6 +1572,9 @@ int main(int argc, char** argv) {
                 qc.profile_ns        = profile.compute_ns;
                 qc.policy_source     = policy.source();
                 qc.profile_source    = to_string(profile_source);
+                qc.resolution_method = resolved_method;
+                qc.calibration_ns    = resolved_calibration_ns;
+                qc.policy_source     = resolved_method == "policy" ? policy.source() : "autotune";
             }
             rec.queue_config = qc;
             return rec;

@@ -151,6 +151,8 @@ struct ResultRecord {
         std::uint64_t profile_ns      = 0;       ///< weight-profile computation, once per graph
         std::string   policy_source;
         std::string   profile_source;            ///< computed | computed_and_cached | cached
+        std::string   resolution_method;         ///< autotune | autotune_cached | policy | default
+        std::uint64_t calibration_ns = 0;        ///< autotune measurement cost (0 when cached)
     };
     std::optional<QueueConfig> queue_config;
 
@@ -204,6 +206,8 @@ inline void write_record(JsonWriter& w, const ResultRecord& r) {
             w.key_value("profile_ns", qc.profile_ns);
             w.key_value("policy_source", qc.policy_source);
             w.key_value("profile_source", qc.profile_source);
+            w.key_value("resolution_method", qc.resolution_method);
+            w.key_value("calibration_ns", qc.calibration_ns);
         }
         w.end_object();
     }

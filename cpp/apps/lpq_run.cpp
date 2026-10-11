@@ -49,6 +49,7 @@
 #include "lpq/graph/graph_metadata.hpp"
 #include "lpq/lpq/learned_priority_queue.hpp"
 #include "lpq/lpq/pooled_bucket_queue.hpp"
+#include "lpq/lpq/queue_autotune.hpp"
 #include "lpq/lpq/queue_policy.hpp"
 #include "lpq/lpq/queue_config.hpp"
 #include "lpq/metrics/benchmark_harness.hpp"
@@ -101,6 +102,7 @@ struct Options {
     std::string   model;
     bool          adaptive_learning = false;
     std::string   policy;  ///< queue policy file for --pq lpq_optimized (empty: none)
+    bool          autotune = true;  ///< lpq_optimized: measure candidates on this graph and machine
     std::string   mode    = "exact";
     double        epsilon = 0.0;
     std::uint64_t source  = 0;
@@ -136,7 +138,9 @@ void print_usage() {
   --mode <name>           exact (default) | approximate (learned queues only)
   --epsilon <e>           slack for approximate mode, 0 < e <= 1
   --lpq-window <lo:hi>    learned-queue candidate window (default 2:32)
-  --policy <path>         queue policy for --pq lpq_optimized (default: none = radix)
+  --policy <path>         queue policy for --pq lpq_optimized (overrides autotuning)
+  --autotune <on|off>     lpq_optimized: calibrate on this graph and machine (default on;
+                          Dijkstra only; A* resolves to the radix heap)
   --lpq-bucket-width <n>  substrate bucket width (default derived from weights)
   --trace-level <l>       none (default) | summary | visual | full
   --max-events <n>        trace event cap (default 250000)
@@ -245,6 +249,10 @@ void print_usage() {
                                                     "--cpu-core"));
         } else if (a == "--policy") {
             o.policy = next_arg(argc, argv, i, "--policy");
+        } else if (a == "--autotune") {
+            const std::string v = next_arg(argc, argv, i, "--autotune");
+            if (v != "on" && v != "off") invalid("--autotune expects on or off");
+            o.autotune = (v == "on");
         } else {
             invalid("unknown argument: " + a);
         }
@@ -331,6 +339,9 @@ struct Context {
     ProfileSource        profile_source = ProfileSource::kComputed;
     std::string          policy_source;
     std::uint64_t        decide_ns = 0;  ///< policy evaluation only (profile is separate)
+    std::string          resolution_method;  ///< autotune | autotune_cached | policy | default
+    std::uint64_t        calibration_ns = 0; ///< autotune measurement cost (0 when cached)
+    std::vector<AutotuneEntry> tuned;        ///< every candidate the autotuner measured
 };
 
 template <typename Queue, typename Obs>
@@ -732,6 +743,17 @@ void write_result(std::ostream& os, const Context& c, const Execution& ex,
         w.key_value("reason", c.choice.reason);
         w.key_value("predicted_ratio_vs_radix", c.choice.predicted_ratio);
         w.key_value("policy_source", c.policy_source);
+        w.key_value("resolution_method", c.resolution_method);
+        w.key_value("calibration_ns", c.calibration_ns);
+        w.begin_array("tuned_candidates");
+        for (const auto& e : c.tuned) {
+            w.begin_object();
+            w.key_value("bucket_width", e.width);  // 0 = the radix heap, the reference
+            w.key_value("geomean_ratio_vs_radix", e.geomean_ratio);
+            w.key_value("win_share", e.win_share);
+            w.end_object();
+        }
+        w.end_array();
         w.key_value("profile_source", std::string(to_string(c.profile_source)));
         w.key_value("profile_ns", c.profile.compute_ns);
         w.key_value("decision_ns", c.decide_ns);
@@ -997,19 +1019,47 @@ int main(int argc, char** argv) {
                 std::filesystem::path(o.dataset).replace_extension(".lpqprofile").string();
             c.profile = load_or_compute_profile(cache, loaded.checksum, g, c.meta,
                                                 c.profile_source);
-            QueueSelectionPolicy policy;
+            const std::uint64_t step = static_cast<std::uint64_t>(
+                o.algorithm == "astar" ? 2.0 * c.profile.max_weight : c.profile.max_weight);
+            t0 = std::chrono::steady_clock::now();
             if (!o.policy.empty()) {
+                // An explicit policy file wins over autotuning.
+                QueueSelectionPolicy policy;
                 try {
                     policy = QueueSelectionPolicy::load(o.policy);
                 } catch (const std::exception& e) {
                     throw CategorisedError("model", std::string("queue policy rejected: ") + e.what());
                 }
+                c.policy_source     = policy.source();
+                c.choice            = policy.choose(c.profile, step);
+                c.resolution_method = "policy";
+            } else if (o.autotune && o.algorithm == "dijkstra") {
+                const auto     hw0     = collect_hardware_info();
+                const AutotuneConfig tcfg;
+                const std::uint64_t  machine = machine_key(hw0.cpu_model, hw0.logical_cores);
+                const std::string    tune_cache =
+                    std::filesystem::path(o.dataset).replace_extension(".lpqtune").string();
+                AutotuneResult tuned;
+                if (autotune_cache_load(tune_cache, loaded.checksum, machine, o.algorithm, tcfg,
+                                        tuned)) {
+                    c.resolution_method = "autotune_cached";
+                } else {
+                    tuned = QueueAutotuner<W>(tcfg).tune(g, c.profile, step);
+                    autotune_cache_store(tune_cache, tuned, loaded.checksum, machine, o.algorithm, tcfg);
+                    c.resolution_method = "autotune";
+                    c.calibration_ns    = tuned.calibration_ns;
+                }
+                c.choice        = tuned.choice;
+                c.choice.reason = tuned.reason;
+                c.tuned         = tuned.measured;
+                c.policy_source = "autotune";
+            } else {
+                c.choice.reason = o.algorithm == "astar"
+                    ? "A* resolves to the radix heap: pooled bucket queues were measured on three "
+                      "road graphs and did not beat it under A*"
+                    : "autotuning is off: radix heap";
+                c.resolution_method = "default";
             }
-            c.policy_source = policy.source();
-            t0 = std::chrono::steady_clock::now();
-            const std::uint64_t step = static_cast<std::uint64_t>(
-                o.algorithm == "astar" ? 2.0 * c.profile.max_weight : c.profile.max_weight);
-            c.choice    = policy.choose(c.profile, step);
             c.decide_ns = ns_since(t0);
         }
 
