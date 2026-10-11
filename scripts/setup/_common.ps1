@@ -104,7 +104,10 @@ function Find-Python {
     foreach ($c in $candidates) {
         if (-not (Test-Command $c[0])) { continue }
         $rest = @($c | Select-Object -Skip 1)
-        $r = Get-NativeOutput $c[0] ($rest + @('-c', 'import sys; print("%d.%d" % sys.version_info[:2])'))
+        # No quotes or % signs in the program text: PowerShell's native-argument
+        # quoting can mangle them, and a mangled probe reads as "no Python".
+        $r = Get-NativeOutput $c[0] ($rest + @('-c', 'import sys; print(sys.version_info.major, sys.version_info.minor)'))
+        if ($r.Code -eq 0) { $r = @{ Code = 0; Output = (($r.Output -split '\s+') -join '.') } }
         if ($r.Code -ne 0 -or $r.Output -notmatch '^3\.\d+$') { continue }   # e.g. the Microsoft Store stub
         $minor = [int]($r.Output.Split('.')[1])
         $label = "$($c -join ' ')=$($r.Output)"
