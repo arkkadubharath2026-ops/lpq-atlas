@@ -15,11 +15,14 @@ import {
   countsRows,
   effectSentence,
   fmtMedian,
+  fmtRoundMedians,
   fmtSpread,
   headlineSentences,
   labelResolver,
   measurementNote,
   rankedLanes,
+  resolutionText,
+  setupText,
   slowestMedian,
   vsVanillaPhrase,
 } from "@/lib/compare";
@@ -113,6 +116,16 @@ export function LaneBoard({ result, dataset }: { result: LaneComparisonResult; d
                       <div className="bar-fill" style={{ width: `${barPercent(l.timing.median_ns, slowest)}%`, background: def?.color ?? "var(--classical)" }} />
                     </div>
                     <div className={`lane-note ${phrase.tone}`} data-testid="lane-vs-vanilla">{phrase.text}</div>
+                    {l.timing.round_medians_ns && l.timing.round_medians_ns.length > 1 ? (
+                      <div className="small dim" data-testid="lane-rounds">Per-round medians: {fmtRoundMedians(l)}</div>
+                    ) : null}
+                    {resolutionText(l) ? (
+                      <div className="small" style={{ color: l.resolved_to_radix ? "var(--warn)" : "var(--learned)" }} data-testid="lane-resolution">
+                        {resolutionText(l)}
+                        {l.resolution_reason ? <Tip text={l.resolution_reason} /> : null}
+                      </div>
+                    ) : null}
+                    {setupText(l) ? <div className="small dim" data-testid="lane-setup">{setupText(l)}</div> : null}
                     {l.timing.warnings.length ? (
                       <div className="small" style={{ color: "var(--warn)" }}>{l.timing.warnings.join("; ")}</div>
                     ) : null}
@@ -188,7 +201,7 @@ export function LaneBoard({ result, dataset }: { result: LaneComparisonResult; d
         <summary>Advanced: spread, queue internals and run details</summary>
         <div className="adv-body stack">
           <p className="small muted" style={{ margin: 0 }}>
-            Run order (shuffled for this request, seed {m.order_seed}): {m.run_order.map(labelOf).join(" → ")}. {m.execution}.
+            Order seed {m.order_seed} (round r is shuffled with seed + r). {m.round_orders.map((o, i) => `Round ${i + 1}: ${o.map(labelOf).join(" → ")}`).join(". ")}. {m.execution}.
             {m.all_pinned ? ` Pinned to core ${m.cores.join(", ")}.` : " At least one lane was not pinned to a core, so its timing may carry scheduler noise."}
             {result.heuristic.used_by_astar_lanes ? ` Both A* lanes used the ${result.heuristic.used_by_astar_lanes} distance estimate.` : ""}
           </p>
@@ -197,7 +210,7 @@ export function LaneBoard({ result, dataset }: { result: LaneComparisonResult; d
               <thead>
                 <tr>
                   <th>Method</th><th className="num">Median</th><th className="num">± MAD</th><th className="num">Relative spread</th>
-                  <th className="num">Min</th><th className="num">Max</th><th className="num">Pushes</th><th className="num">Decrease-keys</th>
+                  <th className="num">Within-run MAD</th><th className="num">Between-round MAD</th><th className="num">Min</th><th className="num">Max</th><th className="num">Pushes</th><th className="num">Decrease-keys</th>
                   <th className="num">Stale pops</th><th className="num">Peak queue</th><th className="num">Edges examined</th>
                 </tr>
               </thead>
@@ -208,6 +221,8 @@ export function LaneBoard({ result, dataset }: { result: LaneComparisonResult; d
                     <td className="num">{fmtNs(l.timing?.median_ns)}</td>
                     <td className="num">{fmtNs(l.timing?.mad_ns)}</td>
                     <td className="num">{fmtPct(l.timing?.relative_mad ?? null)}</td>
+                    <td className="num">{fmtNs(l.timing?.mad_within_ns)}</td>
+                    <td className="num">{fmtNs(l.timing?.mad_between_rounds_ns)}</td>
                     <td className="num">{fmtNs(l.timing?.min_ns)}</td>
                     <td className="num">{fmtNs(l.timing?.max_ns)}</td>
                     <td className="num">{fmtInt(l.counts?.pushes)}</td>

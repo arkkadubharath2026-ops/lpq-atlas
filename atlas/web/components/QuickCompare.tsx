@@ -16,9 +16,12 @@ import { useDatasetGeometry, useLaneComparison } from "@/lib/hooks";
 import {
   ALGORITHM_TIP,
   DEFAULT_REPETITIONS,
+  DEFAULT_ROUNDS,
   DEFAULT_WARMUP,
   LANES,
+  MAX_ROUNDS,
   MIN_REPETITIONS,
+  MIN_ROUNDS,
   MIN_WARMUP,
   defaultLaneIds,
   lanesForRequest,
@@ -70,6 +73,7 @@ function QuickCompareInner() {
   const [pickedTarget, setTarget] = useState<Picked | null>(() => nodeParam(params.get("target")));
   const [snapError, setSnapError] = useState<unknown>(null);
   const [lanesOn, setLanesOn] = useState<Set<string>>(() => new Set(defaultLaneIds()));
+  const [rounds, setRounds] = useState(DEFAULT_ROUNDS);
   const [reps, setReps] = useState(DEFAULT_REPETITIONS);
   const [warmup, setWarmup] = useState(DEFAULT_WARMUP);
   const [heuristic, setHeuristic] = useState<"auto" | "zero" | "haversine" | "euclidean">("auto");
@@ -165,6 +169,7 @@ function QuickCompareInner() {
       target_node: target.node,
       lanes: lanesForRequest(lanesOn),
       heuristic,
+      rounds,
       repetitions: reps,
       warmup,
       ...(seed !== undefined && Number.isInteger(seed) && seed >= 0 ? { order_seed: seed } : {}),
@@ -247,7 +252,7 @@ function QuickCompareInner() {
             <section className="panel qc-step" aria-labelledby="s3">
               <h2 id="s3"><span className="n">3</span>Compare</h2>
               <p className="small muted" style={{ margin: 0 }}>
-                Always compared: Vanilla and Optimized versions of both algorithms.
+                Always compared: Vanilla and Optimized versions of both algorithms, plus the radix heap, the strongest non-ML queue.
                 <Tip text={ALGORITHM_TIP.dijkstra + " " + ALGORITHM_TIP.astar} />
               </p>
               <div className="stack" style={{ gap: 4 }}>
@@ -283,9 +288,14 @@ function QuickCompareInner() {
             <details className="advanced" data-testid="setup-advanced">
               <summary>Advanced settings</summary>
               <div className="adv-body stack">
+                <label className="field" htmlFor="qc-rounds">
+                  Measurement rounds (each runs every method once, in a new random order)
+                  <input id="qc-rounds" type="number" min={MIN_ROUNDS} max={MAX_ROUNDS} value={rounds} disabled={busy}
+                    onChange={(e) => setRounds(Math.max(MIN_ROUNDS, Math.min(MAX_ROUNDS, Number(e.target.value) || DEFAULT_ROUNDS)))} data-testid="rounds" />
+                </label>
                 <div className="grid cols-2">
                   <label className="field" htmlFor="qc-reps">
-                    Timed repetitions per method
+                    Timed repetitions per round
                     <input id="qc-reps" type="number" min={MIN_REPETITIONS} max={51} value={reps} disabled={busy}
                       onChange={(e) => setReps(Math.max(MIN_REPETITIONS, Math.min(51, Number(e.target.value) || DEFAULT_REPETITIONS)))} data-testid="repetitions" />
                   </label>
@@ -296,7 +306,7 @@ function QuickCompareInner() {
                   </label>
                 </div>
                 <p className="small muted" style={{ margin: 0 }}>
-                  Every method gets the same counts. More repetitions give a steadier median but take longer.
+                  Every method gets the same counts. More rounds expose drift between runs and make a win more trustworthy, but take longer. A win is only reported if it holds in most rounds.
                 </p>
                 <label className="field" htmlFor="qc-h">
                   Distance estimate shared by both A* lanes

@@ -12,8 +12,8 @@ describe("lane config", () => {
       expect(LANES.some((v) => v.kind === "vanilla" && v.algorithm === l.algorithm && v.queue === "binary_heap")).toBe(true);
     }
   });
-  it("defaults to the four required lanes and keeps baselines optional", () => {
-    expect(defaultLaneIds().sort()).toEqual(["optimized_astar", "optimized_dijkstra", "vanilla_astar", "vanilla_dijkstra"]);
+  it("defaults to the four core lanes plus the radix heap, the strongest non-ML baseline", () => {
+    expect(defaultLaneIds().sort()).toEqual(["optimized_astar", "optimized_dijkstra", "radix_dijkstra", "vanilla_astar", "vanilla_dijkstra"]);
     expect(LANES.filter((l) => l.kind === "baseline").every((l) => l.optional)).toBe(true);
   });
   it("builds the request from ticked ids in config order, with labels", () => {

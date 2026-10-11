@@ -132,7 +132,9 @@ void print_usage() {
   --algorithm <name>      dijkstra (default) | astar
   --heuristic <name>      auto (default) | zero | euclidean | manhattan | haversine
   --pq <name>             binary_heap (default) | four_ary_heap | pairing_heap |
-                          fibonacci_heap | radix_heap | lpq | lpq_model | lpq_adaptive
+                          fibonacci_heap | radix_heap | lpq | lpq_model | lpq_adaptive |
+                          lpq_optimized (exact; measures candidate queues on this
+                          graph and machine, Dijkstra only, A* uses radix)
   --model <path>          trained model; required by, and only valid with, lpq_model
   --adaptive-learning     with lpq_adaptive: also update the model online
   --mode <name>           exact (default) | approximate (learned queues only)

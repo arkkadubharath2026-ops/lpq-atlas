@@ -645,3 +645,12 @@ If LPQ wins only on certain graph families, identify those conditions.
 If the original hypothesis is wrong, change the hypothesis rather than forcing the data to support it.
 
 That is how this project can become a credible research contribution rather than just a complicated implementation.
+
+## v2 results (measured, with limits)
+
+What the v2 optimisation work did and did not achieve, with every number traceable to
+raw results and its confidence interval: [`docs/experiments/v2-results.md`](docs/experiments/v2-results.md).
+In short: `lpq_optimized` (an exact, per-graph autotuned bucket queue) is faster than the
+radix heap on DIMACS New York Dijkstra and equal to it elsewhere; a trained scorer and a
+learned selection policy did not help. Prior art and novelty limits:
+[`docs/research/literature-and-novelty.md`](docs/research/literature-and-novelty.md).

@@ -90,7 +90,7 @@ export function vsVanillaPhrase(
     };
   const tag = roundsTag(lane, lane.verdict);
   return {
-    text: `${verdictClause(lane.verdict, lane.speedup_vs_vanilla)} than ${v}${tag ? ` (ahead in ${tag})` : ""}`,
+    text: `${verdictClause(lane.verdict, lane.speedup_vs_vanilla)} than ${v}${tag ? ` (${lane.verdict === "slower" ? "behind" : "ahead"} in ${tag})` : ""}`,
     tone: verdictTone(lane.verdict),
   };
 }
@@ -105,7 +105,7 @@ export function resolutionText(lane: LaneResult): string | null {
         ? "by default"
         : "by measuring candidate queues on this graph and this machine";
   if (lane.resolved_to_radix)
-    return `Optimized chose the radix heap here (no gain measured), so its time equals radix. ${how.replace(/^./, (c) => c.toUpperCase())}.`;
+    return `Optimized chose the radix heap here (no gain measured), so its time equals radix. (Chosen ${how}.)`;
   return `Optimized chose ${lane.resolved_queue} ${how}.`;
 }
 
