@@ -1875,6 +1875,26 @@ TEST(QueuePolicy, ChoosesTheCandidatePredictedToBeatRadixByTheMargin) {
     std::remove(path.c_str());
 }
 
+TEST(QueuePolicy, ParsesExponentNotationAsPythonWritesIt) {
+    const auto path = write_temp(
+        "lpq_policy_exp.lpqpolicy",
+        std::string("lpqpolicy 1\nmargin 5e-02\n") + kFeatureLine +
+            "candidate pooled w=1 intercept -2.5e-01 coef 1e-05 -3.0E-2 0 0 0 0 1.5e+00\n");
+    const auto pol = QueueSelectionPolicy::load(path);
+    EXPECT_NEAR(pol.margin(), 0.05, 1e-15);
+    const WeightProfile p = sample_profile();
+    const auto x = policy_features(p);
+    const double z = -0.25 + 1e-05 * x[0] + -0.03 * x[1] + 1.5 * x[6];
+    const QueueChoice c = pol.choose(p, 36946);
+    if (std::exp(z) < 0.95) {
+        ASSERT_EQ(c.kind, QueueKind::kPooledBucket);
+        EXPECT_NEAR(c.predicted_ratio, std::exp(z), 1e-12);
+    } else {
+        EXPECT_EQ(c.kind, QueueKind::kRadixHeap);
+    }
+    std::remove(path.c_str());
+}
+
 TEST(QueuePolicy, KeepsRadixWhenNoCandidateClearsTheMargin) {
     const auto path = write_temp(
         "lpq_policy_margin.lpqpolicy",

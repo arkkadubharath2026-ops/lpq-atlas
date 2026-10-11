@@ -777,7 +777,9 @@ ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query&
     ResultRecord rec;
     rec.experiment_id = o.experiment_id;
     rec.timestamp     = iso8601_now();
-    rec.dataset       = g.dataset_id();
+    // meta.dataset_id falls back to the graph's file stem when the graph itself
+    // carries no id; g.dataset_id() alone left every record's dataset empty.
+    rec.dataset       = meta.dataset_id.empty() ? g.dataset_id() : meta.dataset_id;
     rec.algorithm     = o.algorithm == "astar" ? ("astar:" + o.heuristic) : o.algorithm;
     rec.pq            = pq_name;
     rec.mode          = o.mode;
