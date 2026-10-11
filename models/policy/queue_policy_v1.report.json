@@ -1,0 +1,4152 @@
+{
+  "format": "lpq-queue-policy-report/1",
+  "generated_at": "2026-10-11T13:43:48+00:00",
+  "policy_file": {
+    "path": "models/policy/queue_policy_v1.lpqpolicy",
+    "sha256": "260bc33c7ebd36db21c4bb0302459c9509d724109995ec8bee797c34a20e6e7f",
+    "margin": 0.1,
+    "candidates": [
+      {
+        "width": 1,
+        "intercept": 0.036982103012661145,
+        "coef": {
+          "log2_max_w": -1.4616788393241177e-05,
+          "log2_mean_w": -0.00014348881864751723,
+          "p50_over_max": -4.971766690676851e-06,
+          "p99_over_max": 3.8213214810136206e-05,
+          "cv_w": 0.00013433854616320783,
+          "log2_nodes": 7.86989558538675e-07,
+          "mean_degree": 8.87710089664566e-06
+        }
+      },
+      {
+        "width": 2,
+        "intercept": 1.0724665439233623,
+        "coef": {
+          "log2_max_w": -0.0013582312978851448,
+          "log2_mean_w": -0.00424448673392126,
+          "p50_over_max": 0.009247793996257905,
+          "p99_over_max": 0.004390499788601632,
+          "cv_w": 0.001611758457330278,
+          "log2_nodes": 0.0004942677885487027,
+          "mean_degree": 0.00010948839640568781
+        }
+      },
+      {
+        "width": 4,
+        "intercept": 1.305031402090524,
+        "coef": {
+          "log2_max_w": -0.0016691103819389851,
+          "log2_mean_w": -0.005017208941138634,
+          "p50_over_max": 0.010698055566415099,
+          "p99_over_max": 0.004531956496954447,
+          "cv_w": 0.0018488937957281202,
+          "log2_nodes": -0.00010058807407830174,
+          "mean_degree": 0.000251675325670793
+        }
+      },
+      {
+        "width": 8,
+        "intercept": 1.5497102970165215,
+        "coef": {
+          "log2_max_w": -0.0018911507494410813,
+          "log2_mean_w": -0.005596161423924479,
+          "p50_over_max": 0.010968108110537507,
+          "p99_over_max": 0.004226455787984052,
+          "cv_w": 0.0020591174637929095,
+          "log2_nodes": -0.0008167949754779983,
+          "mean_degree": 0.0003994375026147068
+        }
+      },
+      {
+        "width": 16,
+        "intercept": 1.7958601197082655,
+        "coef": {
+          "log2_max_w": -0.002046163378402987,
+          "log2_mean_w": -0.006036031389167661,
+          "p50_over_max": 0.009703002747182523,
+          "p99_over_max": 0.004109163597570991,
+          "cv_w": 0.002215050199262012,
+          "log2_nodes": -0.0014236802279159412,
+          "mean_degree": 0.000523292075177042
+        }
+      }
+    ]
+  },
+  "provenance": {
+    "git": {
+      "commit": "e1dc655567c5985c5e1877230ddc0b708fff0a04",
+      "dirty": false
+    },
+    "seed": 20260923,
+    "python": "3.13.16",
+    "numpy": "2.2.4",
+    "argv": [
+      "/home/user/lpq-atlas/python/lpq_tools/policy/train.py",
+      "--results",
+      "results/raw/policy/derived_fb_pareto_dijkstra.json",
+      "results/raw/policy/derived_fb_u64_dijkstra.json",
+      "results/raw/policy/derived_ny_bimodal_dijkstra.json",
+      "results/raw/policy/derived_ny_logn_dijkstra.json",
+      "results/raw/policy/derived_ny_pareto_dijkstra.json",
+      "results/raw/policy/derived_ny_u16_dijkstra.json",
+      "results/raw/policy/derived_ny_u256_dijkstra.json",
+      "results/raw/policy/derived_ny_u4096_dijkstra.json",
+      "results/raw/policy/derived_ny_u65536_dijkstra.json",
+      "results/raw/policy/derived_ny_unit_dijkstra.json",
+      "results/raw/policy/derived_pa_u16_dijkstra.json",
+      "results/raw/policy/dimacs_col_dijkstra.json",
+      "results/raw/policy/dimacs_fla_dijkstra.json",
+      "results/raw/policy/dimacs_ny_dijkstra.json",
+      "results/raw/policy/snap_facebook_dijkstra.json",
+      "results/raw/policy/snap_roadnet_ca_dijkstra.json",
+      "results/raw/policy/snap_roadnet_pa_dijkstra.json",
+      "--profiles-dir",
+      "datasets/processed",
+      "--metadata-dir",
+      "datasets/metadata",
+      "--out",
+      "models/policy/queue_policy_v1.lpqpolicy",
+      "--seed",
+      "20260923"
+    ],
+    "result_files": [
+      {
+        "path": "results/raw/policy/derived_fb_pareto_dijkstra.json",
+        "sha256": "e406663221003c49a00254712155638faa3d693fd24da5fdd8fe5d990678e939",
+        "experiment_id": "policy-campaign-derived_fb_pareto-dijkstra",
+        "records": 240
+      },
+      {
+        "path": "results/raw/policy/derived_fb_u64_dijkstra.json",
+        "sha256": "9b704fed5d8dc702b72e7dfe13f3448ccd27ec5fe3e2623f104a8ac48fd69916",
+        "experiment_id": "policy-campaign-derived_fb_u64-dijkstra",
+        "records": 240
+      },
+      {
+        "path": "results/raw/policy/derived_ny_bimodal_dijkstra.json",
+        "sha256": "cae0299b9308b89b3233d9626bca145e953791ae595d8d90addd8c8fee2749ab",
+        "experiment_id": "policy-campaign-derived_ny_bimodal-dijkstra",
+        "records": 240
+      },
+      {
+        "path": "results/raw/policy/derived_ny_logn_dijkstra.json",
+        "sha256": "088971728c28a8e8669339db6f0df0674c547902114a3aa6f814a3a0dca8a8cd",
+        "experiment_id": "policy-campaign-derived_ny_logn-dijkstra",
+        "records": 240
+      },
+      {
+        "path": "results/raw/policy/derived_ny_pareto_dijkstra.json",
+        "sha256": "35d422cea1e059fc291d1bbc4c375892458f006b007332c203218a2ab00961af",
+        "experiment_id": "policy-campaign-derived_ny_pareto-dijkstra",
+        "records": 210
+      },
+      {
+        "path": "results/raw/policy/derived_ny_u16_dijkstra.json",
+        "sha256": "cb077a3aceeda2c6527fa2e3fae963bf6884f5741aaac584738de0a162abf542",
+        "experiment_id": "policy-campaign-derived_ny_u16-dijkstra",
+        "records": 240
+      },
+      {
+        "path": "results/raw/policy/derived_ny_u256_dijkstra.json",
+        "sha256": "fa39ba50f3b9fdc146156bba13f3b1ab7bd40f2b022b9dc878f4c1ea822f7720",
+        "experiment_id": "policy-campaign-derived_ny_u256-dijkstra",
+        "records": 240
+      },
+      {
+        "path": "results/raw/policy/derived_ny_u4096_dijkstra.json",
+        "sha256": "c5eb91853e1cf05f0858bd07eeb4938992a261b89ed7b0bde2a65ef64e5f3964",
+        "experiment_id": "policy-campaign-derived_ny_u4096-dijkstra",
+        "records": 240
+      },
+      {
+        "path": "results/raw/policy/derived_ny_u65536_dijkstra.json",
+        "sha256": "b12333d378a86528e155e7313974b37c2fa2c8f2d64c8bb7a77943f798205b2d",
+        "experiment_id": "policy-campaign-derived_ny_u65536-dijkstra",
+        "records": 240
+      },
+      {
+        "path": "results/raw/policy/derived_ny_unit_dijkstra.json",
+        "sha256": "d2790a595907a1e5b8923b4e533333e6d4fe96688630da090be905cf04dc1e64",
+        "experiment_id": "policy-campaign-derived_ny_unit-dijkstra",
+        "records": 240
+      },
+      {
+        "path": "results/raw/policy/derived_pa_u16_dijkstra.json",
+        "sha256": "74046e78e3276fea56e7020006a8cfac2d4a0445364cb3fae2c774bc54b225ef",
+        "experiment_id": "policy-campaign-derived_pa_u16-dijkstra",
+        "records": 240
+      },
+      {
+        "path": "results/raw/policy/dimacs_col_dijkstra.json",
+        "sha256": "945cd192dce5773ddf8f39954b572d8af7b786e02b6227c823b67d1f312839b1",
+        "experiment_id": "policy-campaign-dimacs_col-dijkstra",
+        "records": 240
+      },
+      {
+        "path": "results/raw/policy/dimacs_fla_dijkstra.json",
+        "sha256": "27db58d372ced8324b95d1e61e0efffc05a1fb536218d4b8f1455ec2e19ae104",
+        "experiment_id": "policy-campaign-dimacs_fla-dijkstra",
+        "records": 240
+      },
+      {
+        "path": "results/raw/policy/dimacs_ny_dijkstra.json",
+        "sha256": "308acfe1deb9104147cb9b778e148b46a4feea8af54040842fedb8bca5be2bb2",
+        "experiment_id": "policy-campaign-dimacs_ny-dijkstra",
+        "records": 240
+      },
+      {
+        "path": "results/raw/policy/snap_facebook_dijkstra.json",
+        "sha256": "415cda70494ed47847717fb70a28963a0ba887e923df3ebea6fa30991e45aac0",
+        "experiment_id": "policy-campaign-snap_facebook-dijkstra",
+        "records": 240
+      },
+      {
+        "path": "results/raw/policy/snap_roadnet_ca_dijkstra.json",
+        "sha256": "f088efceee6d33e80c6a08de4b821e6bffaffe1101f2894778927956008704da",
+        "experiment_id": "policy-campaign-snap_roadnet_ca-dijkstra",
+        "records": 80
+      },
+      {
+        "path": "results/raw/policy/snap_roadnet_pa_dijkstra.json",
+        "sha256": "9a88b65b3072dd88bdd36ff51f41a8066fea19399180aa75178ece04e71aa1c2",
+        "experiment_id": "policy-campaign-snap_roadnet_pa-dijkstra",
+        "records": 240
+      }
+    ],
+    "profiles": [
+      {
+        "dataset": "derived_fb_pareto",
+        "path": "datasets/processed/derived_fb_pareto.lpqprofile",
+        "sha256": "53c91790352ffe0487a9ca42c901ee3c96e43beef8faeb37128a7e77a4c2b446",
+        "topology": "snap_facebook",
+        "declared_base": "snap_facebook"
+      },
+      {
+        "dataset": "derived_fb_u64",
+        "path": "datasets/processed/derived_fb_u64.lpqprofile",
+        "sha256": "14c721df45997c77aa1436fef802f9840b77e752daba63afaa1885eef14523d7",
+        "topology": "snap_facebook",
+        "declared_base": "snap_facebook"
+      },
+      {
+        "dataset": "derived_ny_bimodal",
+        "path": "datasets/processed/derived_ny_bimodal.lpqprofile",
+        "sha256": "fd432dd4212b168bd21347ad2abc084311fea6583ae90a9677c2e63e09582e91",
+        "topology": "dimacs_ny",
+        "declared_base": "dimacs_ny"
+      },
+      {
+        "dataset": "derived_ny_logn",
+        "path": "datasets/processed/derived_ny_logn.lpqprofile",
+        "sha256": "21fcd671f4660db82ceb045516a795a2379b8bba3cc489c825b04b0876eb8ab4",
+        "topology": "dimacs_ny",
+        "declared_base": "dimacs_ny"
+      },
+      {
+        "dataset": "derived_ny_pareto",
+        "path": "datasets/processed/derived_ny_pareto.lpqprofile",
+        "sha256": "c97370ccdc7a1c00f8d9df707f25951c921cdf0683d85480e84b0a695ca59ad9",
+        "topology": "dimacs_ny",
+        "declared_base": "dimacs_ny"
+      },
+      {
+        "dataset": "derived_ny_u16",
+        "path": "datasets/processed/derived_ny_u16.lpqprofile",
+        "sha256": "5309024c10e149756f3f80af4bea3e1055306e0ac9287fc2cd0d550c50400ae6",
+        "topology": "dimacs_ny",
+        "declared_base": "dimacs_ny"
+      },
+      {
+        "dataset": "derived_ny_u256",
+        "path": "datasets/processed/derived_ny_u256.lpqprofile",
+        "sha256": "e09243f3cb7e5c3ce2e16023b95fd65bdb8d54b2a80d7e00d9b26a28e9021486",
+        "topology": "dimacs_ny",
+        "declared_base": "dimacs_ny"
+      },
+      {
+        "dataset": "derived_ny_u4096",
+        "path": "datasets/processed/derived_ny_u4096.lpqprofile",
+        "sha256": "fe6230b2d1e05f9c84481182a681789ac5b3923fed83e729f2236245011cde07",
+        "topology": "dimacs_ny",
+        "declared_base": "dimacs_ny"
+      },
+      {
+        "dataset": "derived_ny_u65536",
+        "path": "datasets/processed/derived_ny_u65536.lpqprofile",
+        "sha256": "9eb07eb28735ec3c0db5275b15147c29e6396200a7b326e815624e3074e101e8",
+        "topology": "dimacs_ny",
+        "declared_base": "dimacs_ny"
+      },
+      {
+        "dataset": "derived_ny_unit",
+        "path": "datasets/processed/derived_ny_unit.lpqprofile",
+        "sha256": "4dbfd4f70cc727a5d2944b265274ae5b85b6e11c2e6f2816ac967ef888bac7fd",
+        "topology": "dimacs_ny",
+        "declared_base": "dimacs_ny"
+      },
+      {
+        "dataset": "derived_pa_u16",
+        "path": "datasets/processed/derived_pa_u16.lpqprofile",
+        "sha256": "41e34450a5965ca13f830b0afa97e1387742ebec760d586a233608419858a280",
+        "topology": "snap_roadnet_pa",
+        "declared_base": "snap_roadnet_pa"
+      },
+      {
+        "dataset": "dimacs_col",
+        "path": "datasets/processed/dimacs_col.lpqprofile",
+        "sha256": "49d327e5e0658b34408555d1c16693282febb06e90dbb0680abe44e7ff28d870",
+        "topology": "dimacs_col",
+        "declared_base": "dimacs_col"
+      },
+      {
+        "dataset": "dimacs_fla",
+        "path": "datasets/processed/dimacs_fla.lpqprofile",
+        "sha256": "5c57893be24f5593b2f0d97614a9f63a80a30ea57c13cee6dec5156897f149ff",
+        "topology": "dimacs_fla",
+        "declared_base": "dimacs_fla"
+      },
+      {
+        "dataset": "dimacs_ny",
+        "path": "datasets/processed/dimacs_ny.lpqprofile",
+        "sha256": "7fa3621962fc23d94e985997bf4ca3cee47bb16846ffbebc0b068f091ff81144",
+        "topology": "dimacs_ny",
+        "declared_base": "dimacs_ny"
+      },
+      {
+        "dataset": "snap_facebook",
+        "path": "datasets/processed/snap_facebook.lpqprofile",
+        "sha256": "9479e62b045066852fd375fd2338a857e0c56e0824e33823185eb54e65b370fb",
+        "topology": "snap_facebook",
+        "declared_base": "snap_facebook"
+      },
+      {
+        "dataset": "snap_roadnet_ca",
+        "path": "datasets/processed/snap_roadnet_ca.lpqprofile",
+        "sha256": "0af7041c42aff678bb17e1dc696e1d3556c5070cbafe77710ec8dde80569facf",
+        "topology": "snap_roadnet_ca",
+        "declared_base": "snap_roadnet_ca"
+      },
+      {
+        "dataset": "snap_roadnet_pa",
+        "path": "datasets/processed/snap_roadnet_pa.lpqprofile",
+        "sha256": "5dfa0c7feff7d24fb66a2dce029af2acac99e85628fbe2e4ce475a995eefb728",
+        "topology": "snap_roadnet_pa",
+        "declared_base": "snap_roadnet_pa"
+      }
+    ],
+    "metadata": [
+      {
+        "dataset": "derived_fb_pareto",
+        "path": "datasets/metadata/derived_fb_pareto.json",
+        "sha256": "2c97d2c9769da6d048f0607f51992b00ee9d4fde12280680933e3467a568d7ba"
+      },
+      {
+        "dataset": "derived_fb_u64",
+        "path": "datasets/metadata/derived_fb_u64.json",
+        "sha256": "f03b182737e4ae034f0f24595668d20b558917e03369bfbcce954348e4090118"
+      },
+      {
+        "dataset": "derived_ny_bimodal",
+        "path": "datasets/metadata/derived_ny_bimodal.json",
+        "sha256": "a553d7f82adc11d305a5e7fc1f1b7e02b3976e8e7cf060f961b7794fe1e3c6d5"
+      },
+      {
+        "dataset": "derived_ny_logn",
+        "path": "datasets/metadata/derived_ny_logn.json",
+        "sha256": "4f3631c826875043a60b136c5b258b2e1d9d0e7c102363d1324ded97f50cf473"
+      },
+      {
+        "dataset": "derived_ny_pareto",
+        "path": "datasets/metadata/derived_ny_pareto.json",
+        "sha256": "6a518e2978e12af4ba7305197673625b7ac3be74c8e4e2a3c1746fe6751d055f"
+      },
+      {
+        "dataset": "derived_ny_u16",
+        "path": "datasets/metadata/derived_ny_u16.json",
+        "sha256": "36106297b672c45b7d4b5c52b1517ba2b95450bf01e57a1b5590532b73ee9060"
+      },
+      {
+        "dataset": "derived_ny_u256",
+        "path": "datasets/metadata/derived_ny_u256.json",
+        "sha256": "bf9628ffe72e8d2ce3d00ac90df0d96b6b2e82c410c86e62ab4e4b4fe89880cd"
+      },
+      {
+        "dataset": "derived_ny_u4096",
+        "path": "datasets/metadata/derived_ny_u4096.json",
+        "sha256": "a0d141074842fb609219ad13299921b5e67e001a3e67bc264d7e5baf5719dc6d"
+      },
+      {
+        "dataset": "derived_ny_u65536",
+        "path": "datasets/metadata/derived_ny_u65536.json",
+        "sha256": "a2907b3295c51d1bc03a6da4c573f25f60dc1f6a09ad1ff0b3a210363f5b974c"
+      },
+      {
+        "dataset": "derived_ny_unit",
+        "path": "datasets/metadata/derived_ny_unit.json",
+        "sha256": "182856948269d07805d1c7db5b8b447c5d46c2491652d8ced22f737de0a87bbc"
+      },
+      {
+        "dataset": "derived_pa_u16",
+        "path": "datasets/metadata/derived_pa_u16.json",
+        "sha256": "a38a887384b6422dd41db33e47d319a163a6326bbd485bb1979cdfe0d40a5188"
+      },
+      {
+        "dataset": "dimacs_col",
+        "path": "datasets/metadata/dimacs_col.json",
+        "sha256": "7b7520fbec5a214a6c2d5164d68e9427a043bf016cec529c04e97e1f1472c047"
+      },
+      {
+        "dataset": "dimacs_fla",
+        "path": "datasets/metadata/dimacs_fla.json",
+        "sha256": "4222b33928b358b8430eaccbe52738f7df81bd468ec62ebd09fd1d58f958e79b"
+      },
+      {
+        "dataset": "dimacs_ny",
+        "path": "datasets/metadata/dimacs_ny.json",
+        "sha256": "9f1934db2517df490066c203f90f6fc7cc4033d15f5058c4115a5bb05171f7d8"
+      },
+      {
+        "dataset": "snap_facebook",
+        "path": "datasets/metadata/snap_facebook.json",
+        "sha256": "8c80ab18553810416129d0173bafebd89f1b94cd051e572e64f9214995358b53"
+      },
+      {
+        "dataset": "snap_roadnet_ca",
+        "path": "datasets/metadata/snap_roadnet_ca.json",
+        "sha256": "b220e4906ffd459b163ef397ce11daefb7390b2f59e970252be43ac47560cd9e"
+      },
+      {
+        "dataset": "snap_roadnet_pa",
+        "path": "datasets/metadata/snap_roadnet_pa.json",
+        "sha256": "25059a09d1ff6b606f5c27c41bbdb4026fc0a043093f3a58913a9a33a323dd52"
+      }
+    ],
+    "datasets_with_inferred_id": {
+      "derived_fb_pareto": "derived_fb_pareto_dijkstra.json: inferred from experiment_id 'policy-campaign-derived_fb_pareto-dijkstra'",
+      "derived_fb_u64": "derived_fb_u64_dijkstra.json: inferred from experiment_id 'policy-campaign-derived_fb_u64-dijkstra'",
+      "derived_ny_u16": "derived_ny_u16_dijkstra.json: inferred from experiment_id 'policy-campaign-derived_ny_u16-dijkstra'",
+      "derived_ny_u256": "derived_ny_u256_dijkstra.json: inferred from experiment_id 'policy-campaign-derived_ny_u256-dijkstra'",
+      "derived_ny_u4096": "derived_ny_u4096_dijkstra.json: inferred from experiment_id 'policy-campaign-derived_ny_u4096-dijkstra'",
+      "derived_ny_u65536": "derived_ny_u65536_dijkstra.json: inferred from experiment_id 'policy-campaign-derived_ny_u65536-dijkstra'",
+      "derived_ny_unit": "derived_ny_unit_dijkstra.json: inferred from experiment_id 'policy-campaign-derived_ny_unit-dijkstra'",
+      "dimacs_col": "dimacs_col_dijkstra.json: inferred from experiment_id 'policy-campaign-dimacs_col-dijkstra'",
+      "dimacs_fla": "dimacs_fla_dijkstra.json: inferred from experiment_id 'policy-campaign-dimacs_fla-dijkstra'",
+      "dimacs_ny": "dimacs_ny_dijkstra.json: inferred from experiment_id 'policy-campaign-dimacs_ny-dijkstra'",
+      "snap_facebook": "snap_facebook_dijkstra.json: inferred from experiment_id 'policy-campaign-snap_facebook-dijkstra'",
+      "snap_roadnet_ca": "snap_roadnet_ca_dijkstra.json: inferred from experiment_id 'policy-campaign-snap_roadnet_ca-dijkstra'",
+      "snap_roadnet_pa": "snap_roadnet_pa_dijkstra.json: inferred from experiment_id 'policy-campaign-snap_roadnet_pa-dijkstra'"
+    }
+  },
+  "training": {
+    "algorithm": "dijkstra",
+    "n_graphs": 17,
+    "n_topologies": 6,
+    "datasets": [
+      "derived_fb_pareto",
+      "derived_fb_u64",
+      "derived_ny_bimodal",
+      "derived_ny_logn",
+      "derived_ny_pareto",
+      "derived_ny_u16",
+      "derived_ny_u256",
+      "derived_ny_u4096",
+      "derived_ny_u65536",
+      "derived_ny_unit",
+      "derived_pa_u16",
+      "dimacs_col",
+      "dimacs_fla",
+      "dimacs_ny",
+      "snap_facebook",
+      "snap_roadnet_ca",
+      "snap_roadnet_pa"
+    ],
+    "feature_subset": [
+      "log2_max_w",
+      "log2_mean_w",
+      "p50_over_max",
+      "p99_over_max",
+      "cv_w",
+      "log2_nodes",
+      "mean_degree"
+    ],
+    "ridge_lambda": 1000.0,
+    "margin": 0.1,
+    "inner_cv_folds": 6,
+    "inner_mse_by_lambda": {
+      "0.001": 121.03776645186679,
+      "0.00316228": 116.12512876268433,
+      "0.01": 104.75241283861867,
+      "0.0316228": 84.3465631328877,
+      "0.1": 60.73021431813938,
+      "0.316228": 40.8201873364853,
+      "1": 47.99033799208406,
+      "3.16228": 183.16370166735,
+      "10": 373.2966792895496,
+      "31.6228": 257.40060382813306,
+      "100": 68.89071798445408,
+      "316.228": 10.820012281601183,
+      "1000": 2.551969554043376
+    },
+    "inner_mean_log_realised_ratio_by_margin": {
+      "0": 0.0,
+      "0.02": 0.0,
+      "0.05": 0.0,
+      "0.1": 0.0
+    },
+    "graphs_per_trained_width": {
+      "1": 16,
+      "2": 17,
+      "4": 17,
+      "8": 17,
+      "16": 17
+    },
+    "widths_not_trained_too_few_graphs": {}
+  },
+  "evaluation": {
+    "protocol": {
+      "scheme": "nested leave-one-topology-out",
+      "inner": "leave-one-topology-out CV for ridge lambda and margin on the training graphs",
+      "algorithm": "dijkstra",
+      "feature_subset": [
+        "log2_max_w",
+        "log2_mean_w",
+        "p50_over_max",
+        "p99_over_max",
+        "cv_w",
+        "log2_nodes",
+        "mean_degree"
+      ],
+      "lambda_grid": [
+        0.001,
+        0.0031622776601683794,
+        0.01,
+        0.03162277660168379,
+        0.1,
+        0.31622776601683794,
+        1.0,
+        3.1622776601683795,
+        10.0,
+        31.622776601683793,
+        100.0,
+        316.22776601683796,
+        1000.0
+      ],
+      "margin_grid": [
+        0.0,
+        0.02,
+        0.05,
+        0.1
+      ],
+      "min_graphs": 4,
+      "seed": 20260923,
+      "unmeasured_policy": "a chosen candidate not measured on the held-out graph is counted separately and excluded from realised-ratio aggregates; never imputed",
+      "tie_tolerance": 0.02
+    },
+    "folds": [
+      {
+        "heldout": "derived_fb_pareto",
+        "topology": "snap_facebook",
+        "derived": true,
+        "train_datasets": [
+          "derived_ny_bimodal",
+          "derived_ny_logn",
+          "derived_ny_pareto",
+          "derived_ny_u16",
+          "derived_ny_u256",
+          "derived_ny_u4096",
+          "derived_ny_u65536",
+          "derived_ny_unit",
+          "derived_pa_u16",
+          "dimacs_col",
+          "dimacs_fla",
+          "dimacs_ny",
+          "snap_roadnet_ca",
+          "snap_roadnet_pa"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 1.0,
+        "oracle_choice": "radix_heap",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 3.1622776601683795,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "pooled_w1",
+        "chosen_ring": 131072,
+        "predicted_ratio": 0.0004781565577181611,
+        "unmeasured": false,
+        "realised_ratio": 1.077253975865994,
+        "regret": 1.077253975865994,
+        "best_fixed": {
+          "width": 2,
+          "train_mean_log_ratio": 0.9971107714871704,
+          "realised_ratio": 4.282416741606189
+        }
+      },
+      {
+        "heldout": "derived_fb_u64",
+        "topology": "snap_facebook",
+        "derived": true,
+        "train_datasets": [
+          "derived_ny_bimodal",
+          "derived_ny_logn",
+          "derived_ny_pareto",
+          "derived_ny_u16",
+          "derived_ny_u256",
+          "derived_ny_u4096",
+          "derived_ny_u65536",
+          "derived_ny_unit",
+          "derived_pa_u16",
+          "dimacs_col",
+          "dimacs_fla",
+          "dimacs_ny",
+          "snap_roadnet_ca",
+          "snap_roadnet_pa"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 1.0,
+        "oracle_choice": "radix_heap",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 3.1622776601683795,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "pooled_w1",
+        "chosen_ring": 128,
+        "predicted_ratio": 0.0004024125645861309,
+        "unmeasured": false,
+        "realised_ratio": 1.0421405506662689,
+        "regret": 1.0421405506662689,
+        "best_fixed": {
+          "width": 2,
+          "train_mean_log_ratio": 0.9971107714871704,
+          "realised_ratio": 5.266514210676384
+        }
+      },
+      {
+        "heldout": "derived_ny_bimodal",
+        "topology": "dimacs_ny",
+        "derived": true,
+        "train_datasets": [
+          "derived_fb_pareto",
+          "derived_fb_u64",
+          "derived_pa_u16",
+          "dimacs_col",
+          "dimacs_fla",
+          "snap_facebook",
+          "snap_roadnet_ca",
+          "snap_roadnet_pa"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 1.0,
+        "oracle_choice": "radix_heap",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 1000.0,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "radix_heap",
+        "chosen_ring": 0,
+        "predicted_ratio": 1.0,
+        "unmeasured": false,
+        "realised_ratio": 1.0,
+        "regret": 1.0,
+        "best_fixed": {
+          "width": 1,
+          "train_mean_log_ratio": 0.056057300407924976,
+          "realised_ratio": 1.2028370140944782
+        }
+      },
+      {
+        "heldout": "derived_ny_logn",
+        "topology": "dimacs_ny",
+        "derived": true,
+        "train_datasets": [
+          "derived_fb_pareto",
+          "derived_fb_u64",
+          "derived_pa_u16",
+          "dimacs_col",
+          "dimacs_fla",
+          "snap_facebook",
+          "snap_roadnet_ca",
+          "snap_roadnet_pa"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 0.9541992280565641,
+        "oracle_choice": "pooled_w1",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 1000.0,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "radix_heap",
+        "chosen_ring": 0,
+        "predicted_ratio": 1.0,
+        "unmeasured": false,
+        "realised_ratio": 1.0,
+        "regret": 1.0479991710292191,
+        "best_fixed": {
+          "width": 1,
+          "train_mean_log_ratio": 0.056057300407924976,
+          "realised_ratio": 0.9541992280565641
+        }
+      },
+      {
+        "heldout": "derived_ny_pareto",
+        "topology": "dimacs_ny",
+        "derived": true,
+        "train_datasets": [
+          "derived_fb_pareto",
+          "derived_fb_u64",
+          "derived_pa_u16",
+          "dimacs_col",
+          "dimacs_fla",
+          "snap_facebook",
+          "snap_roadnet_ca",
+          "snap_roadnet_pa"
+        ],
+        "measured_widths": [
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 1.0,
+        "oracle_choice": "radix_heap",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 1000.0,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "radix_heap",
+        "chosen_ring": 0,
+        "predicted_ratio": 1.0,
+        "unmeasured": false,
+        "realised_ratio": 1.0,
+        "regret": 1.0,
+        "best_fixed": {
+          "width": 1,
+          "train_mean_log_ratio": 0.056057300407924976,
+          "realised_ratio": null
+        }
+      },
+      {
+        "heldout": "derived_ny_u16",
+        "topology": "dimacs_ny",
+        "derived": true,
+        "train_datasets": [
+          "derived_fb_pareto",
+          "derived_fb_u64",
+          "derived_pa_u16",
+          "dimacs_col",
+          "dimacs_fla",
+          "snap_facebook",
+          "snap_roadnet_ca",
+          "snap_roadnet_pa"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 1.0,
+        "oracle_choice": "radix_heap",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 1000.0,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "radix_heap",
+        "chosen_ring": 0,
+        "predicted_ratio": 1.0,
+        "unmeasured": false,
+        "realised_ratio": 1.0,
+        "regret": 1.0,
+        "best_fixed": {
+          "width": 1,
+          "train_mean_log_ratio": 0.056057300407924976,
+          "realised_ratio": 1.012959893609622
+        }
+      },
+      {
+        "heldout": "derived_ny_u256",
+        "topology": "dimacs_ny",
+        "derived": true,
+        "train_datasets": [
+          "derived_fb_pareto",
+          "derived_fb_u64",
+          "derived_pa_u16",
+          "dimacs_col",
+          "dimacs_fla",
+          "snap_facebook",
+          "snap_roadnet_ca",
+          "snap_roadnet_pa"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 0.9627588373314149,
+        "oracle_choice": "pooled_w1",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 1000.0,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "radix_heap",
+        "chosen_ring": 0,
+        "predicted_ratio": 1.0,
+        "unmeasured": false,
+        "realised_ratio": 1.0,
+        "regret": 1.0386817146979512,
+        "best_fixed": {
+          "width": 1,
+          "train_mean_log_ratio": 0.056057300407924976,
+          "realised_ratio": 0.9627588373314149
+        }
+      },
+      {
+        "heldout": "derived_ny_u4096",
+        "topology": "dimacs_ny",
+        "derived": true,
+        "train_datasets": [
+          "derived_fb_pareto",
+          "derived_fb_u64",
+          "derived_pa_u16",
+          "dimacs_col",
+          "dimacs_fla",
+          "snap_facebook",
+          "snap_roadnet_ca",
+          "snap_roadnet_pa"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 0.8714833095912684,
+        "oracle_choice": "pooled_w1",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 1000.0,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "radix_heap",
+        "chosen_ring": 0,
+        "predicted_ratio": 1.0,
+        "unmeasured": false,
+        "realised_ratio": 1.0,
+        "regret": 1.1474689061675856,
+        "best_fixed": {
+          "width": 1,
+          "train_mean_log_ratio": 0.056057300407924976,
+          "realised_ratio": 0.8714833095912684
+        }
+      },
+      {
+        "heldout": "derived_ny_u65536",
+        "topology": "dimacs_ny",
+        "derived": true,
+        "train_datasets": [
+          "derived_fb_pareto",
+          "derived_fb_u64",
+          "derived_pa_u16",
+          "dimacs_col",
+          "dimacs_fla",
+          "snap_facebook",
+          "snap_roadnet_ca",
+          "snap_roadnet_pa"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 0.8777959905753605,
+        "oracle_choice": "pooled_w16",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 1000.0,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "radix_heap",
+        "chosen_ring": 0,
+        "predicted_ratio": 1.0,
+        "unmeasured": false,
+        "realised_ratio": 1.0,
+        "regret": 1.1392168689954252,
+        "best_fixed": {
+          "width": 1,
+          "train_mean_log_ratio": 0.056057300407924976,
+          "realised_ratio": 1.1021705956502528
+        }
+      },
+      {
+        "heldout": "derived_ny_unit",
+        "topology": "dimacs_ny",
+        "derived": true,
+        "train_datasets": [
+          "derived_fb_pareto",
+          "derived_fb_u64",
+          "derived_pa_u16",
+          "dimacs_col",
+          "dimacs_fla",
+          "snap_facebook",
+          "snap_roadnet_ca",
+          "snap_roadnet_pa"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 1.0,
+        "oracle_choice": "radix_heap",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 1000.0,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "radix_heap",
+        "chosen_ring": 0,
+        "predicted_ratio": 1.0,
+        "unmeasured": false,
+        "realised_ratio": 1.0,
+        "regret": 1.0,
+        "best_fixed": {
+          "width": 1,
+          "train_mean_log_ratio": 0.056057300407924976,
+          "realised_ratio": 1.1741193195876045
+        }
+      },
+      {
+        "heldout": "derived_pa_u16",
+        "topology": "snap_roadnet_pa",
+        "derived": true,
+        "train_datasets": [
+          "derived_fb_pareto",
+          "derived_fb_u64",
+          "derived_ny_bimodal",
+          "derived_ny_logn",
+          "derived_ny_pareto",
+          "derived_ny_u16",
+          "derived_ny_u256",
+          "derived_ny_u4096",
+          "derived_ny_u65536",
+          "derived_ny_unit",
+          "dimacs_col",
+          "dimacs_fla",
+          "dimacs_ny",
+          "snap_facebook",
+          "snap_roadnet_ca"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 1.0,
+        "oracle_choice": "radix_heap",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 1000.0,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "radix_heap",
+        "chosen_ring": 0,
+        "predicted_ratio": 1.0,
+        "unmeasured": false,
+        "realised_ratio": 1.0,
+        "regret": 1.0,
+        "best_fixed": {
+          "width": 2,
+          "train_mean_log_ratio": 1.0104352236679053,
+          "realised_ratio": 10.971344070889524
+        }
+      },
+      {
+        "heldout": "dimacs_col",
+        "topology": "dimacs_col",
+        "derived": false,
+        "train_datasets": [
+          "derived_fb_pareto",
+          "derived_fb_u64",
+          "derived_ny_bimodal",
+          "derived_ny_logn",
+          "derived_ny_pareto",
+          "derived_ny_u16",
+          "derived_ny_u256",
+          "derived_ny_u4096",
+          "derived_ny_u65536",
+          "derived_ny_unit",
+          "derived_pa_u16",
+          "dimacs_fla",
+          "dimacs_ny",
+          "snap_facebook",
+          "snap_roadnet_ca",
+          "snap_roadnet_pa"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 0.9335665633736528,
+        "oracle_choice": "pooled_w4",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 1000.0,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "radix_heap",
+        "chosen_ring": 0,
+        "predicted_ratio": 1.0,
+        "unmeasured": false,
+        "realised_ratio": 1.0,
+        "regret": 1.0711608997501743,
+        "best_fixed": {
+          "width": 2,
+          "train_mean_log_ratio": 1.113636796427742,
+          "realised_ratio": 0.9437177294442031
+        }
+      },
+      {
+        "heldout": "dimacs_fla",
+        "topology": "dimacs_fla",
+        "derived": false,
+        "train_datasets": [
+          "derived_fb_pareto",
+          "derived_fb_u64",
+          "derived_ny_bimodal",
+          "derived_ny_logn",
+          "derived_ny_pareto",
+          "derived_ny_u16",
+          "derived_ny_u256",
+          "derived_ny_u4096",
+          "derived_ny_u65536",
+          "derived_ny_unit",
+          "derived_pa_u16",
+          "dimacs_col",
+          "dimacs_ny",
+          "snap_facebook",
+          "snap_roadnet_ca",
+          "snap_roadnet_pa"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 0.9916502627444806,
+        "oracle_choice": "pooled_w8",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 1000.0,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "radix_heap",
+        "chosen_ring": 0,
+        "predicted_ratio": 1.0,
+        "unmeasured": false,
+        "realised_ratio": 1.0,
+        "regret": 1.0084200423972165,
+        "best_fixed": {
+          "width": 2,
+          "train_mean_log_ratio": 1.1075845460893965,
+          "realised_ratio": 1.0396746549616742
+        }
+      },
+      {
+        "heldout": "dimacs_ny",
+        "topology": "dimacs_ny",
+        "derived": false,
+        "train_datasets": [
+          "derived_fb_pareto",
+          "derived_fb_u64",
+          "derived_pa_u16",
+          "dimacs_col",
+          "dimacs_fla",
+          "snap_facebook",
+          "snap_roadnet_ca",
+          "snap_roadnet_pa"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 0.9035464646098809,
+        "oracle_choice": "pooled_w1",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 1000.0,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "radix_heap",
+        "chosen_ring": 0,
+        "predicted_ratio": 1.0,
+        "unmeasured": false,
+        "realised_ratio": 1.0,
+        "regret": 1.1067499449867964,
+        "best_fixed": {
+          "width": 1,
+          "train_mean_log_ratio": 0.056057300407924976,
+          "realised_ratio": 0.9035464646098809
+        }
+      },
+      {
+        "heldout": "snap_facebook",
+        "topology": "snap_facebook",
+        "derived": false,
+        "train_datasets": [
+          "derived_ny_bimodal",
+          "derived_ny_logn",
+          "derived_ny_pareto",
+          "derived_ny_u16",
+          "derived_ny_u256",
+          "derived_ny_u4096",
+          "derived_ny_u65536",
+          "derived_ny_unit",
+          "derived_pa_u16",
+          "dimacs_col",
+          "dimacs_fla",
+          "dimacs_ny",
+          "snap_roadnet_ca",
+          "snap_roadnet_pa"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 1.0,
+        "oracle_choice": "radix_heap",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 3.1622776601683795,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "pooled_w1",
+        "chosen_ring": 8192,
+        "predicted_ratio": 0.0003776860487141696,
+        "unmeasured": false,
+        "realised_ratio": 1.0526015145145553,
+        "regret": 1.0526015145145553,
+        "best_fixed": {
+          "width": 2,
+          "train_mean_log_ratio": 0.9971107714871704,
+          "realised_ratio": 1.9834218416985485
+        }
+      },
+      {
+        "heldout": "snap_roadnet_ca",
+        "topology": "snap_roadnet_ca",
+        "derived": false,
+        "train_datasets": [
+          "derived_fb_pareto",
+          "derived_fb_u64",
+          "derived_ny_bimodal",
+          "derived_ny_logn",
+          "derived_ny_pareto",
+          "derived_ny_u16",
+          "derived_ny_u256",
+          "derived_ny_u4096",
+          "derived_ny_u65536",
+          "derived_ny_unit",
+          "derived_pa_u16",
+          "dimacs_col",
+          "dimacs_fla",
+          "dimacs_ny",
+          "snap_facebook",
+          "snap_roadnet_pa"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 1.0,
+        "oracle_choice": "radix_heap",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 1000.0,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "radix_heap",
+        "chosen_ring": 0,
+        "predicted_ratio": 1.0,
+        "unmeasured": false,
+        "realised_ratio": 1.0,
+        "regret": 1.0,
+        "best_fixed": {
+          "width": 2,
+          "train_mean_log_ratio": 0.8435115509020238,
+          "realised_ratio": 71.09917656952912
+        }
+      },
+      {
+        "heldout": "snap_roadnet_pa",
+        "topology": "snap_roadnet_pa",
+        "derived": false,
+        "train_datasets": [
+          "derived_fb_pareto",
+          "derived_fb_u64",
+          "derived_ny_bimodal",
+          "derived_ny_logn",
+          "derived_ny_pareto",
+          "derived_ny_u16",
+          "derived_ny_u256",
+          "derived_ny_u4096",
+          "derived_ny_u65536",
+          "derived_ny_unit",
+          "dimacs_col",
+          "dimacs_fla",
+          "dimacs_ny",
+          "snap_facebook",
+          "snap_roadnet_ca"
+        ],
+        "measured_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "oracle_best_ratio": 0.9714035133929947,
+        "oracle_choice": "pooled_w1",
+        "status": "evaluated",
+        "hyper": {
+          "lambda": 1000.0,
+          "margin": 0.1
+        },
+        "trained_widths": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "chosen": "radix_heap",
+        "chosen_ring": 0,
+        "predicted_ratio": 1.0,
+        "unmeasured": false,
+        "realised_ratio": 1.0,
+        "regret": 1.029438319105025,
+        "best_fixed": {
+          "width": 2,
+          "train_mean_log_ratio": 1.0104352236679053,
+          "realised_ratio": 1.2317617056429344
+        }
+      }
+    ],
+    "aggregate_all_graphs": {
+      "n_graphs": 17,
+      "n_skipped_untrainable": 0,
+      "n_policy_chose_unmeasured": 0,
+      "n_with_realised_ratio": 17,
+      "n_chose_radix": 14,
+      "geo_mean_realised_ratio": 1.0098693688838123,
+      "geo_mean_oracle_ratio": 0.9675781932291689,
+      "geo_mean_regret": 1.0437082769646782,
+      "fraction_beat_radix": 0.0,
+      "n_beat_radix": 0,
+      "fraction_lost_to_radix": 0.17647058823529413,
+      "n_lost_to_radix": 3,
+      "fraction_tied": 0.8235294117647058,
+      "tie_tolerance": 0.02,
+      "n_strictly_below_1": 0,
+      "comparisons": [
+        {
+          "baseline": "always_radix",
+          "n_graphs": 17,
+          "geo_mean_ratio_policy_over_baseline": 1.0098693688838123,
+          "ci95": [
+            1.0,
+            1.0218260637749241
+          ],
+          "wins": 0,
+          "losses": 3,
+          "ties": 14,
+          "sign_test_p": 0.25,
+          "tie_tolerance": 0.02,
+          "bootstrap_resamples": 2000
+        },
+        {
+          "baseline": "best_fixed_candidate_from_training_graphs",
+          "n_graphs": 16,
+          "geo_mean_ratio_policy_over_baseline": 0.5151073691267033,
+          "ci95": [
+            0.2720036147783794,
+            0.8413512922109698
+          ],
+          "wins": 10,
+          "losses": 5,
+          "ties": 1,
+          "sign_test_p": 0.3017578125,
+          "tie_tolerance": 0.02,
+          "bootstrap_resamples": 2000
+        }
+      ],
+      "n_best_fixed_defined": 16
+    },
+    "aggregate_real_graphs_only": {
+      "n_graphs": 6,
+      "n_skipped_untrainable": 0,
+      "n_policy_chose_unmeasured": 0,
+      "n_with_realised_ratio": 6,
+      "n_chose_radix": 5,
+      "geo_mean_realised_ratio": 1.0085807273183536,
+      "geo_mean_oracle_ratio": 0.9659967459538571,
+      "geo_mean_regret": 1.0440829449404072,
+      "fraction_beat_radix": 0.0,
+      "n_beat_radix": 0,
+      "fraction_lost_to_radix": 0.16666666666666666,
+      "n_lost_to_radix": 1,
+      "fraction_tied": 0.8333333333333334,
+      "tie_tolerance": 0.02,
+      "n_strictly_below_1": 0,
+      "comparisons": [
+        {
+          "baseline": "always_radix",
+          "n_graphs": 6,
+          "geo_mean_ratio_policy_over_baseline": 1.0085807273183536,
+          "ci95": [
+            1.0,
+            1.0259637003883497
+          ],
+          "wins": 0,
+          "losses": 1,
+          "ties": 5,
+          "sign_test_p": 1.0,
+          "tie_tolerance": 0.02,
+          "bootstrap_resamples": 2000
+        },
+        {
+          "baseline": "best_fixed_candidate_from_training_graphs",
+          "n_graphs": 6,
+          "geo_mean_ratio_policy_over_baseline": 0.4356401791791579,
+          "ci95": [
+            0.1048245482628747,
+            1.0119640996824646
+          ],
+          "wins": 4,
+          "losses": 2,
+          "ties": 0,
+          "sign_test_p": 0.6875,
+          "tie_tolerance": 0.02,
+          "bootstrap_resamples": 2000
+        }
+      ],
+      "n_best_fixed_defined": 6
+    }
+  },
+  "data_accounting": {
+    "per_dataset_algorithm_width": [
+      {
+        "dataset": "derived_fb_pareto",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_fb_pareto",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_fb_pareto",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_fb_pareto",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_fb_pareto",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_fb_u64",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_fb_u64",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_fb_u64",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_fb_u64",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_fb_u64",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_bimodal",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_bimodal",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_bimodal",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_bimodal",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_bimodal",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_logn",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_logn",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_logn",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_logn",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_logn",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_pareto",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_pareto",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_pareto",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_pareto",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u16",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u16",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u16",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u16",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u16",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u256",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u256",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u256",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u256",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u256",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u4096",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u4096",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u4096",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u4096",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u4096",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u65536",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u65536",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u65536",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u65536",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_u65536",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_unit",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_unit",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_unit",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_unit",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_ny_unit",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_pa_u16",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_pa_u16",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_pa_u16",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_pa_u16",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "derived_pa_u16",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "dimacs_col",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "dimacs_col",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "dimacs_col",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "dimacs_col",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "dimacs_col",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "dimacs_fla",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "dimacs_fla",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "dimacs_fla",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "dimacs_fla",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "dimacs_fla",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "dimacs_ny",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "dimacs_ny",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "dimacs_ny",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "dimacs_ny",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "dimacs_ny",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "snap_facebook",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "snap_facebook",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "snap_facebook",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "snap_facebook",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "snap_facebook",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "snap_roadnet_ca",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 10,
+        "paired": 10,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "snap_roadnet_ca",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 10,
+        "paired": 10,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "snap_roadnet_ca",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 10,
+        "paired": 10,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "snap_roadnet_ca",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 10,
+        "paired": 10,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "snap_roadnet_ca",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 10,
+        "paired": 10,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "snap_roadnet_pa",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "snap_roadnet_pa",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "snap_roadnet_pa",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "snap_roadnet_pa",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      },
+      {
+        "dataset": "snap_roadnet_pa",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "candidate_records": 30,
+        "paired": 30,
+        "unsupported_candidate": 0,
+        "unsupported_radix": 0,
+        "no_radix": 0
+      }
+    ],
+    "ignored_non_candidate_records": [
+      {
+        "dataset": "derived_fb_pareto",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "derived_fb_pareto",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      },
+      {
+        "dataset": "derived_fb_u64",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "derived_fb_u64",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_bimodal",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_bimodal",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_logn",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_logn",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_pareto",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_pareto",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_u16",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_u16",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_u256",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_u256",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_u4096",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_u4096",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_u65536",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_u65536",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_unit",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "derived_ny_unit",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      },
+      {
+        "dataset": "derived_pa_u16",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "derived_pa_u16",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      },
+      {
+        "dataset": "dimacs_col",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "dimacs_col",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      },
+      {
+        "dataset": "dimacs_fla",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "dimacs_fla",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      },
+      {
+        "dataset": "dimacs_ny",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "dimacs_ny",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      },
+      {
+        "dataset": "snap_facebook",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "snap_facebook",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      },
+      {
+        "dataset": "snap_roadnet_ca",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 10
+      },
+      {
+        "dataset": "snap_roadnet_ca",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 10
+      },
+      {
+        "dataset": "snap_roadnet_pa",
+        "algorithm": "dijkstra",
+        "label": "binary_heap",
+        "records": 30
+      },
+      {
+        "dataset": "snap_roadnet_pa",
+        "algorithm": "dijkstra",
+        "label": "replay_floor",
+        "records": 30
+      }
+    ],
+    "bootstrap_replicates": 1000,
+    "labels": [
+      {
+        "dataset": "derived_fb_pareto",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          131072
+        ],
+        "log_geo_mean_ratio": 0.07441518826215761,
+        "ratio": 1.077253975865994,
+        "bootstrap_se_log": 0.021131296645136754,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_fb_pareto_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_fb_pareto",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          65536
+        ],
+        "log_geo_mean_ratio": 1.454517509487438,
+        "ratio": 4.282416741606189,
+        "bootstrap_se_log": 0.07953747527632106,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_fb_pareto_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_fb_pareto",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          32768
+        ],
+        "log_geo_mean_ratio": 2.012042944671491,
+        "ratio": 7.478580076873147,
+        "bootstrap_se_log": 0.09922895716192247,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_fb_pareto_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_fb_pareto",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          16384
+        ],
+        "log_geo_mean_ratio": 2.619429422278439,
+        "ratio": 13.72788852267935,
+        "bootstrap_se_log": 0.10081249157231782,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_fb_pareto_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_fb_pareto",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          8192
+        ],
+        "log_geo_mean_ratio": 3.0097861083850233,
+        "ratio": 20.283061084544606,
+        "bootstrap_se_log": 0.11586615533327475,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_fb_pareto_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_fb_u64",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          128
+        ],
+        "log_geo_mean_ratio": 0.04127681971121299,
+        "ratio": 1.0421405506662689,
+        "bootstrap_se_log": 0.02263122259881273,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_fb_u64_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_fb_u64",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          64
+        ],
+        "log_geo_mean_ratio": 1.661368703605902,
+        "ratio": 5.266514210676384,
+        "bootstrap_se_log": 0.09422316925047014,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_fb_u64_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_fb_u64",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          32
+        ],
+        "log_geo_mean_ratio": 2.2602513385781937,
+        "ratio": 9.585498069482668,
+        "bootstrap_se_log": 0.12434046931833838,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_fb_u64_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_fb_u64",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          16
+        ],
+        "log_geo_mean_ratio": 2.779844240005992,
+        "ratio": 16.116510444944318,
+        "bootstrap_se_log": 0.1389801780567456,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_fb_u64_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_fb_u64",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          8
+        ],
+        "log_geo_mean_ratio": 3.2811853836424754,
+        "ratio": 26.607293864764202,
+        "bootstrap_se_log": 0.15196020854920125,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_fb_u64_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_bimodal",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          32768
+        ],
+        "log_geo_mean_ratio": 0.18468294493317436,
+        "ratio": 1.2028370140944782,
+        "bootstrap_se_log": 0.03663438033412432,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_bimodal_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_bimodal",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          16384
+        ],
+        "log_geo_mean_ratio": 2.405025096923472,
+        "ratio": 11.078708320192343,
+        "bootstrap_se_log": 0.12203885671314027,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_bimodal_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_bimodal",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          8192
+        ],
+        "log_geo_mean_ratio": 2.379531733222982,
+        "ratio": 10.799844471322205,
+        "bootstrap_se_log": 0.1223110680658332,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_bimodal_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_bimodal",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          4096
+        ],
+        "log_geo_mean_ratio": 2.369854793860518,
+        "ratio": 10.695839069845803,
+        "bootstrap_se_log": 0.1305915215042598,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_bimodal_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_bimodal",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          2048
+        ],
+        "log_geo_mean_ratio": 2.6288255164946652,
+        "ratio": 13.85748495329691,
+        "bootstrap_se_log": 0.13378760714746302,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_bimodal_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_logn",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          131072
+        ],
+        "log_geo_mean_ratio": -0.04688279489588407,
+        "ratio": 0.9541992280565641,
+        "bootstrap_se_log": 0.024050684570227243,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_logn_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_logn",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          65536
+        ],
+        "log_geo_mean_ratio": 0.04691213977285883,
+        "ratio": 1.0480299248871945,
+        "bootstrap_se_log": 0.03153882731741913,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_logn_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_logn",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          32768
+        ],
+        "log_geo_mean_ratio": 0.12850538862234545,
+        "ratio": 1.137127548825625,
+        "bootstrap_se_log": 0.04010254633726597,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_logn_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_logn",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          16384
+        ],
+        "log_geo_mean_ratio": 0.2593615705333525,
+        "ratio": 1.2961023525353073,
+        "bootstrap_se_log": 0.035270179383769446,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_logn_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_logn",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          8192
+        ],
+        "log_geo_mean_ratio": 0.423895995537105,
+        "ratio": 1.527902676822905,
+        "bootstrap_se_log": 0.04030317082189747,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_logn_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_pareto",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          262144
+        ],
+        "log_geo_mean_ratio": 0.48869760136800766,
+        "ratio": 1.6301916773445366,
+        "bootstrap_se_log": 0.047214046408569445,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_pareto_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_pareto",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          131072
+        ],
+        "log_geo_mean_ratio": 0.7737641245979553,
+        "ratio": 2.167911202751099,
+        "bootstrap_se_log": 0.05763503553765421,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_pareto_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_pareto",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          65536
+        ],
+        "log_geo_mean_ratio": 1.1035576198599972,
+        "ratio": 3.01487273857365,
+        "bootstrap_se_log": 0.07096373186370175,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_pareto_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_pareto",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          32768
+        ],
+        "log_geo_mean_ratio": 1.5233758895481786,
+        "ratio": 4.587686605713537,
+        "bootstrap_se_log": 0.08968846933195403,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_pareto_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u16",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          32
+        ],
+        "log_geo_mean_ratio": 0.012876632784474326,
+        "ratio": 1.012959893609622,
+        "bootstrap_se_log": 0.035077659602335956,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u16_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u16",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          16
+        ],
+        "log_geo_mean_ratio": 1.2981591932687324,
+        "ratio": 3.662548414634809,
+        "bootstrap_se_log": 0.07862926805690115,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u16_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u16",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          8
+        ],
+        "log_geo_mean_ratio": 1.7124745244415842,
+        "ratio": 5.5426599695735685,
+        "bootstrap_se_log": 0.09488011584119603,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u16_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u16",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          8
+        ],
+        "log_geo_mean_ratio": 2.163543641033859,
+        "ratio": 8.701919565482935,
+        "bootstrap_se_log": 0.10435121824696875,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u16_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u16",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          4
+        ],
+        "log_geo_mean_ratio": 2.550891943697399,
+        "ratio": 12.818532094111434,
+        "bootstrap_se_log": 0.11628292409331684,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u16_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u256",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          512
+        ],
+        "log_geo_mean_ratio": -0.03795232707044253,
+        "ratio": 0.9627588373314149,
+        "bootstrap_se_log": 0.03267983516429092,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u256_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u256",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          256
+        ],
+        "log_geo_mean_ratio": 0.23444499069916055,
+        "ratio": 1.264206927383786,
+        "bootstrap_se_log": 0.04043286964381488,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u256_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u256",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          128
+        ],
+        "log_geo_mean_ratio": 0.3826013958354532,
+        "ratio": 1.466093522598859,
+        "bootstrap_se_log": 0.047397535929611684,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u256_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u256",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          64
+        ],
+        "log_geo_mean_ratio": 0.6044605129430457,
+        "ratio": 1.83026453846272,
+        "bootstrap_se_log": 0.052768560296709545,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u256_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u256",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          32
+        ],
+        "log_geo_mean_ratio": 0.8606543792695085,
+        "ratio": 2.3647076031518095,
+        "bootstrap_se_log": 0.06489432490358091,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u256_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u4096",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          8192
+        ],
+        "log_geo_mean_ratio": -0.13755856556372018,
+        "ratio": 0.8714833095912684,
+        "bootstrap_se_log": 0.02666673881929653,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u4096_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u4096",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          4096
+        ],
+        "log_geo_mean_ratio": -0.10759263142037624,
+        "ratio": 0.8979933361998111,
+        "bootstrap_se_log": 0.03512367473579853,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u4096_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u4096",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          2048
+        ],
+        "log_geo_mean_ratio": -0.07984045730024504,
+        "ratio": 0.9232636346097942,
+        "bootstrap_se_log": 0.03271769675565567,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u4096_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u4096",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          1024
+        ],
+        "log_geo_mean_ratio": -0.01773006324813249,
+        "ratio": 0.9824261895034055,
+        "bootstrap_se_log": 0.03218560037004689,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u4096_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u4096",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          512
+        ],
+        "log_geo_mean_ratio": -0.023378465014873947,
+        "ratio": 0.9768926940934624,
+        "bootstrap_se_log": 0.033648687070554364,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u4096_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u65536",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          131072
+        ],
+        "log_geo_mean_ratio": 0.09728150423983675,
+        "ratio": 1.1021705956502528,
+        "bootstrap_se_log": 0.03914518599842522,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u65536_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u65536",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          65536
+        ],
+        "log_geo_mean_ratio": 0.024666176615695742,
+        "ratio": 1.0249729034841204,
+        "bootstrap_se_log": 0.038860356362761694,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u65536_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u65536",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          32768
+        ],
+        "log_geo_mean_ratio": -0.05360305387308703,
+        "ratio": 0.9478082606585159,
+        "bootstrap_se_log": 0.04088198781455915,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u65536_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u65536",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          16384
+        ],
+        "log_geo_mean_ratio": -0.059307900862026926,
+        "ratio": 0.9424165536113388,
+        "bootstrap_se_log": 0.030512052239130026,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u65536_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_u65536",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          8192
+        ],
+        "log_geo_mean_ratio": -0.13034106932175618,
+        "ratio": 0.8777959905753605,
+        "bootstrap_se_log": 0.0368345114515108,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_u65536_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_unit",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          4
+        ],
+        "log_geo_mean_ratio": 0.16051835132454792,
+        "ratio": 1.1741193195876045,
+        "bootstrap_se_log": 0.03282336826303648,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_unit_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_unit",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          4
+        ],
+        "log_geo_mean_ratio": 2.7783454249444492,
+        "ratio": 16.092372869749195,
+        "bootstrap_se_log": 0.1347847856248585,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_unit_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_unit",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          4
+        ],
+        "log_geo_mean_ratio": 2.924615882254486,
+        "ratio": 18.6270696875302,
+        "bootstrap_se_log": 0.13225674596212444,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_unit_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_unit",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          4
+        ],
+        "log_geo_mean_ratio": 2.9885530520304497,
+        "ratio": 19.856929750537095,
+        "bootstrap_se_log": 0.13408936596226417,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_unit_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_ny_unit",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          4
+        ],
+        "log_geo_mean_ratio": 3.0141249724219095,
+        "ratio": 20.37125772709869,
+        "bootstrap_se_log": 0.14036605100741598,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_ny_unit_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_pa_u16",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          32
+        ],
+        "log_geo_mean_ratio": 0.06360779181339848,
+        "ratio": 1.0656743505813555,
+        "bootstrap_se_log": 0.025791114746554863,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_pa_u16_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_pa_u16",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          16
+        ],
+        "log_geo_mean_ratio": 2.395286789196605,
+        "ratio": 10.971344070889524,
+        "bootstrap_se_log": 0.0720482972652019,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_pa_u16_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_pa_u16",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          8
+        ],
+        "log_geo_mean_ratio": 3.0403704294721527,
+        "ratio": 20.912988587774443,
+        "bootstrap_se_log": 0.07690935119570796,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_pa_u16_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_pa_u16",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          8
+        ],
+        "log_geo_mean_ratio": 3.5881572079692763,
+        "ratio": 36.167365545675956,
+        "bootstrap_se_log": 0.08064900479710027,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_pa_u16_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "derived_pa_u16",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          4
+        ],
+        "log_geo_mean_ratio": 4.040684619162679,
+        "ratio": 56.865260529088225,
+        "bootstrap_se_log": 0.07964704584590614,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/derived_pa_u16_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "dimacs_col",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          262144
+        ],
+        "log_geo_mean_ratio": 0.01842016129147619,
+        "ratio": 1.0185908589444357,
+        "bootstrap_se_log": 0.030339899799682456,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/dimacs_col_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "dimacs_col",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          131072
+        ],
+        "log_geo_mean_ratio": -0.05792817296993689,
+        "ratio": 0.9437177294442031,
+        "bootstrap_se_log": 0.03363046651983546,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/dimacs_col_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "dimacs_col",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          65536
+        ],
+        "log_geo_mean_ratio": -0.06874301337517565,
+        "ratio": 0.9335665633736528,
+        "bootstrap_se_log": 0.03794506936649394,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/dimacs_col_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "dimacs_col",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          32768
+        ],
+        "log_geo_mean_ratio": -0.03968219574113795,
+        "ratio": 0.9610948306527448,
+        "bootstrap_se_log": 0.02885826296589914,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/dimacs_col_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "dimacs_col",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          16384
+        ],
+        "log_geo_mean_ratio": -0.01009987798983726,
+        "ratio": 0.989950954499947,
+        "bootstrap_se_log": 0.03537343852738977,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/dimacs_col_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "dimacs_fla",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          262144
+        ],
+        "log_geo_mean_ratio": 0.05737223755395923,
+        "ratio": 1.059049955198044,
+        "bootstrap_se_log": 0.03324153570738762,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/dimacs_fla_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "dimacs_fla",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          131072
+        ],
+        "log_geo_mean_ratio": 0.038907832443595546,
+        "ratio": 1.0396746549616742,
+        "bootstrap_se_log": 0.026679424005936248,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/dimacs_fla_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "dimacs_fla",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          65536
+        ],
+        "log_geo_mean_ratio": 0.013334366037278932,
+        "ratio": 1.0134236651704198,
+        "bootstrap_se_log": 0.025515943549877764,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/dimacs_fla_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "dimacs_fla",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          32768
+        ],
+        "log_geo_mean_ratio": -0.008384791577604767,
+        "ratio": 0.9916502627444806,
+        "bootstrap_se_log": 0.03204504312971486,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/dimacs_fla_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "dimacs_fla",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          16384
+        ],
+        "log_geo_mean_ratio": 0.05504398981657691,
+        "ratio": 1.056587092725613,
+        "bootstrap_se_log": 0.02944712989416045,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/dimacs_fla_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "dimacs_ny",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          65536
+        ],
+        "log_geo_mean_ratio": -0.10142774292312896,
+        "ratio": 0.9035464646098809,
+        "bootstrap_se_log": 0.029359572242645862,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/dimacs_ny_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "dimacs_ny",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          32768
+        ],
+        "log_geo_mean_ratio": -0.05789482112218617,
+        "ratio": 0.9437492046991113,
+        "bootstrap_se_log": 0.031500396111906706,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/dimacs_ny_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "dimacs_ny",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          16384
+        ],
+        "log_geo_mean_ratio": -0.08689216860096101,
+        "ratio": 0.9167759475364151,
+        "bootstrap_se_log": 0.02708233463420934,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/dimacs_ny_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "dimacs_ny",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          8192
+        ],
+        "log_geo_mean_ratio": -0.029906867097613924,
+        "ratio": 0.9705359181664808,
+        "bootstrap_se_log": 0.03852363535798669,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/dimacs_ny_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "dimacs_ny",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          4096
+        ],
+        "log_geo_mean_ratio": 0.014544495058926032,
+        "ratio": 1.0146507808932907,
+        "bootstrap_se_log": 0.03170718626102826,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/dimacs_ny_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "snap_facebook",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          8192
+        ],
+        "log_geo_mean_ratio": 0.051264732768498994,
+        "ratio": 1.0526015145145553,
+        "bootstrap_se_log": 0.03147789025478061,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/snap_facebook_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "snap_facebook",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          4096
+        ],
+        "log_geo_mean_ratio": 0.6848235559602105,
+        "ratio": 1.9834218416985485,
+        "bootstrap_se_log": 0.04985270773823503,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/snap_facebook_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "snap_facebook",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          2048
+        ],
+        "log_geo_mean_ratio": 1.0470924399723356,
+        "ratio": 2.8493543933568075,
+        "bootstrap_se_log": 0.064932969532109,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/snap_facebook_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "snap_facebook",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          1024
+        ],
+        "log_geo_mean_ratio": 1.5100584052562132,
+        "ratio": 4.526995186906985,
+        "bootstrap_se_log": 0.08553468099584671,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/snap_facebook_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "snap_facebook",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          512
+        ],
+        "log_geo_mean_ratio": 2.0748029059997255,
+        "ratio": 7.962976849398191,
+        "bootstrap_se_log": 0.11098646429881062,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/snap_facebook_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "snap_roadnet_ca",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          65536
+        ],
+        "log_geo_mean_ratio": 0.1711148041052694,
+        "ratio": 1.1866269708498265,
+        "bootstrap_se_log": 0.058433127414189545,
+        "n_queries": 10,
+        "n_pairs": 10,
+        "files": [
+          "results/raw/policy/snap_roadnet_ca_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "snap_roadnet_ca",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          32768
+        ],
+        "log_geo_mean_ratio": 4.2640757554415565,
+        "ratio": 71.09917656952912,
+        "bootstrap_se_log": 0.24627124494256047,
+        "n_queries": 10,
+        "n_pairs": 10,
+        "files": [
+          "results/raw/policy/snap_roadnet_ca_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "snap_roadnet_ca",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          16384
+        ],
+        "log_geo_mean_ratio": 4.652902353757584,
+        "ratio": 104.88896912349712,
+        "bootstrap_se_log": 0.23726626845241502,
+        "n_queries": 10,
+        "n_pairs": 10,
+        "files": [
+          "results/raw/policy/snap_roadnet_ca_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "snap_roadnet_ca",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          8192
+        ],
+        "log_geo_mean_ratio": 4.8931629293822345,
+        "ratio": 133.37476256074365,
+        "bootstrap_se_log": 0.24889192708506136,
+        "n_queries": 10,
+        "n_pairs": 10,
+        "files": [
+          "results/raw/policy/snap_roadnet_ca_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "snap_roadnet_ca",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          4096
+        ],
+        "log_geo_mean_ratio": 5.06664238019078,
+        "ratio": 158.64077670004792,
+        "bootstrap_se_log": 0.2270265941408273,
+        "n_queries": 10,
+        "n_pairs": 10,
+        "files": [
+          "results/raw/policy/snap_roadnet_ca_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "snap_roadnet_pa",
+        "algorithm": "dijkstra",
+        "width": 1,
+        "labels": [
+          "pooled_w1"
+        ],
+        "ring_sizes": [
+          1024
+        ],
+        "log_geo_mean_ratio": -0.029013332242573086,
+        "ratio": 0.9714035133929947,
+        "bootstrap_se_log": 0.024179951426664643,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/snap_roadnet_pa_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "snap_roadnet_pa",
+        "algorithm": "dijkstra",
+        "width": 2,
+        "labels": [
+          "pooled_w2"
+        ],
+        "ring_sizes": [
+          512
+        ],
+        "log_geo_mean_ratio": 0.20844542565875207,
+        "ratio": 1.2317617056429344,
+        "bootstrap_se_log": 0.0300434191076952,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/snap_roadnet_pa_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "snap_roadnet_pa",
+        "algorithm": "dijkstra",
+        "width": 4,
+        "labels": [
+          "pooled_w4"
+        ],
+        "ring_sizes": [
+          256
+        ],
+        "log_geo_mean_ratio": 0.38259796642629684,
+        "ratio": 1.4660884947729296,
+        "bootstrap_se_log": 0.032619716875999336,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/snap_roadnet_pa_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "snap_roadnet_pa",
+        "algorithm": "dijkstra",
+        "width": 8,
+        "labels": [
+          "pooled_w8"
+        ],
+        "ring_sizes": [
+          128
+        ],
+        "log_geo_mean_ratio": 0.5590645635375249,
+        "ratio": 1.7490356231221293,
+        "bootstrap_se_log": 0.027275892116539767,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/snap_roadnet_pa_dijkstra.json"
+        ]
+      },
+      {
+        "dataset": "snap_roadnet_pa",
+        "algorithm": "dijkstra",
+        "width": 16,
+        "labels": [
+          "pooled_w16"
+        ],
+        "ring_sizes": [
+          128
+        ],
+        "log_geo_mean_ratio": 0.8429047456231307,
+        "ratio": 2.323105215315056,
+        "bootstrap_se_log": 0.03479860569715226,
+        "n_queries": 30,
+        "n_pairs": 30,
+        "files": [
+          "results/raw/policy/snap_roadnet_pa_dijkstra.json"
+        ]
+      }
+    ]
+  }
+}
