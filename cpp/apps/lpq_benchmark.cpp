@@ -60,6 +60,7 @@
 #include "lpq/lpq/classical_bucket_queue.hpp"
 #include "lpq/lpq/learned_priority_queue.hpp"
 #include "lpq/lpq/pooled_bucket_queue.hpp"
+#include "lpq/lpq/queue_policy.hpp"
 #include "lpq/lpq/queue_config.hpp"
 #include "lpq/models/logistic_predictor.hpp"
 #include "lpq/pq/binary_heap.hpp"
@@ -170,6 +171,10 @@ struct Options {
     /// next. See the main loop for why.
     bool interleave = false;
 
+    /// Queue policy file for --pq lpq_optimized. Empty means "no policy", which
+    /// resolves to the radix heap.
+    std::string policy;
+
     /// A list of configurations to compare in one experiment, each with its own
     /// geometry: name[:w=N,ring=N,front=N][@label];... Implies nothing about
     /// order; combine with --interleave.
@@ -275,6 +280,7 @@ void print_usage() {
   --lpq-bucket-width <n> substrate bucket width (default: derived from weights)
   --lpq-front <k>        substrate front length (default: window maximum; 0 = off)
   --lpq-ring <n>         substrate ring size, a power of two (default 1024)
+  --policy <path>        queue policy for lpq_optimized (default: none = radix)
   --interleave           query-major order with a seeded shuffle of the queue
                          order per query (removes host-drift confounding)
   --compare <specs>      name[:w=N,ring=N,front=N][@label];... measured in one
@@ -371,6 +377,8 @@ void print_usage() {
             if (o.lpq_bucket_width == 0) {
                 throw InvalidConfigError("--lpq-bucket-width must be positive");
             }
+        } else if (a == "--policy") {
+            o.policy = next_arg(argc, argv, i, "--policy");
         } else if (a == "--interleave") {
             o.interleave = true;
         } else if (a == "--compare") {
@@ -1134,10 +1142,14 @@ int main(int argc, char** argv) {
                 "--dataset and --graph are mutually exclusive; the run measures one graph");
         }
 
-        Graph       g;
-        std::string graph_label = o.graph_spec;
+        Graph         g;
+        std::string   graph_label = o.graph_spec;
+        std::uint64_t graph_checksum = 0;
+        std::string   profile_cache;
         if (!o.dataset.empty()) {
             LoadedGraph<W> loaded = read_binary_graph_file<W>(o.dataset);
+            graph_checksum        = loaded.checksum;
+            profile_cache = std::filesystem::path(o.dataset).replace_extension(".lpqprofile").string();
             g                     = std::move(loaded.graph);
             graph_label           = std::filesystem::path(o.dataset).stem().string();
         } else {
@@ -1287,6 +1299,17 @@ int main(int argc, char** argv) {
             }
         }
 
+        // --- the optimised queue's decision, once per graph --------------------
+        //
+        // Profiling and the policy are costs of lpq_optimized, paid here and
+        // recorded in every lpq_optimized row (profile_ns). They are outside the
+        // timed search, as a deployed system would compute them at graph load.
+        ProfileSource       profile_source = ProfileSource::kComputed;
+        const WeightProfile profile =
+            load_or_compute_profile(profile_cache, graph_checksum, g, meta, profile_source);
+        const QueueSelectionPolicy policy =
+            o.policy.empty() ? QueueSelectionPolicy{} : QueueSelectionPolicy::load(o.policy);
+
         // --- the configurations to measure ------------------------------------
         //
         // A matrix row becomes one spec with the command-line geometry. With
@@ -1358,6 +1381,7 @@ int main(int argc, char** argv) {
                                                 "that says a model was involved");
             }
 
+            QueueChoice chosen;
             ResultRecord rec;
             if (!queue_supports_mode) {
                 rec.pq                 = name;
@@ -1399,6 +1423,23 @@ int main(int argc, char** argv) {
                 ReplayQueue::script = &recorder.script;
                 rec = measure_one<ReplayQueue>(g, meta, q, o, name, hw, heuristic_scale);
                 ReplayQueue::script = nullptr;
+            } else if (name == "lpq_optimized") {
+                // Resolve to a concrete exact queue, then measure THAT queue. The
+                // row keeps the name lpq_optimized, and the record says what it
+                // resolved to, so a result obtained by choosing the radix heap
+                // can never be read as a result of the learned queue.
+                const std::uint64_t step = static_cast<std::uint64_t>(
+                    o.algorithm == "astar" ? 2.0 * profile.max_weight : profile.max_weight);
+                chosen = policy.choose(profile, step);
+                if (chosen.kind == QueueKind::kRadixHeap) {
+                    if constexpr (radix_heap_supports<W>()) {
+                        rec = measure_one<RadixHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
+                    }
+                } else {
+                    o.lpq_bucket_width = chosen.width;
+                    o.lpq_ring         = chosen.ring;
+                    rec = measure_one<BenchPooled>(g, meta, q, o, name, hw, heuristic_scale);
+                }
             } else if (name == "pooled_bucket") {
                 rec = measure_one<BenchPooled>(g, meta, q, o, name, hw, heuristic_scale);
             } else if (name == "bucket_queue") {
@@ -1468,6 +1509,19 @@ int main(int argc, char** argv) {
                               : name.rfind("lpq", 0) == 0     ? "modular"
                                                               : "";
             qc.position     = position;
+            if (name == "lpq_optimized") {
+                qc.queue             = "lpq_optimized";
+                qc.bucket_width      = chosen.kind == QueueKind::kPooledBucket ? chosen.width : 0;
+                qc.ring_size         = chosen.kind == QueueKind::kPooledBucket ? chosen.ring : 0;
+                qc.front             = -1;
+                qc.strategy          = "";
+                qc.resolved_queue    = chosen.describe();
+                qc.resolution_reason = chosen.reason;
+                qc.predicted_ratio   = chosen.predicted_ratio;
+                qc.profile_ns        = profile.compute_ns;
+                qc.policy_source     = policy.source();
+                qc.profile_source    = to_string(profile_source);
+            }
             rec.queue_config = qc;
             return rec;
         };

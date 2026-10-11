@@ -140,6 +140,17 @@ struct ResultRecord {
         std::int64_t  front        = -1; ///< -1: not applicable
         std::string   strategy;          ///< "modular" | "direct" | ""
         std::uint32_t position     = 0;  ///< place in this query's measurement order
+
+        /// For a queue that resolves to another one (lpq_optimized): which queue
+        /// it actually ran, why, and what deciding cost. Empty otherwise. A row
+        /// whose resolved queue is a classical heap is that heap's result and
+        /// must be read as such.
+        std::string   resolved_queue;
+        std::string   resolution_reason;
+        double        predicted_ratio = 0.0;     ///< vs radix heap; 0 if not predicted
+        std::uint64_t profile_ns      = 0;       ///< weight-profile computation, once per graph
+        std::string   policy_source;
+        std::string   profile_source;            ///< computed | computed_and_cached | cached
     };
     std::optional<QueueConfig> queue_config;
 
@@ -186,6 +197,14 @@ inline void write_record(JsonWriter& w, const ResultRecord& r) {
         w.key_value("front", qc.front);
         w.key_value("strategy", qc.strategy);
         w.key_value("order_position", static_cast<std::uint64_t>(qc.position));
+        if (!qc.resolved_queue.empty()) {
+            w.key_value("resolved_queue", qc.resolved_queue);
+            w.key_value("resolution_reason", qc.resolution_reason);
+            w.key_value("predicted_ratio_vs_radix", qc.predicted_ratio);
+            w.key_value("profile_ns", qc.profile_ns);
+            w.key_value("policy_source", qc.policy_source);
+            w.key_value("profile_source", qc.profile_source);
+        }
         w.end_object();
     }
 

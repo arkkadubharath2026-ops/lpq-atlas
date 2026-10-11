@@ -48,6 +48,8 @@
 #include "lpq/graph/graph_io.hpp"
 #include "lpq/graph/graph_metadata.hpp"
 #include "lpq/lpq/learned_priority_queue.hpp"
+#include "lpq/lpq/pooled_bucket_queue.hpp"
+#include "lpq/lpq/queue_policy.hpp"
 #include "lpq/lpq/queue_config.hpp"
 #include "lpq/metrics/benchmark_harness.hpp"
 #include "lpq/metrics/hardware_info.hpp"
@@ -98,6 +100,7 @@ struct Options {
     std::string   pq        = "binary_heap";
     std::string   model;
     bool          adaptive_learning = false;
+    std::string   policy;  ///< queue policy file for --pq lpq_optimized (empty: none)
     std::string   mode    = "exact";
     double        epsilon = 0.0;
     std::uint64_t source  = 0;
@@ -133,6 +136,7 @@ void print_usage() {
   --mode <name>           exact (default) | approximate (learned queues only)
   --epsilon <e>           slack for approximate mode, 0 < e <= 1
   --lpq-window <lo:hi>    learned-queue candidate window (default 2:32)
+  --policy <path>         queue policy for --pq lpq_optimized (default: none = radix)
   --lpq-bucket-width <n>  substrate bucket width (default derived from weights)
   --trace-level <l>       none (default) | summary | visual | full
   --max-events <n>        trace event cap (default 250000)
@@ -239,6 +243,8 @@ void print_usage() {
         } else if (a == "--cpu-core") {
             o.cpu_core = static_cast<int>(parse_u64(next_arg(argc, argv, i, "--cpu-core"),
                                                     "--cpu-core"));
+        } else if (a == "--policy") {
+            o.policy = next_arg(argc, argv, i, "--policy");
         } else {
             invalid("unknown argument: " + a);
         }
@@ -253,7 +259,7 @@ void print_usage() {
     }
     static const std::vector<std::string> kQueues = {
         "binary_heap", "four_ary_heap", "pairing_heap", "fibonacci_heap",
-        "radix_heap",  "lpq",           "lpq_model",    "lpq_adaptive"};
+        "radix_heap",  "lpq",           "lpq_model",    "lpq_adaptive", "lpq_optimized"};
     if (std::find(kQueues.begin(), kQueues.end(), o.pq) == kQueues.end()) {
         invalid("unknown --pq: " + o.pq);
     }
@@ -274,6 +280,14 @@ void print_usage() {
     }
     if (!learned && (o.window_min != 2 || o.window_max != 32 || o.bucket_width != 0)) {
         invalid("--lpq-window and --lpq-bucket-width only apply to learned queues");
+    }
+    if (o.pq == "lpq_optimized" &&
+        (o.mode != "exact" || o.window_min != 2 || o.window_max != 32 || o.bucket_width != 0)) {
+        invalid("lpq_optimized is exact-only and chooses its own geometry; it takes no "
+                "--mode approximate, --lpq-window or --lpq-bucket-width");
+    }
+    if (!o.policy.empty() && o.pq != "lpq_optimized") {
+        invalid("--policy only affects --pq lpq_optimized");
     }
     if (o.mode != "exact" && o.mode != "approximate") invalid("unknown --mode: " + o.mode);
     if (o.mode == "approximate") {
@@ -310,6 +324,13 @@ struct Context {
     std::string          heuristic;  ///< resolved; empty for dijkstra
     double               heuristic_scale = 1.0;
     const Scorer*        scorer          = nullptr;
+
+    // lpq_optimized: what the queue policy resolved to, and what deciding cost.
+    QueueChoice          choice;
+    WeightProfile        profile;
+    ProfileSource        profile_source = ProfileSource::kComputed;
+    std::string          policy_source;
+    std::uint64_t        decide_ns = 0;  ///< policy evaluation only (profile is separate)
 };
 
 template <typename Queue, typename Obs>
@@ -360,6 +381,8 @@ Queue make_queue(const Context& c) {
             q.set_scorer(c.scorer);
         }
         return q;
+    } else if constexpr (std::is_same_v<Queue, PooledBucketQueue<W>>) {
+        return Queue{static_cast<Dist>(c.choice.width), c.choice.ring};
     } else {
         return Queue{};
     }
@@ -694,6 +717,28 @@ void write_result(std::ostream& os, const Context& c, const Execution& ex,
         w.end_object();
     }
 
+    if (c.o.pq == "lpq_optimized") {
+        // What the optimised queue actually was in this run, and what choosing
+        // it cost. When resolved_queue is the radix heap this is a classical
+        // heap's result and must be read as one.
+        w.begin_object("optimizer");
+        w.key_value("resolved_queue", c.choice.describe());
+        w.key_value("resolved_kind", c.choice.kind == QueueKind::kRadixHeap ? "radix_heap"
+                                                                            : "pooled_bucket");
+        w.key_value("bucket_width", c.choice.kind == QueueKind::kPooledBucket ? c.choice.width : 0);
+        w.key_value("ring_size",
+                    static_cast<std::uint64_t>(c.choice.kind == QueueKind::kPooledBucket ? c.choice.ring
+                                                                                         : 0));
+        w.key_value("reason", c.choice.reason);
+        w.key_value("predicted_ratio_vs_radix", c.choice.predicted_ratio);
+        w.key_value("policy_source", c.policy_source);
+        w.key_value("profile_source", std::string(to_string(c.profile_source)));
+        w.key_value("profile_ns", c.profile.compute_ns);
+        w.key_value("decision_ns", c.decide_ns);
+        w.key_value("per_query_timing_includes_setup", false);
+        w.end_object();
+    }
+
     if (learned && ex.lpq) {
         w.begin_object("lpq");
         w.key_value("bucket_width", ex.bucket_width);
@@ -946,6 +991,28 @@ int main(int argc, char** argv) {
             c.scorer  = scorer.get();
         }
 
+        // --- optimised queue: profile the graph, ask the policy ----------------
+        if (o.pq == "lpq_optimized") {
+            const std::string cache =
+                std::filesystem::path(o.dataset).replace_extension(".lpqprofile").string();
+            c.profile = load_or_compute_profile(cache, loaded.checksum, g, c.meta,
+                                                c.profile_source);
+            QueueSelectionPolicy policy;
+            if (!o.policy.empty()) {
+                try {
+                    policy = QueueSelectionPolicy::load(o.policy);
+                } catch (const std::exception& e) {
+                    throw CategorisedError("model", std::string("queue policy rejected: ") + e.what());
+                }
+            }
+            c.policy_source = policy.source();
+            t0 = std::chrono::steady_clock::now();
+            const std::uint64_t step = static_cast<std::uint64_t>(
+                o.algorithm == "astar" ? 2.0 * c.profile.max_weight : c.profile.max_weight);
+            c.choice    = policy.choose(c.profile, step);
+            c.decide_ns = ns_since(t0);
+        }
+
         // --- reference ------------------------------------------------------
         t0 = std::chrono::steady_clock::now();
         ReferenceDijkstraOptions ropts;
@@ -961,6 +1028,12 @@ int main(int argc, char** argv) {
         else if (o.pq == "pairing_heap") ex = execute<PairingHeap<Dist>>(c);
         else if (o.pq == "fibonacci_heap") ex = execute<FibonacciHeap<Dist>>(c);
         else if (o.pq == "radix_heap") ex = execute<RadixHeap<Dist>>(c);
+        else if (o.pq == "lpq_optimized") {
+            // Measure the queue the policy resolved to, not a stand-in: the
+            // result below says which one that was.
+            if (c.choice.kind == QueueKind::kRadixHeap) ex = execute<RadixHeap<Dist>>(c);
+            else ex = execute<PooledBucketQueue<W>>(c);
+        }
         else if (o.pq == "lpq_model") ex = execute<LpqStatic>(c);
         else ex = execute<LpqPlain>(c);  // lpq and lpq_adaptive share a type
 

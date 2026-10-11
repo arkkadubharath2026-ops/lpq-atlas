@@ -25,6 +25,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <queue>
 #include <set>
@@ -43,6 +46,8 @@
 #include "lpq/lpq/classical_bucket_queue.hpp"
 #include "lpq/lpq/extraction_observer.hpp"
 #include "lpq/lpq/learned_priority_queue.hpp"
+#include "lpq/lpq/pooled_bucket_queue.hpp"
+#include "lpq/lpq/queue_policy.hpp"
 #include "lpq/pq/priority_queue.hpp"
 #include "lpq_test/differential.hpp"
 #include "lpq_test/graph_fixtures.hpp"
@@ -1667,6 +1672,293 @@ TEST(Regression, SubstrateOracleSeed7100194Ring64Width37) {
 
 TEST(Regression, SubstrateOracleSeed7100253Ring1024Width37) {
     ASSERT_NO_FATAL_FAILURE(substrate_trial(37, 1024, 7100253));
+}
+
+
+// =============================================================================
+// 5. PooledBucketQueue and the queue-selection policy
+// =============================================================================
+
+using Pooled = PooledBucketQueue<Weight>;
+static_assert(PriorityQueueLike<Pooled>);
+static_assert(LazyDeletionQueue<Pooled>);
+
+TEST(PooledBucketQueue, MatchesTheHeapReferenceAcrossWidthsAndRings) {
+    const auto cases = make_cases(5200001);
+    for (std::size_t ring : {std::size_t{2}, std::size_t{64}, std::size_t{1024}, std::size_t{16384}}) {
+        for (Key width : kQueueWidths) {
+            Pooled q(width, ring);
+            run_cases(q, cases, "pooled w=" + std::to_string(width) + " ring=" + std::to_string(ring));
+            if (::testing::Test::HasFailure()) {
+                return;
+            }
+        }
+    }
+}
+
+TEST(PooledBucketQueue, AStarMatchesTheReference) {
+    const auto grids = astar_grids();
+    for (std::size_t ring : {std::size_t{2}, std::size_t{64}, std::size_t{1024}}) {
+        for (Key width : {Key{1}, Key{5}, Key{64}}) {
+            Pooled q(width, ring);
+            astar_sweep(q, grids, 5400200 + ring + width,
+                        "pooled w=" + std::to_string(width) + " ring=" + std::to_string(ring));
+            if (::testing::Test::HasFailure()) {
+                return;
+            }
+        }
+    }
+}
+
+// Random monotone push/pop streams against a priority_queue oracle. Keys are
+// drawn from small steps, window-edge steps and enormous jumps so every route
+// through overflow and refile is taken; the popped KEY sequence must equal the
+// oracle's and every pushed (node, key) must come out exactly once.
+void pooled_oracle_trial(Key width, std::size_t ring, std::uint64_t seed) {
+    SCOPED_TRACE("pooled oracle width " + std::to_string(width) + " ring " + std::to_string(ring) +
+                 " seed " + std::to_string(seed));
+    Rng    rng(seed);
+    Pooled q(width, ring);
+    std::priority_queue<Key, std::vector<Key>, std::greater<Key>> oracle;
+    std::multiset<std::pair<NodeId, Key>> in_queue;
+    Key floor_key = 0;
+    NodeId next_node = 0;
+
+    const auto push_one = [&] {
+        const std::uint64_t kind = rng.next_below(10);
+        Key step;
+        if (kind < 6) step = rng.next_below(width * 3 + 2);
+        else if (kind < 8) step = width * ring - 2 + rng.next_below(5);   // window edge
+        else if (kind < 9) step = rng.next_below(width * ring * 4 + 2);
+        else step = width * ring * (10 + rng.next_below(50)) + rng.next_below(1000);
+        const Key key = floor_key + step;
+        q.push(next_node, key);
+        oracle.push(key);
+        in_queue.insert({next_node, key});
+        ++next_node;
+    };
+    for (int op = 0; op < 3000; ++op) {
+        if (q.empty() || rng.next_below(100) < 55) {
+            push_one();
+        } else {
+            const auto e = q.pop();
+            ASSERT_EQ(e.key, oracle.top()) << "op " << op;
+            oracle.pop();
+            const auto it = in_queue.find({e.node, e.key});
+            ASSERT_NE(it, in_queue.end()) << "popped an entry that was never pushed";
+            in_queue.erase(it);
+            floor_key = e.key;
+            ASSERT_EQ(q.size(), oracle.size());
+        }
+    }
+    while (!q.empty()) {
+        const auto e = q.pop();
+        ASSERT_EQ(e.key, oracle.top());
+        oracle.pop();
+        const auto it = in_queue.find({e.node, e.key});
+        ASSERT_NE(it, in_queue.end());
+        in_queue.erase(it);
+    }
+    ASSERT_TRUE(in_queue.empty());
+}
+
+TEST(PooledBucketQueue, RandomisedMonotoneWorkloadsMatchAnOracleAcrossRingsAndWidths) {
+    std::uint64_t seed = 5300000;
+    for (std::size_t ring : {std::size_t{2}, std::size_t{4}, std::size_t{64}, std::size_t{1024}}) {
+        for (Key width : {Key{1}, Key{2}, Key{3}, Key{37}, Key{1000}}) {
+            for (int rep = 0; rep < 12; ++rep) {
+                ASSERT_NO_FATAL_FAILURE(pooled_oracle_trial(width, ring, ++seed));
+            }
+        }
+    }
+}
+
+TEST(PooledBucketQueue, RejectsInvalidGeometryAndEmptyPop) {
+    EXPECT_THROW(Pooled(0, 64), InvalidConfigError);
+    EXPECT_THROW(Pooled(1, 0), InvalidConfigError);
+    EXPECT_THROW(Pooled(1, 1), InvalidConfigError);
+    EXPECT_THROW(Pooled(1, 3), InvalidConfigError);
+    EXPECT_THROW(Pooled(1, Pooled::kMaxRing * 2), InvalidConfigError);
+    Pooled q(1, 8);
+    EXPECT_THROW((void)q.pop(), InternalError);
+}
+
+TEST(PooledBucketQueue, PushBelowTheBaseIsAnError) {
+    Pooled q(4, 8);
+    q.push(1, 100);
+    (void)q.pop();
+    q.push(2, 130);
+    (void)q.pop();  // base has advanced past 100
+    EXPECT_THROW(q.push(3, 50), InternalError);
+}
+
+TEST(PooledBucketQueue, ClearAllowsReuseAndKeepsOrder) {
+    Pooled q(2, 16);
+    for (int cycle = 0; cycle < 50; ++cycle) {
+        q.clear();
+        for (NodeId n = 0; n < 40; ++n) {
+            q.push(n, static_cast<Key>((n * 7919U) % 500U));
+        }
+        Key last = 0;
+        std::size_t count = 0;
+        while (!q.empty()) {
+            const auto e = q.pop();
+            ASSERT_GE(e.key, last);
+            last = e.key;
+            ++count;
+        }
+        ASSERT_EQ(count, 40U);
+    }
+}
+
+TEST(PooledBucketQueue, DuplicateNodesWithDifferentKeysAreBothReturned) {
+    Pooled q(1, 8);
+    q.push(7, 5);
+    q.push(7, 3);
+    q.push(7, 5);
+    EXPECT_EQ(q.pop().key, 3U);
+    EXPECT_EQ(q.pop().key, 5U);
+    EXPECT_EQ(q.pop().key, 5U);
+    EXPECT_TRUE(q.empty());
+}
+
+TEST(QueuePolicy, RingCoversTheLargestKeyRise) {
+    // A push is at most max_step above the current bucket's top, so its offset
+    // is at most 1 + max_step / width. The ring must exceed that.
+    for (std::uint64_t step : {1ULL, 7ULL, 1000ULL, 36946ULL, 214013ULL}) {
+        for (std::uint64_t width : {1ULL, 2ULL, 4ULL, 37ULL}) {
+            const std::size_t ring = pooled_ring_for(step, width);
+            EXPECT_TRUE(std::has_single_bit(ring));
+            EXPECT_GT(ring, 1 + step / width) << "step " << step << " width " << width;
+        }
+    }
+}
+
+std::string write_temp(const std::string& name, const std::string& text) {
+    const auto path = (std::filesystem::temp_directory_path() / name).string();
+    std::ofstream(path) << text;
+    return path;
+}
+
+const char* kFeatureLine =
+    "features log2_max_w log2_mean_w p50_over_max p99_over_max cv_w log2_nodes mean_degree\n";
+
+WeightProfile sample_profile() {
+    WeightProfile p;
+    p.nodes = 264346; p.arcs = 733846; p.min_weight = 1; p.max_weight = 36946;
+    p.mean_weight = 1293.3; p.stddev_weight = 1130.0; p.p50 = 1000; p.p90 = 2600; p.p99 = 5200;
+    p.mean_degree = 2.776;
+    return p;
+}
+
+TEST(QueuePolicy, NoPolicyMeansRadix) {
+    const QueueSelectionPolicy pol;
+    const QueueChoice c = pol.choose(sample_profile(), 36946);
+    EXPECT_EQ(c.kind, QueueKind::kRadixHeap);
+    EXPECT_EQ(c.describe(), "radix_heap");
+}
+
+TEST(QueuePolicy, ChoosesTheCandidatePredictedToBeatRadixByTheMargin) {
+    const auto path = write_temp(
+        "lpq_policy_choose.lpqpolicy",
+        std::string("lpqpolicy 1\nmargin 0.05\ntrained_on unit test\n") + kFeatureLine +
+            "candidate pooled w=1 intercept -0.10 coef 0 0 0 0 0 0 0\n"
+            "candidate pooled w=2 intercept -0.20 coef 0 0 0 0 0 0 0\n"
+            "candidate pooled w=4 intercept 0.30 coef 0 0 0 0 0 0 0\n");
+    const auto pol = QueueSelectionPolicy::load(path);
+    EXPECT_EQ(pol.candidate_count(), 3U);
+    const QueueChoice c = pol.choose(sample_profile(), 36946);
+    ASSERT_EQ(c.kind, QueueKind::kPooledBucket);
+    EXPECT_EQ(c.width, 2U);                       // lowest predicted ratio
+    EXPECT_NEAR(c.predicted_ratio, std::exp(-0.20), 1e-12);
+    EXPECT_EQ(c.ring, pooled_ring_for(36946, 2));
+    std::remove(path.c_str());
+}
+
+TEST(QueuePolicy, KeepsRadixWhenNoCandidateClearsTheMargin) {
+    const auto path = write_temp(
+        "lpq_policy_margin.lpqpolicy",
+        std::string("lpqpolicy 1\nmargin 0.10\n") + kFeatureLine +
+            "candidate pooled w=1 intercept -0.05 coef 0 0 0 0 0 0 0\n");  // ratio 0.951 > 0.90
+    const auto pol = QueueSelectionPolicy::load(path);
+    EXPECT_EQ(pol.choose(sample_profile(), 36946).kind, QueueKind::kRadixHeap);
+    std::remove(path.c_str());
+}
+
+TEST(QueuePolicy, SkipsGeometriesWhoseRingWouldBeTooLarge) {
+    const auto path = write_temp(
+        "lpq_policy_ring.lpqpolicy",
+        std::string("lpqpolicy 1\nmargin 0.0\n") + kFeatureLine +
+            "candidate pooled w=1 intercept -1.0 coef 0 0 0 0 0 0 0\n");
+    const auto pol = QueueSelectionPolicy::load(path);
+    // max_step 10^6 at width 1 needs a ring far beyond the cap.
+    EXPECT_EQ(pol.choose(sample_profile(), 1'000'000).kind, QueueKind::kRadixHeap);
+    EXPECT_EQ(pol.choose(sample_profile(), 1'000).kind, QueueKind::kPooledBucket);
+    std::remove(path.c_str());
+}
+
+TEST(QueuePolicy, AFeatureListFromADifferentVersionIsRefused) {
+    const auto path = write_temp("lpq_policy_badfeat.lpqpolicy",
+                                 "lpqpolicy 1\nfeatures a b c d e f g\n");
+    EXPECT_THROW((void)QueueSelectionPolicy::load(path), InvalidConfigError);
+    std::remove(path.c_str());
+}
+
+TEST(QueuePolicy, MalformedFilesAreRefusedNotGuessedAt) {
+    const auto too_few = write_temp(
+        "lpq_policy_few.lpqpolicy",
+        std::string("lpqpolicy 1\n") + kFeatureLine + "candidate pooled w=1 intercept 0 coef 0 0 0\n");
+    EXPECT_THROW((void)QueueSelectionPolicy::load(too_few), InvalidConfigError);
+    const auto no_header = write_temp("lpq_policy_nohdr.lpqpolicy", std::string(kFeatureLine));
+    EXPECT_THROW((void)QueueSelectionPolicy::load(no_header), InvalidConfigError);
+    const auto bad_version = write_temp("lpq_policy_ver.lpqpolicy", "lpqpolicy 9\n");
+    EXPECT_THROW((void)QueueSelectionPolicy::load(bad_version), InvalidConfigError);
+    const auto unknown = write_temp("lpq_policy_unk.lpqpolicy",
+                                    std::string("lpqpolicy 1\n") + kFeatureLine + "mystery 3\n");
+    EXPECT_THROW((void)QueueSelectionPolicy::load(unknown), InvalidConfigError);
+    EXPECT_THROW((void)QueueSelectionPolicy::load("/nonexistent/dir/x.lpqpolicy"), InvalidConfigError);
+    for (const auto& f : {too_few, no_header, bad_version, unknown}) {
+        std::remove(f.c_str());
+    }
+}
+
+TEST(QueuePolicy, ProfileCacheRoundTripsAndRefusesAForeignGraph) {
+    Rng rng(5500001);
+    const Graph g = weighted_grid(rng, 12, 12, 1, 40, false);
+    const GraphMetadata meta = compute_metadata(g);
+    const auto cache = (std::filesystem::temp_directory_path() / "lpq_profile_cache.lpqprofile").string();
+    std::remove(cache.c_str());
+
+    ProfileSource src = ProfileSource::kCached;
+    const WeightProfile first = load_or_compute_profile(cache, 111ULL, g, meta, src);
+    EXPECT_EQ(src, ProfileSource::kComputedAndCached);
+    EXPECT_EQ(first.nodes, meta.node_count);
+    EXPECT_EQ(first.max_weight, meta.max_weight);
+
+    const WeightProfile second = load_or_compute_profile(cache, 111ULL, g, meta, src);
+    EXPECT_EQ(src, ProfileSource::kCached);
+    EXPECT_EQ(second.p50, first.p50);
+    EXPECT_EQ(second.p99, first.p99);
+    EXPECT_EQ(second.compute_ns, first.compute_ns);  // the ORIGINAL cost is what is reported
+
+    // A cache written for another graph (different checksum) must not be used.
+    const WeightProfile third = load_or_compute_profile(cache, 222ULL, g, meta, src);
+    EXPECT_NE(src, ProfileSource::kCached);
+    (void)third;
+    std::remove(cache.c_str());
+}
+
+TEST(QueuePolicy, QuantilesAreOrderedAndWithinTheWeightRange) {
+    Rng rng(5500002);
+    const Graph g = weighted_grid(rng, 30, 30, 3, 900, false);
+    const GraphMetadata meta = compute_metadata(g);
+    ProfileSource src;
+    const WeightProfile p = load_or_compute_profile("", 0, g, meta, src);
+    EXPECT_EQ(src, ProfileSource::kComputed);
+    EXPECT_LE(p.min_weight, p.p50);
+    EXPECT_LE(p.p50, p.p90);
+    EXPECT_LE(p.p90, p.p99);
+    EXPECT_LE(p.p99, p.max_weight);
 }
 
 }  // namespace

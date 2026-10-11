@@ -217,7 +217,7 @@ namespace detail {
     return q == "binary_heap" || q == "four_ary_heap" || q == "pairing_heap" ||
            q == "fibonacci_heap" || q == "radix_heap" || q == "lpq" ||
            q == "lpq_model" || q == "lpq_adaptive" || q == "bucket_queue" ||
-           q == "lpq_direct" || q == "lpq_direct_model" || q == "replay_floor" || q == "pooled_bucket";
+           q == "lpq_direct" || q == "lpq_direct_model" || q == "replay_floor" || q == "pooled_bucket" || q == "lpq_optimized";
 }
 
 }  // namespace detail
