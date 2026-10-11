@@ -216,7 +216,8 @@ namespace detail {
 [[nodiscard]] inline bool em_known_pq(const std::string& q) {
     return q == "binary_heap" || q == "four_ary_heap" || q == "pairing_heap" ||
            q == "fibonacci_heap" || q == "radix_heap" || q == "lpq" ||
-           q == "lpq_model" || q == "lpq_adaptive";
+           q == "lpq_model" || q == "lpq_adaptive" || q == "bucket_queue" ||
+           q == "lpq_direct" || q == "lpq_direct_model" || q == "replay_floor" || q == "pooled_bucket";
 }
 
 }  // namespace detail
@@ -280,7 +281,8 @@ namespace detail {
                     throw ExperimentManifestError(
                         "line " + std::to_string(line_number) + ": unknown queue '" + value +
                         "'; the runner supports binary_heap, four_ary_heap, pairing_heap, "
-                        "fibonacci_heap, radix_heap and lpq");
+                        "fibonacci_heap, radix_heap, bucket_queue, lpq, lpq_model, lpq_adaptive, "
+                        "lpq_direct and lpq_direct_model");
                 }
                 m.pqs.push_back(value);
             } else if (current_list == "mode") {

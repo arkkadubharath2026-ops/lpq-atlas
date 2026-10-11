@@ -29,6 +29,7 @@
 // exercise the whole measurement path end to end.
 // =============================================================================
 #include <algorithm>
+#include <numeric>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -56,7 +57,9 @@
 #include "lpq/metrics/result_record.hpp"
 #include "lpq/adaptation/controller_observer.hpp"
 #include "lpq/features/graph_features.hpp"
+#include "lpq/lpq/classical_bucket_queue.hpp"
 #include "lpq/lpq/learned_priority_queue.hpp"
+#include "lpq/lpq/pooled_bucket_queue.hpp"
 #include "lpq/lpq/queue_config.hpp"
 #include "lpq/models/logistic_predictor.hpp"
 #include "lpq/pq/binary_heap.hpp"
@@ -143,7 +146,112 @@ struct Options {
     /// Bucket width for the learned queue's substrate. 0 means "derive it from
     /// the graph" -- see make_queue().
     std::uint64_t lpq_bucket_width = 0;
+
+    /// Substrate front length for the learned queue. kFrontDefault means the
+    /// window maximum, which is what every row measured before this option
+    /// existed used. Zero turns front maintenance off, which is the right
+    /// setting for a constant scorer (a front ordered by an identical score is
+    /// pure insertion cost).
+    static constexpr std::size_t kFrontDefault = static_cast<std::size_t>(-1);
+    std::size_t lpq_front = kFrontDefault;
+
+    /// Substrate ring size (a power of two). 0 means the substrate default.
+    /// A narrow bucket width needs a larger ring to cover the same key range
+    /// without spilling into the overflow list.
+    std::size_t lpq_ring = 0;
+
+    /// Set per run by main() from the queue name: whether the learned queue
+    /// extracts in place (ExtractionStrategy::kDirect) rather than through the
+    /// modular verification pipeline.
+    bool lpq_direct = false;
+
+    /// Measure queries in the outer loop and shuffle the configuration order
+    /// for each one, instead of finishing one configuration before starting the
+    /// next. See the main loop for why.
+    bool interleave = false;
+
+    /// A list of configurations to compare in one experiment, each with its own
+    /// geometry: name[:w=N,ring=N,front=N][@label];... Implies nothing about
+    /// order; combine with --interleave.
+    std::string compare;
 };
+
+/// One configuration of one queue: what the main loop actually measures.
+struct RunSpec {
+    ExperimentRun run;
+    std::string   label;
+    std::uint64_t bucket_width = 0;
+    std::size_t   ring_size    = 0;
+    std::size_t   front        = static_cast<std::size_t>(-1);
+};
+
+/// Queues that score nodes with a trained model and so need --model.
+[[nodiscard]] bool is_model_queue(const std::string& name) {
+    return name == "lpq_model" || name == "lpq_direct_model";
+}
+
+/// Parses --compare: `name[:w=N,ring=N,front=N][@label]` separated by ';'.
+[[nodiscard]] std::vector<RunSpec> parse_compare_specs(const std::string& text,
+                                                       const Options&     defaults) {
+    std::vector<RunSpec> out;
+    std::size_t          pos = 0;
+    while (pos <= text.size()) {
+        const std::size_t semi = text.find(';', pos);
+        std::string       item = text.substr(pos, semi == std::string::npos ? std::string::npos
+                                                                            : semi - pos);
+        pos = semi == std::string::npos ? text.size() + 1 : semi + 1;
+        if (item.empty()) {
+            continue;
+        }
+        RunSpec spec;
+        spec.bucket_width = defaults.lpq_bucket_width;
+        spec.ring_size    = defaults.lpq_ring;
+        spec.front        = defaults.lpq_front;
+
+        std::string label;
+        if (const std::size_t at = item.find('@'); at != std::string::npos) {
+            label = item.substr(at + 1);
+            item  = item.substr(0, at);
+        }
+        std::string name = item;
+        if (const std::size_t colon = item.find(':'); colon != std::string::npos) {
+            name = item.substr(0, colon);
+            std::string params = item.substr(colon + 1);
+            std::size_t p = 0;
+            while (p <= params.size()) {
+                const std::size_t comma = params.find(',', p);
+                const std::string kv =
+                    params.substr(p, comma == std::string::npos ? std::string::npos : comma - p);
+                p = comma == std::string::npos ? params.size() + 1 : comma + 1;
+                if (kv.empty()) {
+                    continue;
+                }
+                const std::size_t eq = kv.find('=');
+                if (eq == std::string::npos) {
+                    throw InvalidConfigError("--compare parameter '" + kv + "' is not key=value");
+                }
+                const std::string k = kv.substr(0, eq);
+                const std::uint64_t v = std::stoull(kv.substr(eq + 1));
+                if (k == "w") {
+                    spec.bucket_width = v;
+                } else if (k == "ring") {
+                    spec.ring_size = static_cast<std::size_t>(v);
+                } else if (k == "front") {
+                    spec.front = static_cast<std::size_t>(v);
+                } else {
+                    throw InvalidConfigError("--compare: unknown parameter '" + k + "'");
+                }
+            }
+        }
+        spec.run = ExperimentRun{defaults.algorithm, name, defaults.mode};
+        spec.label = label.empty() ? item : label;
+        out.push_back(std::move(spec));
+    }
+    if (out.empty()) {
+        throw InvalidConfigError("--compare lists no configurations");
+    }
+    return out;
+}
 
 void print_usage() {
     std::cout << R"(lpq_benchmark -- shortest-path benchmark runner
@@ -152,8 +260,12 @@ void print_usage() {
   --heuristic <name>     zero | euclidean (default) | manhattan | haversine
                          (astar only; euclidean/manhattan/haversine need coordinates)
   --pq <name>            binary_heap | four_ary_heap | pairing_heap |
-                         fibonacci_heap | radix_heap | lpq | lpq_model |
-                         lpq_adaptive | all (default)
+                         fibonacci_heap | radix_heap | bucket_queue | lpq |
+                         lpq_model | lpq_adaptive | lpq_direct |
+                         lpq_direct_model | all (default)
+                         bucket_queue is the classical bucket queue (the LPQ
+                         substrate with every learned component off).
+                         lpq_direct* extract in place, exact mode only.
   --adaptive             with --pq lpq_adaptive: also update the model online
                          from verified outcomes, not just the policy
   --model <path>         trained model for --pq lpq_model. Without it the
@@ -161,6 +273,12 @@ void print_usage() {
                          the control condition rather than a degraded mode.
   --lpq-window <lo:hi>   learned-queue candidate window bounds (default 2:32)
   --lpq-bucket-width <n> substrate bucket width (default: derived from weights)
+  --lpq-front <k>        substrate front length (default: window maximum; 0 = off)
+  --lpq-ring <n>         substrate ring size, a power of two (default 1024)
+  --interleave           query-major order with a seeded shuffle of the queue
+                         order per query (removes host-drift confounding)
+  --compare <specs>      name[:w=N,ring=N,front=N][@label];... measured in one
+                         experiment, each with its own bucket geometry
   --graph <spec>         grid:RxC | path:N | star:N | random:N:P  (default grid:200x200)
   --dataset <path>       converted graph (.lpqgraph) to load instead of --graph
   --queries-file <path>  query manifest to run instead of generating queries
@@ -253,6 +371,14 @@ void print_usage() {
             if (o.lpq_bucket_width == 0) {
                 throw InvalidConfigError("--lpq-bucket-width must be positive");
             }
+        } else if (a == "--interleave") {
+            o.interleave = true;
+        } else if (a == "--compare") {
+            o.compare = next_arg(argc, argv, i, "--compare");
+        } else if (a == "--lpq-ring") {
+            o.lpq_ring = std::stoull(next_arg(argc, argv, i, "--lpq-ring"));
+        } else if (a == "--lpq-front") {
+            o.lpq_front = std::stoull(next_arg(argc, argv, i, "--lpq-front"));
         } else if (a == "--experiment-id") {
             o.experiment_id = next_arg(argc, argv, i, "--experiment-id");
         } else if (a == "--output") {
@@ -282,15 +408,15 @@ void print_usage() {
     // manifest decides the queue list, and it is read after this point. main()
     // re-applies them once it knows what the matrix contains, so an ablation
     // ladder can carry lpq_model beside the classical queues in one run.
-    if (o.experiment_file.empty()) {
-        if (o.pq == "lpq_model" && o.model.empty()) {
+    if (o.experiment_file.empty() && o.compare.empty()) {
+        if (is_model_queue(o.pq) && o.model.empty()) {
             throw InvalidConfigError(
-                "--pq lpq_model requires --model. Without one the queue scores every node "
+                "--pq " + o.pq + " requires --model. Without one the queue scores every node "
                 "identically, which is the control condition and is spelled --pq lpq");
         }
-        if (!o.model.empty() && o.pq != "lpq_model") {
+        if (!o.model.empty() && !is_model_queue(o.pq)) {
             throw InvalidConfigError(
-                "--model only affects --pq lpq_model; with --pq " + o.pq +
+                "--model only affects --pq lpq_model and lpq_direct_model; with --pq " + o.pq +
                 " it would be loaded and never consulted");
         }
         // Same reasoning as --model: a flag that is silently ignored produces a
@@ -516,6 +642,70 @@ using BenchLpqStatic = LearnedPriorityQueue<W, BenchScorer>;
 /// nothing else.
 using BenchLpqAdaptive = BenchLpq;
 
+/// The classical bucket queue: the substrate with no learned machinery.
+using BenchBucketQueue = ClassicalBucketQueue<W>;
+
+/// The pooled (cache-resident) bucket queue.
+using BenchPooled = PooledBucketQueue<W>;
+
+/// DIAGNOSTIC ONLY -- not a priority queue, never a competitor in a result table.
+///
+/// Replays the pop sequence of a previous run and ignores pushes. Dijkstra over
+/// this queue does everything a real search does except order its own frontier,
+/// so its time is the search's cost with the queue removed: the floor under
+/// every queue implementation, learned or not. The gap between a real queue and
+/// this floor is the most any priority-queue improvement could ever recover, and
+/// it is the number that says whether queue engineering is worth doing at all.
+///
+/// Validity: the replay is only meaningful if the search it drives reaches the
+/// same distances. measure_one validates every answer against the reference, so
+/// a script that did not correspond to the search would abort the run.
+class ReplayQueue {
+public:
+    using KeyType = Dist;
+    static constexpr bool kSupportsDecreaseKey = false;
+    inline static const std::vector<QueueEntry<Dist>>* script = nullptr;
+
+    void push(NodeId, Dist) noexcept {}
+    [[nodiscard]] QueueEntry<Dist> pop() { return (*script)[next_++]; }
+    [[nodiscard]] QueueEntry<Dist> top() const { return (*script)[next_]; }
+    [[nodiscard]] bool empty() const noexcept { return next_ >= script->size(); }
+    [[nodiscard]] std::size_t size() const noexcept { return script->size() - next_; }
+    void clear() noexcept { next_ = 0; }
+    [[nodiscard]] std::uint64_t comparison_count() const noexcept { return 0; }
+    void reset_comparison_count() noexcept {}
+    void reserve_nodes(std::size_t) {}
+
+private:
+    std::size_t next_ = 0;
+};
+
+/// A classical bucket queue that records what it pops, to build a replay script.
+class RecordingQueue {
+public:
+    using KeyType = Dist;
+    static constexpr bool kSupportsDecreaseKey = false;
+    explicit RecordingQueue(const GraphMetadata& meta)
+        : inner_(static_cast<Dist>(derive_bucket_width(meta, 1024, 0))) {}
+    void push(NodeId n, Dist k) { inner_.push(n, k); }
+    [[nodiscard]] QueueEntry<Dist> pop() {
+        const auto e = inner_.pop();
+        script.push_back(e);
+        return e;
+    }
+    [[nodiscard]] QueueEntry<Dist> top() const { return inner_.top(); }
+    [[nodiscard]] bool empty() const noexcept { return inner_.empty(); }
+    [[nodiscard]] std::size_t size() const noexcept { return inner_.size(); }
+    void clear() noexcept { inner_.clear(); script.clear(); }
+    [[nodiscard]] std::uint64_t comparison_count() const noexcept { return 0; }
+    void reset_comparison_count() noexcept {}
+    void reserve_nodes(std::size_t) {}
+    std::vector<QueueEntry<Dist>> script;
+
+private:
+    ClassicalBucketQueue<W> inner_;
+};
+
 /// Builds the queue for a measurement.
 ///
 /// Classical queues take no parameters, so the default does. The learned queue
@@ -526,7 +716,17 @@ using BenchLpqAdaptive = BenchLpq;
 /// rather than the queue.
 template <typename Queue>
 [[nodiscard]] Queue make_queue(const GraphMetadata& meta, const Options& o) {
-    if constexpr (std::is_same_v<Queue, BenchLpq> ||
+    if constexpr (std::is_same_v<Queue, BenchPooled>) {
+        return Queue{static_cast<Dist>(derive_bucket_width(
+                         meta, BenchLpq::Substrate::kBucketCount, o.lpq_bucket_width)),
+                     o.lpq_ring != 0 ? o.lpq_ring : BenchLpq::Substrate::kBucketCount};
+    } else if constexpr (std::is_same_v<Queue, BenchBucketQueue>) {
+        // Same width rule as the learned queue, so the two differ only in the
+        // machinery on top of the substrate.
+        return Queue{static_cast<Dist>(derive_bucket_width(
+                         meta, BenchLpq::Substrate::kBucketCount, o.lpq_bucket_width)),
+                     o.lpq_ring != 0 ? o.lpq_ring : BenchLpq::Substrate::kBucketCount};
+    } else if constexpr (std::is_same_v<Queue, BenchLpq> ||
                   std::is_same_v<Queue, BenchLpqStatic>) {
         CandidateWindowConfig window;
         window.k_min = static_cast<std::uint32_t>(o.lpq_window_min);
@@ -546,7 +746,13 @@ template <typename Queue>
         const CorrectnessPolicy policy = (o.mode == "approximate")
                                              ? CorrectnessPolicy::approximate(o.epsilon)
                                              : CorrectnessPolicy::exact();
-        return Queue{static_cast<Dist>(width), window, policy};
+        Queue queue{static_cast<Dist>(width), window, policy,
+                    o.lpq_direct ? ExtractionStrategy::kDirect : ExtractionStrategy::kModular,
+                    o.lpq_ring != 0 ? o.lpq_ring : BenchLpq::Substrate::kBucketCount};
+        if (o.lpq_front != Options::kFrontDefault) {
+            queue.set_front_size(o.lpq_front);
+        }
+        return queue;
     } else {
         (void)meta;
         (void)o;
@@ -868,8 +1074,7 @@ int main(int argc, char** argv) {
             // model would otherwise measure the control condition under a name
             // that says a model was involved.
             const bool matrix_has_model =
-                std::find(experiment.pqs.begin(), experiment.pqs.end(), "lpq_model") !=
-                experiment.pqs.end();
+                std::any_of(experiment.pqs.begin(), experiment.pqs.end(), is_model_queue);
             if (matrix_has_model && o.model.empty()) {
                 throw InvalidConfigError(
                     "experiment '" + experiment.experiment +
@@ -1082,6 +1287,21 @@ int main(int argc, char** argv) {
             }
         }
 
+        // --- the configurations to measure ------------------------------------
+        //
+        // A matrix row becomes one spec with the command-line geometry. With
+        // --compare, each spec carries its own bucket width, ring and front, so a
+        // sweep is one interleaved experiment rather than many sequential ones.
+        std::vector<RunSpec> specs;
+        if (!o.compare.empty()) {
+            specs = parse_compare_specs(o.compare, o);
+        } else {
+            for (const auto& run : runs) {
+                specs.push_back(RunSpec{run, label_of(run), o.lpq_bucket_width, o.lpq_ring,
+                                        o.lpq_front});
+            }
+        }
+
         // --- the scorer, built once outside every timed region ---------------
         //
         // O(n) model inferences and one float per node. Built here rather than
@@ -1106,18 +1326,22 @@ int main(int argc, char** argv) {
         std::vector<ResultRecord>           records;
         std::map<std::string, QueueSummary> summaries;
 
-        for (const auto& run : runs) {
-            const std::string name  = run.pq;
-            const std::string label = label_of(run);
+        // One measurement of one configuration on one query. Shared by the
+        // run-major and the interleaved loops below so the two cannot drift.
+        const auto measure_spec = [&](const RunSpec& spec, const Query& q,
+                                      std::uint32_t position) -> ResultRecord {
+            const ExperimentRun& run  = spec.run;
+            const std::string    name = run.pq;
 
             // The per-run configuration the measurement actually reads. Set
             // here rather than passed separately so that a matrix entry and an
             // equivalent command line produce identical records.
-            o.algorithm = run.algorithm;
-            o.mode      = run.mode;
-
-            QueueSummary qs;
-            qs.name = label;
+            o.algorithm        = run.algorithm;
+            o.mode             = run.mode;
+            o.lpq_direct       = (name == "lpq_direct" || name == "lpq_direct_model");
+            o.lpq_bucket_width = spec.bucket_width;
+            o.lpq_ring         = spec.ring_size;
+            o.lpq_front        = spec.front;
 
             // Only the learned queue has an approximation mechanism. A classical
             // heap asked for approximate mode would run exactly, return exact
@@ -1128,80 +1352,176 @@ int main(int argc, char** argv) {
             // instead, so it is explained rather than absent or wrong.
             const bool queue_supports_mode = (run.mode != "approximate") || (name == "lpq");
 
-            for (const auto& q : queries) {
-                ResultRecord rec;
-                if (!queue_supports_mode) {
-                    rec.pq                 = name;
-                    rec.algorithm          = run.algorithm;
-                    rec.mode               = run.mode;
-                    rec.unsupported_reason =
-                        name + " has no approximation mechanism; running it under --mode "
-                               "approximate would produce exact results carrying an "
-                               "approximate label";
-                } else if (name == "binary_heap") {
-                    rec = measure_one<BinaryHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
-                } else if (name == "four_ary_heap") {
-                    rec = measure_one<FourAryHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
-                } else if (name == "pairing_heap") {
-                    rec = measure_one<PairingHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
-                } else if (name == "fibonacci_heap") {
-                    rec = measure_one<FibonacciHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
-                } else if (name == "radix_heap") {
-                    if constexpr (radix_heap_supports<W>()) {
-                        rec = measure_one<RadixHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
-                    } else {
-                        rec.pq                 = name;
-                        rec.unsupported_reason = radix_heap_unsupported_reason<W>();
-                    }
-                } else if (name == "lpq_model") {
-                    if constexpr (bucket_substrate_supports<W>()) {
-                        rec = measure_one<BenchLpqStatic>(g, meta, q, o, name, hw,
-                                                          heuristic_scale, scorer.get());
-                    } else {
-                        rec.pq                 = name;
-                        rec.unsupported_reason = bucket_substrate_unsupported_reason<W>();
-                    }
-                } else if (name == "lpq") {
-                    if constexpr (bucket_substrate_supports<W>()) {
-                        rec = measure_one<BenchLpq>(g, meta, q, o, name, hw, heuristic_scale);
-                    } else {
-                        rec.pq                 = name;
-                        rec.unsupported_reason = bucket_substrate_unsupported_reason<W>();
-                    }
-                } else if (name == "lpq_adaptive") {
-                    // Same queue type as "lpq"; measure_one attaches the
-                    // controller when the row is named this. The distinction is
-                    // the observer, not the type, which is why BenchLpqAdaptive
-                    // is an alias rather than a separate instantiation -- two
-                    // instantiations would differ in code layout and the
-                    // comparison would not be like for like.
-                    if constexpr (bucket_substrate_supports<W>()) {
-                        rec = measure_one<BenchLpqAdaptive>(g, meta, q, o, name, hw,
-                                                            heuristic_scale);
-                    } else {
-                        rec.pq                 = name;
-                        rec.unsupported_reason = bucket_substrate_unsupported_reason<W>();
-                    }
-                } else {
-                    throw InvalidConfigError("unknown --pq: " + name);
-                }
-
-                if (rec.supported()) {
-                    qs.per_query_median_ns.push_back(rec.timing.median_ns());
-                    qs.per_query_relative_mad.push_back(rec.timing.summary.relative_mad());
-                    qs.total_comparisons += rec.counters.pq_comparisons;
-                    qs.total_pops += rec.counters.pq_pops;
-                    qs.any_unpinned = qs.any_unpinned || !rec.timing.affinity.pinned;
-                    qs.noisy_queries += rec.timing.noisy ? 1U : 0U;
-                } else if (qs.unsupported_reason.empty()) {
-                    // Every query in this configuration carries the same
-                    // reason, so the first is taken and the rest would only
-                    // repeat it.
-                    qs.unsupported_reason = rec.unsupported_reason;
-                }
-                records.push_back(std::move(rec));
+            if (is_model_queue(name) && !scorer) {
+                throw InvalidConfigError(name + " was requested without --model; it would "
+                                                "run as the control condition under a name "
+                                                "that says a model was involved");
             }
-            summaries[label] = std::move(qs);
+
+            ResultRecord rec;
+            if (!queue_supports_mode) {
+                rec.pq                 = name;
+                rec.algorithm          = run.algorithm;
+                rec.mode               = run.mode;
+                rec.unsupported_reason =
+                    name + " has no approximation mechanism; running it under --mode "
+                           "approximate would produce exact results carrying an "
+                           "approximate label";
+            } else if (name == "binary_heap") {
+                rec = measure_one<BinaryHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
+            } else if (name == "four_ary_heap") {
+                rec = measure_one<FourAryHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
+            } else if (name == "pairing_heap") {
+                rec = measure_one<PairingHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
+            } else if (name == "fibonacci_heap") {
+                rec = measure_one<FibonacciHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
+            } else if (name == "radix_heap") {
+                if constexpr (radix_heap_supports<W>()) {
+                    rec = measure_one<RadixHeap<Dist>>(g, meta, q, o, name, hw, heuristic_scale);
+                } else {
+                    rec.pq                 = name;
+                    rec.unsupported_reason = radix_heap_unsupported_reason<W>();
+                }
+            } else if (name == "replay_floor") {
+                // Record the pop sequence once (untimed), then time the same
+                // search with the queue's work removed.
+                RecordingQueue recorder(meta);
+                recorder.reserve_nodes(g.num_nodes());
+                DijkstraOptions dopts;
+                dopts.target       = q.target;
+                dopts.measure_time = false;
+                if (o.algorithm == "astar") {
+                    (void)run_astar<RecordingQueue>(g, q.source, q.target, recorder, o.heuristic,
+                                                    heuristic_scale);
+                } else {
+                    (void)dijkstra<W, RecordingQueue>(g, q.source, recorder, dopts);
+                }
+                ReplayQueue::script = &recorder.script;
+                rec = measure_one<ReplayQueue>(g, meta, q, o, name, hw, heuristic_scale);
+                ReplayQueue::script = nullptr;
+            } else if (name == "pooled_bucket") {
+                rec = measure_one<BenchPooled>(g, meta, q, o, name, hw, heuristic_scale);
+            } else if (name == "bucket_queue") {
+                if constexpr (bucket_substrate_supports<W>()) {
+                    rec = measure_one<BenchBucketQueue>(g, meta, q, o, name, hw,
+                                                        heuristic_scale);
+                } else {
+                    rec.pq                 = name;
+                    rec.unsupported_reason = bucket_substrate_unsupported_reason<W>();
+                }
+            } else if (name == "lpq_direct") {
+                if constexpr (bucket_substrate_supports<W>()) {
+                    rec = measure_one<BenchLpq>(g, meta, q, o, name, hw, heuristic_scale);
+                } else {
+                    rec.pq                 = name;
+                    rec.unsupported_reason = bucket_substrate_unsupported_reason<W>();
+                }
+            } else if (name == "lpq_model" || name == "lpq_direct_model") {
+                if constexpr (bucket_substrate_supports<W>()) {
+                    rec = measure_one<BenchLpqStatic>(g, meta, q, o, name, hw,
+                                                      heuristic_scale, scorer.get());
+                } else {
+                    rec.pq                 = name;
+                    rec.unsupported_reason = bucket_substrate_unsupported_reason<W>();
+                }
+            } else if (name == "lpq") {
+                if constexpr (bucket_substrate_supports<W>()) {
+                    rec = measure_one<BenchLpq>(g, meta, q, o, name, hw, heuristic_scale);
+                } else {
+                    rec.pq                 = name;
+                    rec.unsupported_reason = bucket_substrate_unsupported_reason<W>();
+                }
+            } else if (name == "lpq_adaptive") {
+                // Same queue type as "lpq"; measure_one attaches the
+                // controller when the row is named this. The distinction is
+                // the observer, not the type, which is why BenchLpqAdaptive
+                // is an alias rather than a separate instantiation -- two
+                // instantiations would differ in code layout and the
+                // comparison would not be like for like.
+                if constexpr (bucket_substrate_supports<W>()) {
+                    rec = measure_one<BenchLpqAdaptive>(g, meta, q, o, name, hw,
+                                                        heuristic_scale);
+                } else {
+                    rec.pq                 = name;
+                    rec.unsupported_reason = bucket_substrate_unsupported_reason<W>();
+                }
+            } else {
+                throw InvalidConfigError("unknown --pq: " + name);
+            }
+
+
+            rec.pq = spec.label;
+            ResultRecord::QueueConfig qc;
+            qc.label        = spec.label;
+            qc.queue        = name;
+            const bool bucketed = name == "bucket_queue" || name == "pooled_bucket" || name.rfind("lpq", 0) == 0;
+            qc.bucket_width = bucketed ? derive_bucket_width(meta, BenchLpq::Substrate::kBucketCount,
+                                                             spec.bucket_width)
+                                       : 0;
+            qc.ring_size    = bucketed ? (spec.ring_size != 0 ? spec.ring_size
+                                                               : BenchLpq::Substrate::kBucketCount)
+                                       : 0;
+            qc.front        = (name.rfind("lpq", 0) == 0 && spec.front != Options::kFrontDefault)
+                                  ? static_cast<std::int64_t>(spec.front)
+                                  : -1;
+            qc.strategy     = name.rfind("lpq_direct", 0) == 0 ? "direct"
+                              : name.rfind("lpq", 0) == 0     ? "modular"
+                                                              : "";
+            qc.position     = position;
+            rec.queue_config = qc;
+            return rec;
+        };
+
+        const auto accumulate = [&summaries](const std::string& label, const ResultRecord& rec) {
+            QueueSummary& qs = summaries[label];
+            qs.name          = label;
+            if (rec.supported()) {
+                qs.per_query_median_ns.push_back(rec.timing.median_ns());
+                qs.per_query_relative_mad.push_back(rec.timing.summary.relative_mad());
+                qs.total_comparisons += rec.counters.pq_comparisons;
+                qs.total_pops += rec.counters.pq_pops;
+                qs.any_unpinned = qs.any_unpinned || !rec.timing.affinity.pinned;
+                qs.noisy_queries += rec.timing.noisy ? 1U : 0U;
+            } else if (qs.unsupported_reason.empty()) {
+                // Every query in this configuration carries the same reason, so
+                // the first is taken and the rest would only repeat it.
+                qs.unsupported_reason = rec.unsupported_reason;
+            }
+        };
+
+        if (!o.interleave) {
+            // Run-major: every query for one configuration, then the next. The
+            // historical order, kept as the default so existing experiments
+            // reproduce. It confounds configuration with time on a machine whose
+            // speed drifts, which is what --interleave removes.
+            for (const auto& spec : specs) {
+                std::uint32_t position = 0;
+                for (const auto& q : queries) {
+                    ResultRecord rec = measure_spec(spec, q, position++);
+                    accumulate(spec.label, rec);
+                    records.push_back(std::move(rec));
+                }
+            }
+        } else {
+            // Query-major with a freshly shuffled configuration order per query
+            // (Fisher-Yates on a seeded stream, so the order is reproducible and
+            // recorded in every record). Within one query all configurations run
+            // back to back, so slow drift of the host hits them equally, and no
+            // configuration is systematically first or last.
+            Rng order_rng(derive_seed(o.seed, "interleave-order"));
+            std::vector<std::size_t> order(specs.size());
+            for (std::size_t qi = 0; qi < queries.size(); ++qi) {
+                std::iota(order.begin(), order.end(), std::size_t{0});
+                for (std::size_t k = order.size(); k > 1; --k) {
+                    std::swap(order[k - 1], order[order_rng.next_below(k)]);
+                }
+                for (std::size_t pos = 0; pos < order.size(); ++pos) {
+                    ResultRecord rec =
+                        measure_spec(specs[order[pos]], queries[qi], static_cast<std::uint32_t>(pos));
+                    accumulate(specs[order[pos]].label, rec);
+                    records.push_back(std::move(rec));
+                }
+            }
         }
 
         print_console_summary(summaries, meta, o);

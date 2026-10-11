@@ -129,6 +129,20 @@ struct ResultRecord {
     bool target_reachable = false;
     std::string termination;
 
+    /// The queue configuration this record was measured under. Optional so that
+    /// records from before this existed still serialise identically. Without it a
+    /// bucket-width sweep leaves records that cannot be told apart.
+    struct QueueConfig {
+        std::string   label;             ///< the name the row is reported under
+        std::string   queue;             ///< the queue implementation
+        std::uint64_t bucket_width = 0;  ///< 0 for queues with no buckets
+        std::uint64_t ring_size    = 0;
+        std::int64_t  front        = -1; ///< -1: not applicable
+        std::string   strategy;          ///< "modular" | "direct" | ""
+        std::uint32_t position     = 0;  ///< place in this query's measurement order
+    };
+    std::optional<QueueConfig> queue_config;
+
     /// Set when the configuration could not run at all -- for example a radix
     /// heap requested for floating-point weights. A record is still emitted, so
     /// a missing row in a results table is explained rather than absent.
@@ -161,6 +175,18 @@ inline void write_record(JsonWriter& w, const ResultRecord& r) {
     w.key_value("supported", r.supported());
     if (!r.supported()) {
         w.key_value("unsupported_reason", r.unsupported_reason);
+    }
+    if (r.queue_config) {
+        const auto& qc = *r.queue_config;
+        w.begin_object("queue_config");
+        w.key_value("label", qc.label);
+        w.key_value("queue", qc.queue);
+        w.key_value("bucket_width", qc.bucket_width);
+        w.key_value("ring_size", qc.ring_size);
+        w.key_value("front", qc.front);
+        w.key_value("strategy", qc.strategy);
+        w.key_value("order_position", static_cast<std::uint64_t>(qc.position));
+        w.end_object();
     }
 
     // --- Timing --------------------------------------------------------------
