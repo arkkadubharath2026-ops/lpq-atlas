@@ -152,7 +152,12 @@ class LaneComparisonRequest(BaseModel):
     target_node: int = Field(ge=0)
     lanes: list[LaneSpec] = Field(min_length=2, max_length=8)
     heuristic: Heuristic = "auto"
-    repetitions: int = Field(7, ge=3, le=51)
+    # Measured in `rounds` rounds; each round runs EVERY lane once (a fresh process, a fresh
+    # shuffled order), each process doing `warmup` + `repetitions` searches. Separate
+    # processes drift against one another on a shared machine, so one process's own spread
+    # understates the real uncertainty; rounds expose it.
+    rounds: int = Field(3, ge=1, le=7)
+    repetitions: int = Field(5, ge=3, le=51)
     warmup: int = Field(2, ge=2, le=10)
     order_seed: int | None = Field(None, ge=0, le=2**63 - 1)
 

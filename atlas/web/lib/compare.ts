@@ -3,7 +3,7 @@
 // slower", a bar width). The speedup, the ranking, the fastest lane and the
 // same-distance verdict are computed once, by the API, and only shown here.
 import { fmtDistance, fmtInt, fmtNs, queueLabel } from "./format";
-import type { LaneComparisonResult, LaneEffect, LaneResult, LaneVerdict } from "./types";
+import type { LaneComparisonResult, LaneEffect, LaneResult, LaneVerdict, VerdictReason } from "./types";
 
 /** "1.12x"; two decimals below 10, one above. */
 export function fmtFactor(f: number | null | undefined): string {
@@ -48,6 +48,30 @@ export function labelResolver(
   return (id) => preferred?.(id) ?? byId.get(id) ?? id;
 }
 
+/** "ahead in 3 of 3 rounds" for the side of the comparison that won. */
+export function roundsTag(
+  x: { rounds_faster?: number | null; rounds_slower?: number | null; rounds_compared?: number | null },
+  verdict: LaneVerdict,
+): string {
+  const n = x.rounds_compared ?? 0;
+  if (!n) return "";
+  const k = verdict === "slower" ? x.rounds_slower : x.rounds_faster;
+  return `${k ?? 0} of ${n} rounds`;
+}
+
+/** Why the API called a gap "about the same", in plain words. */
+function samePhrase(
+  x: { speedup: number | null; reason?: VerdictReason; rounds_faster?: number | null; rounds_compared?: number | null },
+  versus: string,
+): string {
+  const ratio = fmtFactor(x.speedup);
+  if (x.reason === "single_round")
+    return `Not enough evidence to call a winner against ${versus}: only one round was measured (${ratio} in that round)`;
+  if (x.reason === "not_consistent_across_rounds")
+    return `No clear difference from ${versus}: ahead in only ${x.rounds_faster ?? 0} of ${x.rounds_compared ?? 0} rounds (${ratio} overall)`;
+  return `About the same speed as ${versus} (${ratio}, within measurement noise)`;
+}
+
 /** The text beside a bar: how this lane did against its vanilla counterpart. */
 export function vsVanillaPhrase(
   lane: LaneResult,
@@ -61,20 +85,52 @@ export function vsVanillaPhrase(
   const v = labelOf(lane.vanilla_lane_id);
   if (lane.verdict === "same")
     return {
-      text: `About the same speed as ${v} (${fmtFactor(lane.speedup_vs_vanilla)}, within measurement noise)`,
+      text: samePhrase({ ...lane, speedup: lane.speedup_vs_vanilla, reason: lane.verdict_reason }, v),
       tone: "neutral",
     };
+  const tag = roundsTag(lane, lane.verdict);
   return {
-    text: `${verdictClause(lane.verdict, lane.speedup_vs_vanilla)} than ${v}`,
+    text: `${verdictClause(lane.verdict, lane.speedup_vs_vanilla)} than ${v}${tag ? ` (ahead in ${tag})` : ""}`,
     tone: verdictTone(lane.verdict),
   };
+}
+
+/** What the Optimized queue resolved to and how, e.g. for a line under its bar. */
+export function resolutionText(lane: LaneResult): string | null {
+  if (!lane.resolved_queue) return null;
+  const how =
+    lane.resolution_method === "policy"
+      ? "using a stored queue policy"
+      : lane.resolution_method === "default"
+        ? "by default"
+        : "by measuring candidate queues on this graph and this machine";
+  if (lane.resolved_to_radix)
+    return `Optimized chose the radix heap here (no gain measured), so its time equals radix. ${how.replace(/^./, (c) => c.toUpperCase())}.`;
+  return `Optimized chose ${lane.resolved_queue} ${how}.`;
+}
+
+/** The one-time set-up cost line, or null when nothing was calibrated for this lane. */
+export function setupText(lane: LaneResult): string | null {
+  const ns = lane.calibration_ns;
+  if (ns === null || ns === undefined || !lane.resolved_queue) return null;
+  if (ns > 0)
+    return `One-time setup, not included in the time: calibrating the Optimized queue on this graph took ${fmtNs(ns)} (cached afterwards).`;
+  return lane.resolution_method === "autotune_cached"
+    ? "One-time setup: this graph was already calibrated on this machine (cached), so no calibration was needed."
+    : null;
+}
+
+/** "31.0 ms · 31.3 ms · 32.1 ms": the per-round medians. */
+export function fmtRoundMedians(l: LaneResult): string {
+  const rs = l.timing?.round_medians_ns ?? [];
+  return rs.map((x) => (x === null ? "failed" : fmtNs(x))).join(" · ");
 }
 
 /** The plain-language summary: what the optimized lanes did, then who was fastest. */
 export function headlineSentences(result: LaneComparisonResult, labelOf: LabelOf): string[] {
   const out: string[] = [];
   for (const lane of result.lanes) {
-    if (lane.effect !== "ml") continue;
+    if (lane.family !== "learned") continue;
     const name = labelOf(lane.id);
     if (lane.status !== "ok") {
       out.push(`${name} could not run: ${lane.error?.message ?? "the engine reported an error"}.`);
@@ -82,19 +138,44 @@ export function headlineSentences(result: LaneComparisonResult, labelOf: LabelOf
     }
     if (!lane.vanilla_lane_id || lane.speedup_vs_vanilla === null) {
       out.push(`${name} has no vanilla lane of the same algorithm to be compared with.`);
-      continue;
+    } else {
+      const v = labelOf(lane.vanilla_lane_id);
+      const tag = roundsTag(lane, lane.verdict);
+      if (lane.verdict === "faster")
+        out.push(
+          `${name} was ${fmtFactor(lane.speedup_vs_vanilla)} faster than ${v} on this query${tag ? ` (ahead in ${tag})` : ""}.`,
+        );
+      else if (lane.verdict === "slower")
+        out.push(
+          `${name} was ${fmtFactor(1 / lane.speedup_vs_vanilla)} slower than ${v} on this query${tag ? ` (behind in ${tag})` : ""}. It was not faster here.`,
+        );
+      else
+        out.push(
+          `${name} was not clearly faster than ${v} on this query: ${samePhrase({ speedup: lane.speedup_vs_vanilla, reason: lane.verdict_reason, rounds_faster: lane.rounds_faster, rounds_compared: lane.rounds_compared }, v).replace(/^./, (c) => c.toLowerCase())}.`,
+        );
     }
-    const v = labelOf(lane.vanilla_lane_id);
-    if (lane.verdict === "faster")
-      out.push(`${name} was ${fmtFactor(lane.speedup_vs_vanilla)} faster than ${v} on this query.`);
-    else if (lane.verdict === "slower")
+    if (lane.resolved_to_radix) {
       out.push(
-        `${name} was ${fmtFactor(1 / lane.speedup_vs_vanilla)} slower than ${v} on this query. It was not faster here.`,
+        `${name} chose the radix heap here (no gain measured), so its time equals radix. Any gain over the vanilla lane is credited to the queue choice, not to ML.`,
       );
-    else
-      out.push(
-        `${name} was about the same speed as ${v} on this query (${fmtFactor(lane.speedup_vs_vanilla)}, within measurement noise). It was not clearly faster.`,
-      );
+    } else if (lane.resolved_queue) {
+      out.push(`${name} chose ${lane.resolved_queue} by measuring candidate queues on this graph and machine.`);
+    }
+    const vsBest = result.effects.find((e) => e.kind === "ml_vs_best_classical" && e.lane_id === lane.id);
+    if (vsBest && vsBest.speedup !== null) {
+      const base = labelOf(vsBest.versus_lane_id);
+      const tag = roundsTag(vsBest, vsBest.verdict);
+      if (vsBest.verdict === "faster")
+        out.push(`${name} beat ${base}, the strongest non-ML queue, by ${fmtFactor(vsBest.speedup)} (ahead in ${tag}).`);
+      else if (vsBest.verdict === "slower")
+        out.push(`${name} did not beat ${base}, the strongest non-ML queue: it was ${fmtFactor(1 / vsBest.speedup)} slower.`);
+      else
+        out.push(
+          lane.resolved_to_radix
+            ? `${name} did not beat ${base}: it used the same queue here.`
+            : `${name} did not clearly beat ${base}, the strongest non-ML queue (about the same speed).`,
+        );
+    }
   }
   const f = result.fastest;
   if (f) {
@@ -102,7 +183,7 @@ export function headlineSentences(result: LaneComparisonResult, labelOf: LabelOf
     else {
       const names = [f.lane_id, ...f.tied_with].map(labelOf);
       out.push(
-        `${joinNames(names)} were effectively tied for fastest (the gaps are within measurement noise).`,
+        `${joinNames(names)} were effectively tied for fastest (the gaps are within measurement noise or not consistent across rounds).`,
       );
     }
   } else out.push("No lane finished, so there is no fastest method for this query.");
@@ -148,7 +229,7 @@ export function correctnessMessage(
 export function rankedLanes(result: LaneComparisonResult): LaneResult[] {
   const group = (l: LaneResult) => (l.rank !== null ? 0 : l.status === "ok" ? 1 : 2);
   return [...result.lanes].sort(
-    (a, b) => group(a) - group(b) || (a.rank ?? 0) - (b.rank ?? 0) || a.run_index - b.run_index,
+    (a, b) => group(a) - group(b) || (a.rank ?? 0) - (b.rank ?? 0) || 0,
   );
 }
 
@@ -171,28 +252,39 @@ export const fmtSpread = (l: LaneResult): string =>
 /** One effect as a sentence, e.g. "Switching from Dijkstra to A* ... was 3.88x faster". */
 export function effectSentence(e: LaneEffect, result: LaneComparisonResult, labelOf: LabelOf): string {
   const lane = result.lanes.find((l) => l.id === e.lane_id);
+  const tag = roundsTag(e, e.verdict);
   const clause = verdictClause(e.verdict, e.speedup);
-  const tail = e.verdict === "same" ? ` (${fmtFactor(e.speedup)}, within noise)` : "";
+  const tail =
+    e.verdict === "same"
+      ? ` (${fmtFactor(e.speedup)}${e.reason === "within_noise" ? ", within noise" : e.reason === "single_round" ? ", one round only" : ", not consistent across rounds"})`
+      : tag
+        ? ` (${tag})`
+        : "";
   const alg = lane?.algorithm === "astar" ? "A*" : "Dijkstra";
   switch (e.kind) {
     case "algorithm":
       return `Search algorithm: A* instead of Dijkstra (both with the binary heap) was ${clause}${tail}.`;
     case "queue":
+      if (lane?.resolved_to_radix)
+        return `Queue choice: Optimized picked the radix heap here, so with ${alg} it behaves as the radix heap did against the binary heap: ${clause}${tail}. This is the queue's effect, not ML's.`;
       return `Priority queue: ${queueLabel(lane?.queue ?? "")} instead of the binary heap, with ${alg}, was ${clause}${tail}.`;
     case "ml":
       return `ML: the Optimized queue instead of the binary heap, with ${alg}, was ${clause}${tail}.`;
     case "ml_vs_best_classical":
-      return `ML against the best non-ML queue: Optimized ${alg} against ${labelOf(e.versus_lane_id)} was ${clause}${tail}.`;
+      return `Optimized ${alg} against ${labelOf(e.versus_lane_id)} (the strongest non-ML queue) was ${clause}${tail}.`;
   }
 }
 
 /** The honest-labelling note shown with every result. */
 export function measurementNote(result: LaneComparisonResult): string {
   const m = result.measurement;
+  const rounds = m.rounds ?? 1;
   return (
     `These times were measured just now on this machine (${m.machine.os} ${m.machine.arch}) by the C++ engine, ` +
-    `not copied from anywhere. A single query is noisy: each method ran ${m.repetitions} times after ` +
-    `${m.warmup} warm-up runs, and the middle value (the median) is shown with ± its typical spread. ` +
+    `not copied from anywhere. A single query is noisy, and separate runs of the same method can drift on a shared machine, ` +
+    `so every method was measured in ${rounds} round${rounds === 1 ? "" : "s"} (a fresh process each, order reshuffled every round), ` +
+    `each with ${m.repetitions} timed repetitions after ${m.warmup} warm-up runs. ` +
+    "The time shown is the median of the per-round medians, with ± the larger of the within-run and between-round spread. " +
     "Results on other machines or other routes can differ."
   );
 }

@@ -58,20 +58,32 @@ def test_classical_lanes_are_timed_fairly(client: Any) -> None:
     d = _compare(client, [VANILLA_D, VANILLA_A, RADIX], order_seed=7)
     res = d["result"]
     m = res["measurement"]
-    # Defaults: 7 timed repetitions after 2 warm-ups, tracing off, one lane at a time.
-    assert (m["repetitions"], m["warmup"], m["tracing"]) == (7, 2, "off")
+    # Defaults: 3 rounds of 5 timed repetitions after 2 warm-ups, tracing off, one lane at a time.
+    assert (m["rounds"], m["repetitions"], m["warmup"], m["tracing"]) == (3, 5, 2, "off")
     assert m["order_seed"] == 7
-    assert sorted(m["run_order"]) == sorted(ln["id"] for ln in res["lanes"])
+    ids = sorted(ln["id"] for ln in res["lanes"])
+    assert len(m["round_orders"]) == 3
+    assert all(sorted(o) == ids for o in m["round_orders"])  # every lane, every round
+    import random
+
+    for r, order in enumerate(m["round_orders"], start=1):
+        expect = [ln["id"] for ln in res["lanes"]]
+        random.Random(7 + r).shuffle(expect)
+        assert order == expect  # round r is shuffled with seed order_seed + r
     lanes = {ln["id"]: ln for ln in res["lanes"]}
     for ln in lanes.values():
         assert ln["status"] == "ok", ln
         t = ln["timing"]
-        assert len(t["samples_ns"]) == 7 and t["repetitions"] == 7 and t["warmup"] == 2
+        assert len(t["samples_ns"]) == 15 and t["repetitions"] == 5 and t["warmup"] == 2
+        assert len(t["round_medians_ns"]) == 3 and all(x > 0 for x in t["round_medians_ns"])
+        assert t["median_ns"] == sorted(t["round_medians_ns"])[1]
+        assert t["mad_ns"] >= max(t["mad_within_ns"], t["mad_between_rounds_ns"]) - 1e-9
         assert t["median_ns"] > 0 and t["mad_ns"] >= 0
         assert (ln["median_ns"], ln["mad_ns"]) == (t["median_ns"], t["mad_ns"])
         assert ln["counts"]["settled_nodes"] > 0 and ln["counts"]["pops"] >= 1
         assert ln["matches_reference"] is True
-        assert m["run_order"].index(ln["id"]) + 1 == ln["run_index"]
+        assert ln["run_positions"] == [o.index(ln["id"]) + 1 for o in m["round_orders"]]
+        assert ln["rounds_compared"] in (None, 3)
     # Same distance everywhere, and the engine's own reference agrees.
     assert res["correctness"]["all_match_reference"] is True
     assert res["correctness"]["all_lanes_same_distance"] is True
@@ -93,14 +105,14 @@ def test_classical_lanes_are_timed_fairly(client: Any) -> None:
 
 
 def test_every_lane_uses_the_same_query_counts_and_no_tracing(client: Any) -> None:
-    d = _compare(client, [VANILLA_D, RADIX], repetitions=3, warmup=2)
+    d = _compare(client, [VANILLA_D, RADIX], repetitions=3, warmup=2, rounds=2)
     # The engine log records the exact argv each lane ran with.
     from atlas_api.app import lane_comparisons  # imported after the client set the env
 
     job_dir = lane_comparisons.get(d["id"]).dir
     argvs = []
     for lane_id in ("vanilla_dijkstra", "radix_dijkstra"):
-        first = (job_dir / f"{lane_id}.log").read_text().splitlines()[0]
+        first = (job_dir / f"{lane_id}_r1.log").read_text().splitlines()[0]
         argvs.append(json.loads(first.removeprefix("argv: ")))
     for argv in argvs:
         flag = lambda name, a=argv: a[a.index(name) + 1]
@@ -110,20 +122,27 @@ def test_every_lane_uses_the_same_query_counts_and_no_tracing(client: Any) -> No
     assert len({a[a.index("--dataset") + 1] for a in argvs}) == 1  # one graph for every lane
 
 
-def test_run_order_is_shuffled_per_request_and_reproducible_from_the_seed(client: Any) -> None:
+def test_round_orders_differ_between_requests_and_replay_from_the_seed(client: Any) -> None:
     lanes = [VANILLA_D, VANILLA_A, RADIX]
     orders = {
-        seed: _compare(client, lanes, order_seed=seed, repetitions=3)["result"]["measurement"][
-            "run_order"
-        ]
+        seed: _compare(client, lanes, order_seed=seed, repetitions=3, rounds=2)["result"][
+            "measurement"
+        ]["round_orders"]
         for seed in (1, 2, 3, 4, 5, 6)
     }
-    assert all(sorted(o) == sorted(ln["id"] for ln in lanes) for o in orders.values())
-    assert len({tuple(o) for o in orders.values()}) > 1  # not a fixed order
-    again = _compare(client, lanes, order_seed=3, repetitions=3)["result"]["measurement"]
-    assert again["run_order"] == orders[3]
-    unseeded = _compare(client, lanes, repetitions=3)["result"]["measurement"]
+    flat = {tuple(map(tuple, o)) for o in orders.values()}
+    assert len(flat) > 1  # not a fixed order
+    again = _compare(client, lanes, order_seed=3, repetitions=3, rounds=2)["result"]["measurement"]
+    assert again["round_orders"] == orders[3]
+    unseeded = _compare(client, lanes, repetitions=3, rounds=1)["result"]["measurement"]
     assert isinstance(unseeded["order_seed"], int)  # chosen and reported, so replayable
+
+
+def test_one_round_reports_no_win(client: Any) -> None:
+    d = _compare(client, [VANILLA_D, RADIX], rounds=1, repetitions=3)
+    for ln in d["result"]["lanes"]:
+        assert ln["verdict"] in ("reference", "same")  # never faster/slower from one round
+        assert len(ln["timing"]["round_medians_ns"]) == 1
 
 
 def test_unreachable_query_agrees_across_lanes(client: Any) -> None:
@@ -141,6 +160,8 @@ def test_unreachable_query_agrees_across_lanes(client: Any) -> None:
         {"lanes": [VANILLA_D, {**RADIX, "id": VANILLA_D["id"]}]},
         {"lanes": [VANILLA_D, {**VANILLA_D, "id": "again"}]},
         {"lanes": [VANILLA_D, RADIX], "repetitions": 2},
+        {"lanes": [VANILLA_D, RADIX], "rounds": 0},
+        {"lanes": [VANILLA_D, RADIX], "rounds": 8},
         {"lanes": [VANILLA_D, RADIX], "warmup": 1},
         {"lanes": [VANILLA_D, {"id": "m", "algorithm": "dijkstra", "queue": "lpq_model"}]},
         {"lanes": [VANILLA_D, {"id": "x", "algorithm": "dijkstra", "queue": "nope"}]},
@@ -205,7 +226,26 @@ def test_optimized_lanes_return_the_exact_distance(client: Any) -> None:
     assert lanes["optimized_astar"]["vanilla_lane_id"] == "vanilla_astar"
     assert lanes["optimized_astar"]["heuristic_used"] == lanes["vanilla_astar"]["heuristic_used"]
     kinds = {(e["kind"], e["lane_id"]) for e in res["effects"]}
-    assert ("ml", "optimized_dijkstra") in kinds and ("algorithm", "vanilla_astar") in kinds
+    assert ("algorithm", "vanilla_astar") in kinds
+    # The engine says what the Optimized queue resolved to; it is passed through, and a
+    # radix resolution is a queue choice, never an ML effect.
+    from atlas_api.app import lane_comparisons
+
+    job_dir = lane_comparisons.get(d["id"]).dir
+    for lid in ("optimized_dijkstra", "optimized_astar"):
+        ln = lanes[lid]
+        assert ln["resolved_queue"] and ln["resolution_method"] in (
+            "autotune", "autotune_cached", "policy", "default",
+        )
+        assert ln["calibration_ns"] is not None
+        assert ln["resolved_to_radix"] is (ln["resolved_kind"] == "radix_heap")
+        assert ("ml", lid) in kinds or ln["resolved_to_radix"]
+        assert not (ln["resolved_to_radix"] and ("ml", lid) in kinds)
+        # One untimed set-up call before round 1; it is not among the timed samples.
+        warm = json.loads((job_dir / lid / "warmup" / "result.json").read_text())
+        assert warm["timing"]["benchmark"] is None
+        assert len(ln["timing"]["samples_ns"]) == 3 * 5
+    assert not (job_dir / "vanilla_dijkstra" / "warmup").exists()  # only Optimized lanes
     r = client.post(
         "/api/runs",
         json={

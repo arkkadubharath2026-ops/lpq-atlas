@@ -84,6 +84,7 @@ export interface LaneComparisonBody {
   target_node: number;
   lanes: { id: string; algorithm: "dijkstra" | "astar"; queue: string; label?: string }[];
   heuristic?: "auto" | "zero" | "haversine" | "euclidean";
+  rounds?: number;
   repetitions?: number;
   warmup?: number;
   order_seed?: number;

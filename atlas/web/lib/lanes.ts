@@ -22,8 +22,10 @@ export interface LaneDef {
   /** Engine queue id. */
   queue: string;
   kind: LaneKind;
-  /** Optional lanes start unticked and can be switched on by the user. */
+  /** Optional lanes can be switched off (the four core lanes are always offered on). */
   optional: boolean;
+  /** Whether the lane starts ticked. */
+  defaultOn: boolean;
   /** One plain sentence on what this lane is, for the tooltip. */
   tooltip: string;
   /** Used by the bars: a CSS colour variable. */
@@ -51,6 +53,7 @@ export const LANES: readonly LaneDef[] = [
     queue: "binary_heap",
     kind: "vanilla",
     optional: false,
+    defaultOn: true,
     tooltip:
       "Plain Dijkstra with an ordinary binary heap. This is the reference every Dijkstra lane is compared with.",
     color: "var(--classical)",
@@ -62,6 +65,7 @@ export const LANES: readonly LaneDef[] = [
     queue: "lpq_optimized",
     kind: "optimized",
     optional: false,
+    defaultOn: true,
     tooltip:
       "The same Dijkstra search, but its priority queue is the ML-assisted Optimized queue. Same answer by construction; the question is whether it is quicker.",
     color: "var(--learned)",
@@ -73,6 +77,7 @@ export const LANES: readonly LaneDef[] = [
     queue: "binary_heap",
     kind: "vanilla",
     optional: false,
+    defaultOn: true,
     tooltip:
       "Plain A* with an ordinary binary heap. This is the reference every A* lane is compared with.",
     color: "var(--classical)",
@@ -84,6 +89,7 @@ export const LANES: readonly LaneDef[] = [
     queue: "lpq_optimized",
     kind: "optimized",
     optional: false,
+    defaultOn: true,
     tooltip:
       "The same A* search, but its priority queue is the ML-assisted Optimized queue. It uses the same distance estimate as Vanilla A*.",
     color: "var(--learned)",
@@ -95,6 +101,7 @@ export const LANES: readonly LaneDef[] = [
     queue: "radix_heap",
     kind: "baseline",
     optional: true,
+    defaultOn: true,
     tooltip:
       "Dijkstra with a radix heap, a strong non-ML priority queue built for exactly this kind of search. A fair test of whether ML is needed to go faster.",
     color: "var(--primary)",
@@ -106,13 +113,17 @@ export const LANES: readonly LaneDef[] = [
     queue: "four_ary_heap",
     kind: "baseline",
     optional: true,
+    defaultOn: false,
     tooltip:
       "Dijkstra with a 4-ary heap, a cache-friendlier cousin of the binary heap and another strong non-ML baseline.",
     color: "var(--primary)",
   },
 ];
 
-export const DEFAULT_REPETITIONS = 7;
+export const DEFAULT_ROUNDS = 3;
+export const MIN_ROUNDS = 1;
+export const MAX_ROUNDS = 7;
+export const DEFAULT_REPETITIONS = 5;
 export const DEFAULT_WARMUP = 2;
 export const MIN_REPETITIONS = 3;
 export const MIN_WARMUP = 2;
@@ -120,7 +131,7 @@ export const MIN_WARMUP = 2;
 export const laneDef = (id: string): LaneDef | undefined => LANES.find((l) => l.id === id);
 
 /** The lanes switched on by default. */
-export const defaultLaneIds = (): string[] => LANES.filter((l) => !l.optional).map((l) => l.id);
+export const defaultLaneIds = (): string[] => LANES.filter((l) => l.defaultOn).map((l) => l.id);
 
 export interface LaneRequestItem {
   id: string;

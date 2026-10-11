@@ -11,6 +11,7 @@ Nothing here measures anything. It reads the per-lane facts the engine reported
 
 from __future__ import annotations
 
+import statistics
 from typing import Any
 
 # A lane is "vanilla" when it pairs its algorithm with this queue.
@@ -23,10 +24,70 @@ NOISE_FLOOR = 0.02
 NOISE_MADS = 2.0
 
 NOISE_RULE = (
-    f"A difference is reported only if it is larger than {NOISE_FLOOR:.0%} of the vanilla "
-    f"median and larger than {NOISE_MADS:g}x the sum of the two lanes' median absolute "
-    "deviations; otherwise the lanes are reported as about the same."
+    f"A difference is reported only if (1) it is larger than {NOISE_FLOOR:.0%} of the vanilla "
+    f"median and larger than {NOISE_MADS:g}x the sum of the two lanes' spreads, where a lane's "
+    "spread is the larger of its typical within-process deviation and the deviation of its "
+    "per-round medians, and (2) the same lane was ahead in a strict majority of the measurement "
+    "rounds. Otherwise the lanes are reported as about the same. One round is never enough to "
+    "call a winner."
 )
+
+
+def median(xs: list[float]) -> float:
+    return float(statistics.median(xs))
+
+
+def mad(xs: list[float]) -> float:
+    """Median absolute deviation about the median; 0 for fewer than two values."""
+    if len(xs) < 2:
+        return 0.0
+    m = median(xs)
+    return median([abs(x - m) for x in xs])
+
+
+def aggregate_rounds(rounds: list[dict[str, Any] | None]) -> dict[str, Any] | None:
+    """Combine one lane's per-round engine timings into the lane's timing record.
+
+    `rounds` has one entry per round, in round order: the engine's benchmark block for
+    that round, or None if the lane failed in it. The lane's median is the median of the
+    per-round medians. Its spread is the LARGER of the median within-process MAD and the
+    MAD of the per-round medians: within-process MAD alone understates the drift between
+    separate processes on a shared machine, so the between-round figure is never dropped.
+    Returns None when no round produced a timing.
+    """
+    ok = [r for r in rounds if r]
+    if not ok:
+        return None
+    medians = [float(r["median_ns"]) for r in ok]
+    within = median([float(r["mad_ns"]) for r in ok])
+    between = mad(medians)
+    med = median(medians)
+    samples = [x for r in ok for x in r.get("samples_ns", [])]
+    warnings: list[str] = []
+    for r in ok:
+        for w in r.get("warnings", []):
+            if w not in warnings:
+                warnings.append(w)
+    spread = max(within, between)
+    return {
+        "median_ns": med,
+        "mad_ns": spread,
+        "mad_within_ns": within,
+        "mad_between_rounds_ns": between,
+        "round_medians_ns": [float(r["median_ns"]) if r else None for r in rounds],
+        "rounds": len(rounds),
+        "rounds_ok": len(ok),
+        "relative_mad": spread / med if med > 0 else None,
+        "min_ns": min((r["min_ns"] for r in ok if r.get("min_ns") is not None), default=None),
+        "max_ns": max((r["max_ns"] for r in ok if r.get("max_ns") is not None), default=None),
+        "samples_ns": samples,
+        "repetitions": ok[0].get("repetitions"),
+        "warmup": ok[0].get("warmup"),
+        "noisy": any(bool(r.get("noisy")) for r in ok),
+        "pinned": all(bool(r.get("pinned")) for r in ok),
+        "core": ok[0].get("core"),
+        "warnings": warnings,
+    }
 
 
 def _within_noise(a_med: float, a_mad: float, b_med: float, b_mad: float) -> bool:
@@ -46,23 +107,59 @@ def _timing_ok(lane: dict[str, Any]) -> bool:
 
 
 def _compare(lane: dict[str, Any], base: dict[str, Any]) -> dict[str, Any]:
-    """How `lane` compares with `base`: speedup = base median / lane median."""
+    """How `lane` compares with `base`: speedup = base median / lane median.
+
+    Besides the noise rule, a win or a loss needs the same sign in a strict majority of
+    the rounds in which both lanes have a timing (and at least two such rounds).
+    """
     lt, bt = lane["timing"], base["timing"]
     s = speedup(bt["median_ns"], lt["median_ns"])
+    out: dict[str, Any] = {
+        "speedup": s,
+        "verdict": "unavailable",
+        "within_noise": None,
+        "reason": None,
+        "rounds_faster": 0,
+        "rounds_slower": 0,
+        "rounds_compared": 0,
+    }
     if s is None:
-        return {"speedup": None, "verdict": "unavailable", "within_noise": None}
+        return out
+    pairs = [
+        (b, x)
+        for b, x in zip(bt.get("round_medians_ns") or [], lt.get("round_medians_ns") or [], strict=False)
+        if b and x
+    ]
+    n = len(pairs)
+    faster = sum(1 for b, x in pairs if b / x > 1.0)
+    slower = sum(1 for b, x in pairs if b / x < 1.0)
+    out.update(rounds_faster=faster, rounds_slower=slower, rounds_compared=n)
     noise = _within_noise(
         lt["median_ns"], lt.get("mad_ns") or 0.0, bt["median_ns"], bt.get("mad_ns") or 0.0
     )
-    verdict = "same" if noise else ("faster" if s > 1.0 else "slower")
-    return {"speedup": s, "verdict": verdict, "within_noise": noise}
+    out["within_noise"] = noise
+    if noise:
+        out.update(verdict="same", reason="within_noise")
+    elif n < 2:
+        out.update(verdict="same", reason="single_round")
+    elif s > 1.0 and faster * 2 > n:
+        out.update(verdict="faster")
+    elif s < 1.0 and slower * 2 > n:
+        out.update(verdict="slower")
+    else:
+        out.update(verdict="same", reason="not_consistent_across_rounds")
+    return out
 
 
 def effect_kind(lane: dict[str, Any]) -> str:
     """What changed relative to the vanilla lane of the same algorithm."""
     if lane["queue"] == VANILLA_QUEUE:
         return "vanilla"
-    return "ml" if lane.get("family") == "learned" else "queue"
+    if lane.get("family") == "learned":
+        # An Optimized lane that resolved to the radix heap IS the radix heap: whatever it
+        # gained over vanilla is the queue choice, and must not be credited to ML.
+        return "queue" if lane.get("resolved_kind") == "radix_heap" else "ml"
+    return "queue"
 
 
 def analyse(
@@ -113,6 +210,8 @@ def analyse(
         lane["speedup_vs_vanilla"] = None
         lane["verdict"] = "unavailable"
         lane["within_noise"] = None
+        lane["verdict_reason"] = None
+        lane["rounds_faster"] = lane["rounds_slower"] = lane["rounds_compared"] = None
         if not _timing_ok(lane):
             continue
         vanilla = vanilla_by_alg.get(lane["algorithm"])
@@ -124,7 +223,13 @@ def analyse(
         else:
             c = _compare(lane, vanilla)
             lane.update(
-                speedup_vs_vanilla=c["speedup"], verdict=c["verdict"], within_noise=c["within_noise"]
+                speedup_vs_vanilla=c["speedup"],
+                verdict=c["verdict"],
+                within_noise=c["within_noise"],
+                verdict_reason=c["reason"],
+                rounds_faster=c["rounds_faster"],
+                rounds_slower=c["rounds_slower"],
+                rounds_compared=c["rounds_compared"],
             )
 
     # -- ranking: only lanes with a timing AND the right answer can place -----------
@@ -143,16 +248,8 @@ def analyse(
     fastest = None
     if placed:
         top = placed[0]
-        tied = [
-            other["id"]
-            for other in placed[1:]
-            if _within_noise(
-                top["timing"]["median_ns"],
-                top["timing"].get("mad_ns") or 0.0,
-                other["timing"]["median_ns"],
-                other["timing"].get("mad_ns") or 0.0,
-            )
-        ]
+        # Tied: not demonstrably slower than the leader (noise rule AND round majority).
+        tied = [o["id"] for o in placed[1:] if _compare(o, top)["verdict"] != "slower"]
         fastest = {
             "lane_id": top["id"],
             "median_ns": top["timing"]["median_ns"],
@@ -173,6 +270,10 @@ def analyse(
                 "versus_lane_id": base["id"],
                 "speedup": c["speedup"],
                 "verdict": c["verdict"],
+                "reason": c["reason"],
+                "rounds_faster": c["rounds_faster"],
+                "rounds_slower": c["rounds_slower"],
+                "rounds_compared": c["rounds_compared"],
             }
         )
 
@@ -186,10 +287,11 @@ def analyse(
         vid = lane["vanilla_lane_id"]
         if vid is not None:
             add(lane["effect"], lane, by_id[vid])
-    # ML against the best classical queue of the same algorithm, when that is not
-    # simply the vanilla queue: the fair question once a faster classical queue exists.
+    # Optimized against the strongest non-ML queue of the same algorithm: the radix heap when
+    # that lane is present, else the fastest other classical queue. This, not vanilla, is the
+    # fair test of whether the Optimized queue earns its place.
     for lane in lanes:
-        if not _timing_ok(lane) or lane["effect"] != "ml":
+        if not _timing_ok(lane) or lane.get("family") != "learned":
             continue
         classical = [
             o
@@ -197,13 +299,14 @@ def analyse(
             if o is not lane
             and o["algorithm"] == lane["algorithm"]
             and o.get("family") == "classical"
+            and o["queue"] != VANILLA_QUEUE
             and _timing_ok(o)
         ]
         if not classical:
             continue
-        best = min(classical, key=lambda o: o["timing"]["median_ns"])
-        if best["queue"] != VANILLA_QUEUE:
-            add("ml_vs_best_classical", lane, best)
+        radix = [o for o in classical if o["queue"] == "radix_heap"]
+        best = radix[0] if radix else min(classical, key=lambda o: o["timing"]["median_ns"])
+        add("ml_vs_best_classical", lane, best)
 
     return {
         "fastest": fastest,

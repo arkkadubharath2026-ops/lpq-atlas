@@ -340,10 +340,19 @@ export interface Note {
 
 export type LaneVerdict = "faster" | "slower" | "same" | "reference" | "unavailable";
 export type LaneEffectKind = "vanilla" | "queue" | "ml";
+export type VerdictReason = "within_noise" | "not_consistent_across_rounds" | "single_round" | null;
 
 export interface LaneTiming {
+  /** Median of the per-round medians. */
   median_ns: number;
+  /** Spread: the larger of the within-process MAD and the MAD of the per-round medians. */
   mad_ns: number;
+  mad_within_ns?: number;
+  mad_between_rounds_ns?: number;
+  /** One entry per round (null where that round failed). */
+  round_medians_ns?: (number | null)[];
+  rounds?: number;
+  rounds_ok?: number;
   relative_mad: number | null;
   min_ns: number | null;
   max_ns: number | null;
@@ -374,7 +383,8 @@ export interface LaneResult {
   algorithm: "dijkstra" | "astar";
   queue: string;
   family: string | null;
-  run_index: number;
+  /** Position in each round's shuffled order. */
+  run_positions: number[];
   run_id: string;
   status: "ok" | "error";
   error: { category: string; message: string } | null;
@@ -391,8 +401,23 @@ export interface LaneResult {
   speedup_vs_vanilla: number | null;
   verdict: LaneVerdict;
   within_noise: boolean | null;
+  verdict_reason?: VerdictReason;
+  /** Rounds (of `rounds_compared`) in which this lane was ahead of / behind its vanilla lane. */
+  rounds_faster?: number | null;
+  rounds_slower?: number | null;
+  rounds_compared?: number | null;
   rank: number | null;
   vs_fastest: number | null;
+  /** From the engine's `optimizer` block, for the Optimized queue. */
+  resolved_queue?: string | null;
+  resolved_kind?: string | null;
+  resolution_method?: "autotune" | "autotune_cached" | "policy" | "default" | null;
+  /** One-time set-up cost of the untimed call before round 1; not part of any timed figure. */
+  calibration_ns?: number | null;
+  resolution_reason?: string | null;
+  predicted_ratio_vs_radix?: number | null;
+  resolved_to_radix?: boolean;
+  failed_rounds?: number[];
 }
 
 export interface LaneEffect {
@@ -401,6 +426,10 @@ export interface LaneEffect {
   versus_lane_id: string;
   speedup: number | null;
   verdict: LaneVerdict;
+  reason?: VerdictReason;
+  rounds_faster?: number | null;
+  rounds_slower?: number | null;
+  rounds_compared?: number | null;
 }
 
 export interface LaneComparisonResult {
@@ -409,12 +438,15 @@ export interface LaneComparisonResult {
   source_node: number;
   target_node: number;
   measurement: {
+    rounds: number;
     repetitions: number;
     warmup: number;
     tracing: string;
     execution: string;
-    run_order: string[];
+    /** The shuffled lane order of each round. */
+    round_orders: string[][];
     order_seed: number;
+    one_time_setup_ns?: number;
     all_pinned: boolean;
     cores: number[];
     clock: string;

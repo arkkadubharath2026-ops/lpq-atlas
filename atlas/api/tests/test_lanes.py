@@ -26,6 +26,8 @@ def lane(
     distance: int | None = 100,
     family: str | None = None,
     status: str = "ok",
+    rounds: list[float | None] | None = None,
+    resolved_kind: str | None = None,
 ) -> dict[str, Any]:
     if status != "ok":
         return {
@@ -43,7 +45,12 @@ def lane(
         "queue": queue,
         "family": family or ("learned" if queue.startswith("lpq") else "classical"),
         "status": "ok",
-        "timing": {"median_ns": median, "mad_ns": mad},
+        "timing": {
+            "median_ns": median,
+            "mad_ns": mad,
+            "round_medians_ns": rounds if rounds is not None else [median] * 3,
+        },
+        "resolved_kind": resolved_kind,
         "distance": distance,
         "reachable": distance is not None,
         "reference": {"reachable": distance is not None, "distance": distance},
@@ -226,7 +233,7 @@ def test_every_astar_lane_gets_the_same_heuristic_and_every_lane_the_same_query(
     assert runs["c"].heuristic == "auto"  # Dijkstra takes none
     for r in runs.values():
         assert (r.source_node, r.target_node, r.trace_level) == (3, 9, "none")
-        assert (r.repetitions, r.warmup) == (7, 2)
+        assert (r.repetitions, r.warmup) == (5, 2)
         assert r.correctness_policy == "exact" and r.model_id is None
 
 
@@ -277,3 +284,196 @@ def test_unparseable_help_means_unknown_not_unavailable(tmp_path: Path) -> None:
     tool.write_text("#!/bin/sh\necho nothing useful\n")
     tool.chmod(0o755)
     assert _engine_help_queues(str(tool), 1.0) is None
+
+
+# -- measurement rounds: aggregation, majority-sign rule, resolved queue ---------------------
+
+
+def bench(median: float, mad_ns: float = 0.0, samples: list[int] | None = None) -> dict[str, Any]:
+    return {
+        "median_ns": median,
+        "mad_ns": mad_ns,
+        "min_ns": median - 1,
+        "max_ns": median + 1,
+        "samples_ns": samples or [int(median)] * 5,
+        "repetitions": 5,
+        "warmup": 2,
+        "noisy": False,
+        "pinned": True,
+        "core": 1,
+        "warnings": [],
+    }
+
+
+def test_lane_median_is_the_median_of_round_medians() -> None:
+    t = L.aggregate_rounds([bench(10), bench(30), bench(20)])
+    assert t is not None
+    assert t["median_ns"] == 20
+    assert t["round_medians_ns"] == [10, 30, 20]
+    assert t["rounds"] == 3 and t["rounds_ok"] == 3
+    assert len(t["samples_ns"]) == 15  # every timed sample of every round, nothing else
+
+
+def test_spread_is_the_larger_of_within_and_between_round_deviation() -> None:
+    # Tight within each process, wildly different between processes: the drift shows.
+    drift = L.aggregate_rounds([bench(100, 1), bench(140, 1), bench(180, 1)])
+    assert drift is not None
+    assert drift["mad_within_ns"] == 1
+    assert drift["mad_between_rounds_ns"] == 40
+    assert drift["mad_ns"] == 40
+    # Noisy within each process, identical across rounds: the within figure is kept.
+    jitter = L.aggregate_rounds([bench(100, 7), bench(100, 9), bench(100, 8)])
+    assert jitter is not None
+    assert jitter["mad_between_rounds_ns"] == 0 and jitter["mad_ns"] == 8
+
+
+def test_a_failed_round_is_left_out_but_keeps_its_slot() -> None:
+    t = L.aggregate_rounds([bench(10), None, bench(30)])
+    assert t is not None
+    assert t["median_ns"] == 20 and t["round_medians_ns"] == [10, None, 30]
+    assert t["rounds"] == 3 and t["rounds_ok"] == 2
+    assert L.aggregate_rounds([None, None]) is None
+
+
+def test_win_needs_the_same_sign_in_a_majority_of_rounds() -> None:
+    van = lane("vd", "dijkstra", "binary_heap", 100.0, rounds=[100.0] * 4)
+    # Median 90 says faster, but the lane is ahead in only 2 of 4 rounds: not a majority.
+    split = lane("od", "dijkstra", "lpq_optimized", 90.0, rounds=[50.0, 60.0, 120.0, 130.0])
+    L.analyse([van, split])
+    assert split["speedup_vs_vanilla"] == pytest.approx(100 / 90)
+    assert split["verdict"] == "same"
+    assert split["verdict_reason"] == "not_consistent_across_rounds"
+    assert (split["rounds_faster"], split["rounds_compared"]) == (2, 4)
+    # 3 of 4 is a strict majority.
+    most = lane("od", "dijkstra", "lpq_optimized", 70.0, rounds=[50.0, 60.0, 70.0, 130.0])
+    van2 = lane("vd", "dijkstra", "binary_heap", 100.0, rounds=[100.0] * 4)
+    L.analyse([van2, most])
+    assert most["verdict"] == "faster" and most["rounds_faster"] == 3
+
+
+def test_the_same_rule_stops_a_one_off_loss() -> None:
+    van = lane("vd", "dijkstra", "binary_heap", 100.0, rounds=[100.0] * 4)
+    split = lane("od", "dijkstra", "lpq_optimized", 110.0, rounds=[80.0, 90.0, 130.0, 140.0])
+    L.analyse([van, split])
+    assert split["verdict"] == "same" and split["rounds_slower"] == 2
+
+
+def test_one_round_never_labels_a_win_or_a_loss() -> None:
+    van = lane("vd", "dijkstra", "binary_heap", 1000.0, rounds=[1000.0])
+    fast = lane("od", "dijkstra", "lpq_optimized", 500.0, rounds=[500.0])
+    L.analyse([van, fast])
+    assert fast["verdict"] == "same" and fast["verdict_reason"] == "single_round"
+    assert fast["speedup_vs_vanilla"] == pytest.approx(2.0)  # still reported, not labelled
+
+
+def test_consistent_sign_still_needs_to_clear_the_noise() -> None:
+    van = lane("vd", "dijkstra", "binary_heap", 1000.0, mad=200.0, rounds=[900.0, 1000.0, 1100.0])
+    lane_ = lane("od", "dijkstra", "lpq_optimized", 950.0, mad=200.0, rounds=[850.0, 950.0, 1050.0])
+    L.analyse([van, lane_])
+    assert lane_["rounds_faster"] == 3
+    assert lane_["verdict"] == "same" and lane_["verdict_reason"] == "within_noise"
+
+
+def test_identical_queues_are_not_split_by_one_noisy_run() -> None:
+    a = lane("a", "dijkstra", "radix_heap", 100.0, rounds=[100.0, 160.0, 100.0])
+    b = lane("b", "dijkstra", "lpq_optimized", 100.0, rounds=[100.0, 100.0, 100.0],
+             resolved_kind="radix_heap")
+    van = lane("vd", "dijkstra", "binary_heap", 200.0, rounds=[200.0] * 3)
+    s = L.analyse([van, a, b])
+    assert s["fastest"]["clear_win"] is False and set(s["fastest"]["tied_with"]) <= {"a", "b"}
+
+
+def _ok_run(median: float, *, calibration_ns: int = 0, distance: int = 7) -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "error": None,
+        "reachable": True,
+        "distance": distance,
+        "path_hops": 1,
+        "path": [0, 1],
+        "reference": {"reachable": True, "distance": distance},
+        "counts": {"pops": 3},
+        "lpq": None,
+        "heuristic": None,
+        "bench": bench(median),
+        "optimizer": {
+            "resolved_queue": "radix_heap",
+            "resolved_kind": "radix_heap",
+            "resolution_method": "autotune_cached",
+            "calibration_ns": calibration_ns,
+            "reason": "no gain",
+            "predicted_ratio_vs_radix": 1.0,
+            "tuned_candidates": [],
+        },
+    }
+
+
+def _warm(calibration_ns: int, kind: str = "radix_heap") -> dict[str, Any]:
+    run = _ok_run(0, calibration_ns=calibration_ns)
+    run["bench"] = None  # an untimed call has no benchmark block
+    run["optimizer"].update(resolved_kind=kind, resolved_queue=kind, resolution_method="autotune")
+    return run
+
+
+def test_resolved_queue_and_one_time_calibration_come_from_the_warmup_call() -> None:
+    from atlas_api.engine import merge_lane_rounds
+
+    lane_ = merge_lane_rounds(_warm(2_500_000_000), [_ok_run(10), _ok_run(12), _ok_run(11)])
+    assert lane_["status"] == "ok"
+    assert lane_["resolved_queue"] == "radix_heap" and lane_["resolved_to_radix"] is True
+    assert lane_["resolution_method"] == "autotune"
+    assert lane_["calibration_ns"] == 2_500_000_000
+    # The calibration is reported, but is in no timed figure and raises no warning.
+    assert lane_["timing"]["median_ns"] == 11
+    assert lane_["timing"]["round_medians_ns"] == [10, 12, 11]
+    assert len(lane_["timing"]["samples_ns"]) == 15
+    assert lane_["timing"]["warnings"] == []
+
+
+def test_calibration_inside_a_timed_round_is_flagged() -> None:
+    from atlas_api.engine import merge_lane_rounds
+
+    lane_ = merge_lane_rounds(_warm(0), [_ok_run(10, calibration_ns=9), _ok_run(11), _ok_run(12)])
+    assert any("calibration ran during timed round(s) 1" in w for w in lane_["timing"]["warnings"])
+
+
+def test_a_lane_that_resolved_to_radix_is_a_queue_choice_not_an_ml_win() -> None:
+    from atlas_api.engine import merge_lane_rounds
+
+    opt = merge_lane_rounds(_warm(1), [_ok_run(50)] * 3)
+    opt.update(id="od", algorithm="dijkstra", queue="lpq_optimized", family="learned")
+    opt["reference"] = {"reachable": True, "distance": 7}
+    van = lane("vd", "dijkstra", "binary_heap", 100.0)
+    rad = lane("rd", "dijkstra", "radix_heap", 50.0)
+    van["reference"] = rad["reference"] = opt["reference"]
+    van["distance"] = rad["distance"] = 7
+    s = L.analyse([van, rad, opt])
+    assert opt["effect"] == "queue"
+    kinds = {(e["kind"], e["lane_id"]) for e in s["effects"]}
+    assert ("ml", "od") not in kinds
+    # It is also set against the radix lane, the strongest non-ML baseline.
+    vs_radix = next(e for e in s["effects"] if e["kind"] == "ml_vs_best_classical")
+    assert vs_radix["lane_id"] == "od" and vs_radix["versus_lane_id"] == "rd"
+    assert vs_radix["verdict"] == "same"
+
+
+def test_a_lane_that_resolved_to_a_bucket_queue_stays_an_ml_effect() -> None:
+    from atlas_api.engine import merge_lane_rounds
+
+    opt = merge_lane_rounds(_warm(1, kind="pooled_bucket"), [_ok_run(50)] * 3)
+    assert opt["resolved_to_radix"] is False and opt["resolved_kind"] == "pooled_bucket"
+
+
+def test_round_disagreement_on_the_answer_is_an_error_not_a_timing() -> None:
+    from atlas_api.engine import merge_lane_rounds
+
+    lane_ = merge_lane_rounds(None, [_ok_run(10), _ok_run(11, distance=8)])
+    assert lane_["status"] == "error" and "differed between rounds" in lane_["error"]["message"]
+
+
+def test_all_rounds_failing_is_the_lanes_error() -> None:
+    from atlas_api.engine import merge_lane_rounds
+
+    bad = {"status": "error", "error": {"category": "engine", "message": "boom"}}
+    lane_ = merge_lane_rounds(None, [bad, bad])
+    assert lane_["status"] == "error" and lane_["error"]["message"] == "boom"
