@@ -1,0 +1,30 @@
+{
+  "command": [
+    "build/release/bin/lpq_convert",
+    "--input",
+    "datasets/processed/staging/demo_road.gr",
+    "--format",
+    "dimacs",
+    "--output",
+    "datasets/processed/demo_road.lpqgraph",
+    "--metadata",
+    "datasets/metadata/demo_road.json",
+    "--dataset-id",
+    "demo_road",
+    "--directedness",
+    "directed",
+    "--self-loops",
+    "drop",
+    "--parallel-edges",
+    "keep",
+    "--default-weight",
+    "1",
+    "--edges-listed",
+    "once",
+    "--coordinates",
+    "datasets/processed/staging/demo_road.co"
+  ],
+  "converter": "build/release/bin/lpq_convert",
+  "dataset_id": "demo_road",
+  "stdout": "demo_road: 19600 nodes, 55986 arcs, checksum 0xebd2ba73ec480d93"
+}

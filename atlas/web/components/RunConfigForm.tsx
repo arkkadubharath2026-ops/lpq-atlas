@@ -13,8 +13,11 @@ export const DEFAULT_CONFIG: EngineConfig = {
   adaptive_learning: false,
 };
 
+/** The research LPQ variants take approximate mode; the Optimized queue is exact-only. */
+const hasApproximation = (queue: string): boolean => queue.startsWith("lpq") && queue !== "lpq_optimized";
+
 export function normaliseConfig(c: EngineConfig): EngineConfig {
-  const learned = c.queue.startsWith("lpq");
+  const learned = hasApproximation(c.queue);
   return {
     ...c,
     heuristic: c.algorithm === "dijkstra" ? "auto" : c.heuristic,
@@ -37,7 +40,7 @@ interface Props {
 
 export function RunConfigForm({ value, onChange, dataset, queues, models, idPrefix, disabled }: Props) {
   const set = (patch: Partial<EngineConfig>) => onChange(normaliseConfig({ ...value, ...patch }));
-  const learned = value.queue.startsWith("lpq");
+  const learned = hasApproximation(value.queue);
   const compatibleModels = models.filter((m) => m.training_dataset === dataset?.id);
   const heuristics = dataset?.astar_heuristics ?? ["zero"];
   return (
@@ -79,9 +82,10 @@ export function RunConfigForm({ value, onChange, dataset, queues, models, idPref
           </optgroup>
           <optgroup label="Learned">
             {queues.filter((q) => q.family === "learned").map((q) => (
-              <option key={q.id} value={q.id} disabled={q.requires_model && compatibleModels.length === 0}>
+              <option key={q.id} value={q.id} disabled={(q.requires_model && compatibleModels.length === 0) || q.engine_available === false}>
                 {q.name}
                 {q.requires_model && compatibleModels.length === 0 ? " — no model for this dataset" : ""}
+                {q.engine_available === false ? " — not in this engine build" : ""}
               </option>
             ))}
           </optgroup>
@@ -108,7 +112,7 @@ export function RunConfigForm({ value, onChange, dataset, queues, models, idPref
       ) : null}
       <fieldset style={{ border: 0, padding: 0, margin: 0 }} disabled={disabled || !learned}>
         <legend className="small muted" style={{ marginBottom: 4 }}>
-          Correctness policy {learned ? "" : "(exact only: classical queues have no approximation)"}
+          Correctness policy {learned ? "" : "(exact only: this queue has no approximation)"}
         </legend>
         <div className="seg" role="group">
           {(["exact", "approximate"] as const).map((p) => (

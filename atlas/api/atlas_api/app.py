@@ -20,7 +20,13 @@ from typing import Any
 import numpy as np
 from atlas_api import analysis, graphcache
 from atlas_api.config import get_settings
-from atlas_api.engine import execute_benchmark, execute_run, validate_against_dataset
+from atlas_api.engine import (
+    execute_benchmark,
+    execute_lane_comparison,
+    execute_run,
+    lane_run_requests,
+    validate_against_dataset,
+)
 from atlas_api.jobs import (
     COMPLETED,
     FINALIZING,
@@ -31,9 +37,21 @@ from atlas_api.jobs import (
     JobManager,
 )
 from atlas_api.logging_setup import configure_logging
-from atlas_api.registry import ALGORITHMS, QUEUES, Registry, capabilities
-from atlas_api.schemas import BenchmarkRequest, ComparisonRequest, RunRequest, SnapRequest
+from atlas_api.registry import (
+    ALGORITHMS,
+    Registry,
+    capabilities,
+    queues_with_availability,
+)
+from atlas_api.schemas import (
+    BenchmarkRequest,
+    ComparisonRequest,
+    LaneComparisonRequest,
+    RunRequest,
+    SnapRequest,
+)
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Path as ApiPath
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from lpq_tools.data.pipeline import PipelineError, prepare_dataset
@@ -50,6 +68,8 @@ runs = JobManager(settings.runs_dir, "run", settings.max_concurrent_jobs)
 # deadlock with every worker waiting for work that has no worker to run it.
 comparisons = JobManager(settings.comparisons_dir, "comparison", 2)
 benchmarks = JobManager(settings.benchmarks_dir, "benchmark", 1)
+# One lane comparison at a time: its lanes are timed, and timed work must not overlap.
+lane_comparisons = JobManager(settings.work_dir / "lane_comparisons", "lane_comparison", 1)
 preparations = JobManager(settings.work_dir / "preparations", "prepare", 1)
 
 app = FastAPI(title="LPQ Atlas API", version="1.0.0")
@@ -152,7 +172,7 @@ def get_dataset(dataset_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/datasets/{dataset_id}/prepare", status_code=202)
-def prepare(dataset_id: str) -> dict[str, Any]:
+def prepare(dataset_id: str = ApiPath(pattern=r"^[a-z0-9_]{1,64}$")) -> dict[str, Any]:
     cfg_path = settings.root / "configs" / "datasets" / f"{dataset_id}.yaml"
     if not cfg_path.exists():
         raise HTTPException(404, detail={"error": "not_found", "message": "no dataset config"})
@@ -193,7 +213,7 @@ def list_algorithms() -> list[dict[str, Any]]:
 
 @app.get("/api/queues")
 def list_queues() -> list[dict[str, Any]]:
-    return QUEUES
+    return queues_with_availability(settings)
 
 
 @app.get("/api/models")
@@ -525,6 +545,68 @@ def create_comparison(req: ComparisonRequest) -> dict[str, Any]:
     return job.public()
 
 
+def _benchmark_running() -> bool:
+    return any(j.state in (RUNNING, FINALIZING) for j in benchmarks.list(5))
+
+
+@app.post("/api/lane-comparisons", status_code=202)
+def create_lane_comparison(req: LaneComparisonRequest) -> dict[str, Any]:
+    """Time several (algorithm, queue) lanes on one query, fairly (see engine.py).
+
+    Same graph, source and target for every lane; the same warm-up and repetition
+    counts; tracing off; one lane at a time in a per-request shuffled order that is
+    reported back; one admissible heuristic shared by every A* lane.
+    """
+    info, graph = _ready_dataset(req.dataset_id)
+    n = int(info["nodes"])
+    if req.source_node >= n or req.target_node >= n:
+        raise _bad(f"source and target must be node ids below {n}")
+    try:
+        settings.tool("lpq_run")
+    except FileNotFoundError as e:
+        raise HTTPException(
+            503, detail={"error": "engine_unavailable", "message": "lpq_run is not built"}
+        ) from e
+    try:
+        _, run_reqs = lane_run_requests(req, info)
+        for rr in run_reqs.values():
+            validate_against_dataset(rr, info, registry)
+    except ValueError as e:
+        raise _bad(str(e)) from e
+
+    def work(job: Job, m: JobManager) -> dict[str, Any]:
+        return execute_lane_comparison(
+            job, m, settings, registry, req, info, graph, _benchmark_running
+        )
+
+    job = lane_comparisons.submit(
+        req.model_dump(mode="json"),
+        work,
+        {"dataset_id": req.dataset_id, "lanes": [lane.id for lane in req.lanes]},
+    )
+    return job.public()
+
+
+@app.get("/api/lane-comparisons/{cmp_id}")
+def get_lane_comparison(cmp_id: str) -> dict[str, Any]:
+    """Job status; once COMPLETED, ``result`` holds every figure the page displays."""
+    job = _job_or_404(lane_comparisons, cmp_id)
+    out = job.public()
+    out["request"] = _read_json(job.dir / "request.json")
+    out["result"] = (
+        _read_json(job.dir / "comparison.json")
+        if job.state == COMPLETED and (job.dir / "comparison.json").exists()
+        else None
+    )
+    return out
+
+
+@app.post("/api/lane-comparisons/{cmp_id}/cancel")
+def cancel_lane_comparison(cmp_id: str) -> dict[str, Any]:
+    _job_or_404(lane_comparisons, cmp_id)
+    return lane_comparisons.cancel(cmp_id).public()
+
+
 @app.get("/api/comparisons")
 def list_comparisons(limit: int = Query(30, ge=1, le=200)) -> list[dict[str, Any]]:
     return [j.public() for j in comparisons.list(limit)]
@@ -617,16 +699,20 @@ def get_benchmark_results(bench_id: str, raw: bool = False) -> Any:
 def research_results() -> list[dict[str, Any]]:
     out = []
     for p in analysis.list_result_files(settings.root):
+        rid = analysis.result_id(settings.root, p)
+        group = rid.rpartition("/")[0]
         try:
             s = analysis.summarise_file(p, compare=False)
-        except (ValueError, KeyError, TypeError):
-            out.append({"file": p.name, "error": "malformed result file"})
+        except (ValueError, KeyError, TypeError, OSError):
+            out.append({"file": rid, "group": group, "error": "malformed result file"})
             continue
         out.append(
             {
-                "file": p.name,
+                "file": rid,
+                "group": group,
                 "experiment_id": s["experiment_id"],
                 "generated_at": s["generated_at"],
+                "dataset": s["dataset"],
                 "dataset_nodes": s["graph_nodes"],
                 "records": s["records"],
                 "configurations": [c["key"] for c in s["configurations"]],
@@ -636,14 +722,21 @@ def research_results() -> list[dict[str, Any]]:
     return out
 
 
-@app.get("/api/research/results/{file}")
+@app.get("/api/research/results/{file:path}")
 def research_result(
     file: str, baseline: str | None = Query(None, pattern=r"^[a-z_0-9]+$")
 ) -> dict[str, Any]:
-    for p in analysis.list_result_files(settings.root):
-        if p.name == file:
-            return analysis.summarise_file(p, baseline)
-    raise HTTPException(404, detail={"error": "not_found", "message": "unknown result file"})
+    p = analysis.find_result_file(settings.root, file)
+    if p is None:
+        raise HTTPException(404, detail={"error": "not_found", "message": "unknown result file"})
+    try:
+        s = analysis.summarise_file(p, baseline)
+    except (ValueError, KeyError, TypeError, OSError):
+        raise HTTPException(
+            422, detail={"error": "malformed", "message": "result file could not be read"}
+        ) from None
+    s["file"] = file
+    return s
 
 
 @app.get("/api/research/notes")

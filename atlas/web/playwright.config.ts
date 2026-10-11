@@ -14,5 +14,8 @@ export default defineConfig({
     baseURL: process.env.ATLAS_WEB_URL ?? "http://127.0.0.1:3000",
     viewport: { width: 1500, height: 950 },
     trace: "retain-on-failure",
+    // Optional: use an already-installed Chromium instead of the one Playwright pins
+    // (e.g. a sandbox whose preinstalled browser build differs). Unset in CI.
+    launchOptions: process.env.ATLAS_CHROMIUM_PATH ? { executablePath: process.env.ATLAS_CHROMIUM_PATH } : {},
   },
 });

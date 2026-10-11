@@ -83,6 +83,7 @@
 #define LPQ_LPQ_BUCKET_SUBSTRATE_HPP
 
 #include <algorithm>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -93,6 +94,7 @@
 
 #include "lpq/common/error.hpp"
 #include "lpq/common/types.hpp"
+#include "lpq/lpq/bucket_bitmap.hpp"
 #include "lpq/pq/priority_queue.hpp"
 
 namespace lpq {
@@ -145,6 +147,11 @@ public:
     static constexpr std::size_t kBucketCount = 1024;
     static constexpr std::size_t kBucketMask  = kBucketCount - 1;
 
+    /// Largest ring a caller may ask for. 2^22 buckets of vector headers is
+    /// 100 MB, which is already far past where a wider bucket is the better
+    /// trade; the cap exists so a configuration error cannot allocate gigabytes.
+    static constexpr std::size_t kMaxRing = std::size_t{1} << 22;
+
     /// One queued entry. 16 bytes with a 64-bit key, so four share a cache
     /// line -- and the scan fallback is a linear walk over exactly this array,
     /// which is the access pattern caches are best at.
@@ -162,6 +169,12 @@ public:
 
     BucketSubstrate() : BucketSubstrate(1) {}
 
+    /// The ring size is a runtime parameter so a narrow bucket width can still
+    /// cover the key range: the ring spans ring * width above the base, and a
+    /// width of 1 on a road network needs a ring larger than the longest arc.
+    /// It defaults to kBucketCount, which is what every earlier configuration
+    /// used, so existing behaviour is unchanged unless a caller opts in.
+
     /// `width` is the key span each bucket covers.
     ///
     /// Width 1 makes every bucket hold a single key value, so the cached bound
@@ -169,14 +182,24 @@ public:
     /// in the ablation, not as a production setting. Wider buckets hold more
     /// elements, which is where a scan is expensive and a correct prediction is
     /// worth something.
-    explicit BucketSubstrate(KeyType width) {
+    explicit BucketSubstrate(KeyType width, std::size_t ring_size = kBucketCount) {
         if (width == 0) {
             throw InvalidConfigError("bucket width must be at least 1");
         }
+        if (ring_size < 2 || ring_size > kMaxRing || !std::has_single_bit(ring_size)) {
+            throw InvalidConfigError("bucket ring size must be a power of two in [2, " +
+                                     std::to_string(kMaxRing) + "], got " +
+                                     std::to_string(ring_size));
+        }
         width_ = width;
-        buckets_.resize(kBucketCount);
-        bucket_bound_.assign(kBucketCount, kNoBound);
+        ring_  = ring_size;
+        mask_  = ring_size - 1;
+        buckets_.resize(ring_);
+        bucket_bound_.assign(ring_, kNoBound);
+        nonempty_.reset(ring_);
     }
+
+    [[nodiscard]] std::size_t ring_size() const noexcept { return ring_; }
 
     // --- PriorityQueueLike ---------------------------------------------------
 
@@ -206,7 +229,7 @@ public:
         const std::size_t offset = static_cast<std::size_t>((key - base_) / width_);
         ++size_;
 
-        if (offset >= kBucketCount) {
+        if (offset >= ring_) {
             overflow_.push_back(Entry{key, node, score});
             if (overflow_bound_ == kNoBound || key < overflow_bound_) {
                 overflow_bound_ = key;
@@ -214,8 +237,9 @@ public:
             return;
         }
 
-        const std::size_t index = (cursor_ + offset) & kBucketMask;
+        const std::size_t index = (cursor_ + offset) & mask_;
         insert_into_bucket(buckets_[index], Entry{key, node, score});
+        nonempty_.set(index);
 
         // The O(1) bound maintenance that makes cheap verification possible.
         ++comparisons_;
@@ -236,6 +260,9 @@ public:
         bucket[at]        = bucket.back();
         bucket.pop_back();
         --size_;
+        if (bucket.empty()) {
+            nonempty_.clear(cursor_);
+        }
 
         // The bound is NOT recomputed here. See the header: refreshing it would
         // cost the scan this structure exists to avoid, and a stale lower bound
@@ -260,8 +287,8 @@ public:
             throw InternalError("top() called on an empty bucket substrate");
         }
 
-        for (std::size_t step = 0; step < kBucketCount; ++step) {
-            const std::vector<Entry>& bucket = buckets_[(cursor_ + step) & kBucketMask];
+        for (std::size_t step = 0; step < ring_; ++step) {
+            const std::vector<Entry>& bucket = buckets_[(cursor_ + step) & mask_];
             if (bucket.empty()) {
                 continue;
             }
@@ -290,9 +317,13 @@ public:
     [[nodiscard]] std::size_t size() const noexcept { return size_; }
 
     void clear() noexcept {
-        for (std::vector<Entry>& b : buckets_) {
-            b.clear();
+        // Visit only the buckets that hold something: a query that touched a few
+        // hundred of a 65536-bucket ring should not pay to clear all of it.
+        for (std::size_t i = nonempty_.find_next(0); i != BucketBitmap::npos;
+             i = nonempty_.find_next(i + 1)) {
+            buckets_[i].clear();
         }
+        nonempty_.clear_all();
         std::fill(bucket_bound_.begin(), bucket_bound_.end(), kNoBound);
         overflow_.clear();
         overflow_bound_ = kNoBound;
@@ -381,11 +412,60 @@ public:
                 bucket[i] = bucket.back();
                 bucket.pop_back();
                 --size_;
+                if (bucket.empty()) {
+                    nonempty_.clear(cursor_);
+                }
                 return true;
             }
         }
         return false;
     }
+
+    // --- Direct extraction (LearnedPriorityQueue, ExtractionStrategy::kDirect) --
+    //
+    // The modular path copies a front into the CandidateManager, verifies the
+    // copy, and then searches the bucket again to remove the winner. These
+    // accessors let a caller verify IN PLACE and remove by the index it already
+    // holds, so none of that copying or re-searching happens. They expose the
+    // current bucket's storage and nothing else: the bound, the size counter and
+    // the cursor stay owned by the substrate, which is what keeps the invariants
+    // (bound <= every key in the bucket; size_ == contents) in one place.
+
+    /// The current bucket, advanced to first, for in-place inspection.
+    /// Precondition: the queue is not empty.
+    [[nodiscard]] std::span<const Entry> peek_current_bucket() {
+        advance_to_non_empty();
+        const std::vector<Entry>& b = buckets_[cursor_];
+        return {b.data(), b.size()};
+    }
+
+    /// Removes the entry at `index` of the current bucket by swapping the last
+    /// entry into its slot. O(1). The caller obtained `index` from
+    /// peek_current_bucket() with no push in between.
+    ///
+    /// Does not touch the cached bound: a removal can only leave it loose, never
+    /// invalid.
+    QueueEntry<KeyType> take_from_current(std::size_t index) {
+        std::vector<Entry>& bucket = buckets_[cursor_];
+        const Entry         taken  = bucket[index];
+        bucket[index]              = bucket.back();
+        bucket.pop_back();
+        --size_;
+        if (bucket.empty()) {
+            nonempty_.clear(cursor_);
+        }
+        return QueueEntry<KeyType>{taken.node, taken.key};
+    }
+
+    /// Records that a scan of the whole current bucket found `exact_minimum`.
+    /// Only a full scan may call this: the bound must stay a lower bound.
+    void set_current_bound(KeyType exact_minimum) noexcept {
+        bucket_bound_[cursor_] = exact_minimum;
+    }
+
+    /// Adds comparisons performed by a caller working on the bucket in place, so
+    /// comparison_count() stays the whole queue's work and not just the push side.
+    void add_comparisons(std::uint64_t n) noexcept { comparisons_ += n; }
 
     /// Recomputes the current bucket's bound with a full scan, and reports the
     /// index of the minimum.
@@ -411,7 +491,7 @@ public:
         for (const std::vector<Entry>& b : buckets_) {
             bytes += b.capacity() * sizeof(Entry);
         }
-        return bytes + overflow_.capacity() * sizeof(Entry);
+        return bytes + overflow_.capacity() * sizeof(Entry) + nonempty_.memory_bytes();
     }
 
 private:
@@ -436,24 +516,37 @@ private:
     /// by fuzz_queue_ops; regression tests in test_bucket_substrate.cpp).
     void advance_to_non_empty() {
         absorb_overflow();
-        std::size_t steps = 0;
-        while (buckets_[cursor_].empty()) {
-            if (steps == kBucketCount) {
-                // A full lap with nothing found: everything left is in the
-                // overflow list, so re-bucket it and start again.
+        if (!buckets_[cursor_].empty()) {
+            return;  // the common case: still inside the bucket being drained
+        }
+        for (;;) {
+            // Jump straight to the next occupied bucket in ring order. The cost
+            // is independent of the gap, which is what makes narrow buckets
+            // affordable.
+            std::size_t next = nonempty_.find_next(cursor_);
+            if (next == BucketBitmap::npos) {
+                next = nonempty_.find_next(0);
+            }
+            if (next == BucketBitmap::npos) {
+                // The ring is empty, so everything left is in the overflow list.
                 redistribute_overflow();
-                steps = 0;
                 continue;
             }
-            bucket_bound_[cursor_] = kNoBound;
-            cursor_                = (cursor_ + 1) & kBucketMask;
-            base_ += width_;
-            ++steps;
-            if (absorb_overflow()) {
-                // Something just landed in a bucket ahead of the cursor; the
-                // lap that would justify a full redistribution starts again.
-                steps = 0;
+            const std::size_t steps = (next - cursor_) & mask_;
+            // Reset the bound of the bucket being LEFT. When next == cursor_ --
+            // which happens right after redistribute_overflow() has refilled the
+            // bucket the cursor already sits on -- that bucket is the one being
+            // ARRIVED at, its bound was just recorded by push(), and wiping it
+            // lets a later push record a bound above a key already queued.
+            if (next != cursor_) {
+                bucket_bound_[cursor_] = kNoBound;
             }
+            cursor_                 = next;
+            base_ += static_cast<KeyType>(steps) * width_;
+            // The window moved. Anything it now covers is later than the bucket
+            // just reached, so re-filing it cannot change which bucket is first.
+            absorb_overflow();
+            return;
         }
     }
 
@@ -467,7 +560,7 @@ private:
         if (overflow_bound_ == kNoBound) {
             return false;
         }
-        const KeyType window_end = base_ + static_cast<KeyType>(kBucketCount) * width_;
+        const KeyType window_end = base_ + static_cast<KeyType>(ring_) * width_;
         if (overflow_bound_ >= window_end) {
             return false;
         }
@@ -527,6 +620,7 @@ private:
         base_                = lowest - (lowest % width_);
         cursor_              = 0;
         std::fill(bucket_bound_.begin(), bucket_bound_.end(), kNoBound);
+        nonempty_.clear_all();  // already empty: this runs only when the ring is
 
         std::vector<Entry> pending;
         pending.swap(overflow_);
@@ -541,8 +635,11 @@ private:
         }
     }
 
-    KeyType width_ = 1;
-    KeyType base_  = 0;
+    KeyType     width_ = 1;
+    KeyType     base_  = 0;
+    std::size_t ring_  = kBucketCount;
+    std::size_t mask_  = kBucketMask;
+    BucketBitmap nonempty_;
 
     std::vector<std::vector<Entry>> buckets_;
     std::vector<KeyType>            bucket_bound_;

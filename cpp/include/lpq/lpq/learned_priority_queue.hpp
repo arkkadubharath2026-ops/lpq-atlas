@@ -54,9 +54,11 @@
 #ifndef LPQ_LPQ_LEARNED_PRIORITY_QUEUE_HPP
 #define LPQ_LPQ_LEARNED_PRIORITY_QUEUE_HPP
 
+#include <algorithm>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <vector>
 
 #include "lpq/common/types.hpp"
@@ -174,6 +176,25 @@ struct LpqMetrics {
     void reset() noexcept { *this = LpqMetrics{}; }
 };
 
+/// How an extraction is carried out.
+///
+/// Both strategies accept an entry only when its key is at or below a valid
+/// lower bound on everything still queued, so both are exact. They differ in how
+/// much machinery stands between the bucket and that comparison.
+enum class ExtractionStrategy : std::uint8_t {
+    /// The modular pipeline of ESD.md section 10: copy the front into the
+    /// CandidateManager, VerificationEngine, CorrectionEngine, then remove the
+    /// winner by searching the bucket. Kept as the reference implementation and
+    /// as the only strategy that implements the approximate correctness policy.
+    kModular = 0,
+
+    /// Verify in place. Walk the substrate's front in score order and accept the
+    /// first entry whose key meets the bound; on a miss, finish the scan of the
+    /// bucket (the classical fallback) from where the front ended. No candidate
+    /// copy, no sort, no second search to remove. Exact mode only.
+    kDirect = 1,
+};
+
 /// Dijkstra-compatible priority queue with a learned candidate window.
 template <WeightType W, NodeScorer Scorer>
     requires(bucket_substrate_supports<W>())
@@ -188,9 +209,27 @@ public:
     LearnedPriorityQueue() : LearnedPriorityQueue(1, CandidateWindowConfig{}) {}
 
     LearnedPriorityQueue(KeyType bucket_width, CandidateWindowConfig window,
-                         CorrectnessPolicy policy = CorrectnessPolicy::exact())
-        : substrate_(bucket_width), manager_(window), verifier_(policy) {
+                         CorrectnessPolicy policy = CorrectnessPolicy::exact(),
+                         ExtractionStrategy strategy = ExtractionStrategy::kModular,
+                         std::size_t ring_size = Substrate::kBucketCount)
+        : substrate_(bucket_width, ring_size), manager_(window), verifier_(policy), strategy_(strategy),
+          front_cap_(window.k_max) {
+        if (strategy == ExtractionStrategy::kDirect && policy.slack_factor() != 1.0) {
+            throw InvalidConfigError(
+                "ExtractionStrategy::kDirect implements exact extraction only; the "
+                "approximate correctness policy requires ExtractionStrategy::kModular");
+        }
         substrate_.set_front_size(window.k_max);
+    }
+
+    [[nodiscard]] ExtractionStrategy strategy() const noexcept { return strategy_; }
+
+    /// Sets the substrate front length (0 disables front maintenance). Only
+    /// meaningful for scorers that carry information; a constant scorer gains
+    /// nothing from a front and pays for maintaining one.
+    void set_front_size(std::size_t k) noexcept {
+        substrate_.set_front_size(k);
+        front_cap_ = k;
     }
 
     void set_scorer(const Scorer* scorer) noexcept { scorer_ = scorer; }
@@ -238,6 +277,12 @@ public:
                 observer_->on_extraction(0, 0, CorrectionOutcome{});
             }
             return entry;
+        }
+
+        // The direct strategy needs no front: with a front of zero it is the
+        // classical scan plus an early exit on the bound.
+        if (strategy_ == ExtractionStrategy::kDirect) {
+            return pop_direct(policy, bucket_size);
         }
 
         if (front.empty()) {
@@ -387,6 +432,105 @@ public:
     [[nodiscard]] const Substrate& substrate() const noexcept { return substrate_; }
 
 private:
+    /// In-place extraction (ExtractionStrategy::kDirect).
+    ///
+    /// Correctness argument, which is the same one the modular path makes: the
+    /// substrate's bound is a lower bound on every key in the current bucket and
+    /// in every later bucket (bucket_substrate.hpp, "The bound goes stale, on
+    /// purpose"). An entry whose key is at or below it is therefore a minimum of
+    /// the whole queue. Nothing here consults a score for correctness; scores
+    /// only choose the ORDER in which entries are looked at, so a bad score costs
+    /// comparisons and never a wrong answer.
+    ///
+    /// Probe the front in score order and stop at the first entry meeting the
+    /// bound -- the verification engine has to scan its whole window because it
+    /// selects the window minimum, whereas the bound makes any hit a minimum.
+    /// If the front misses, the scan simply continues through the rest of the
+    /// bucket: that is the classical fallback, entered without restarting. A
+    /// completed scan with no early hit has found the exact minimum, so the
+    /// bound is refreshed for free (the same amortisation as locate_minimum()).
+    [[nodiscard]] QueueEntry<KeyType> pop_direct(const ExtractionPolicy& policy,
+                                                 std::size_t             bucket_size) {
+        LPQ_PROFILE_BEGIN(verify);
+        const std::span<const typename Substrate::Entry> bucket = substrate_.peek_current_bucket();
+        const KeyType bound = substrate_.current_bound();
+
+        const std::size_t cap =
+            observer_ != nullptr ? std::min<std::size_t>(policy.window_size, front_cap_)
+                                 : front_cap_;
+        const std::size_t probe = std::min(cap, bucket_size);
+
+        std::size_t best     = 0;
+        KeyType     best_key = bucket[0].key;
+        bool        hit      = best_key <= bound;
+        std::size_t i        = 1;
+        // Comparisons: one per entry examined, counting the first.
+        std::uint64_t compared = 1;
+
+        for (; !hit && i < probe; ++i) {
+            ++compared;
+            const auto& e = bucket[i];
+            if (e.key < best_key) {
+                best = i;
+                best_key = e.key;
+            }
+            hit = best_key <= bound;
+        }
+        const std::size_t probed = i;
+
+        bool scanned_past_front = false;
+        if (!hit) {
+            // The front missed. Finish the classical scan from where it ended.
+            scanned_past_front = probed < bucket_size;
+            for (; i < bucket_size; ++i) {
+                ++compared;
+                const auto& e = bucket[i];
+                if (e.key < best_key) {
+                    best = i;
+                    best_key = e.key;
+                    if (best_key <= bound) {
+                        hit = true;
+                        break;
+                    }
+                }
+            }
+            if (!hit) {
+                // Full scan, no early exit: best_key is the exact bucket minimum.
+                substrate_.set_current_bound(best_key);
+            }
+        }
+        substrate_.add_comparisons(compared);
+        LPQ_PROFILE_END(verify, QueuePhase::kVerificationScan);
+
+        const QueueEntry<KeyType> entry = substrate_.take_from_current(best);
+
+        ++metrics_.verified_extractions;
+        metrics_.entries_examined += compared;
+        const std::uint64_t skipped = bucket_size > compared ? (bucket_size - compared) : 0;
+        metrics_.entries_skipped += skipped;
+
+        if (observer_ != nullptr) {
+            CorrectionOutcome outcome;
+            outcome.path = scanned_past_front ? ResolutionPath::kFallback
+                           : (best == 0 ? ResolutionPath::kFirstAttempt
+                                        : ResolutionPath::kFirstAttemptCorrected);
+            outcome.attempts                     = 1;
+            outcome.comparisons                  = static_cast<std::uint32_t>(compared);
+            outcome.verification.outcome         = VerificationOutcome::kAccepted;
+            outcome.verification.node            = entry.node;
+            outcome.verification.key             = static_cast<double>(entry.key);
+            outcome.verification.prediction_was_correct = (best == 0);
+            outcome.verification.rank_displacement      = static_cast<std::uint32_t>(best);
+            outcome.verification.comparisons            = static_cast<std::uint32_t>(compared);
+            observer_->on_extraction(scanned_past_front ? 0 : skipped,
+                                     static_cast<std::uint32_t>(compared), outcome);
+        }
+        if (scanned_past_front) {
+            ++metrics_.fallback_scans;
+        }
+        return entry;
+    }
+
     /// A valid lower bound on everything not yet offered.
     ///
     /// Two cases, and the second is what makes expansion terminate usefully:
@@ -433,6 +577,8 @@ private:
 
     /// Null in every non-adaptive configuration. See set_observer().
     ExtractionObserver* observer_ = nullptr;
+    ExtractionStrategy  strategy_ = ExtractionStrategy::kModular;
+    std::size_t         front_cap_ = 0;
     LpqMetrics         metrics_{};
     std::uint64_t      verifier_comparisons_at_reset_ = 0;
 };

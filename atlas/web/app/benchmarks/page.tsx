@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { ResultView } from "@/components/ResultView";
 import { Empty, ErrorBox, Loading, StateBadge } from "@/components/States";
 import { api, waitForJob } from "@/lib/api";
-import type { Dataset, Job, ModelInfo, QueueInfo, ResultSummary } from "@/lib/types";
+import Link from "next/link";
+import type { Dataset, Job, ModelInfo, QueueInfo, ResultListing, ResultSummary } from "@/lib/types";
 import { fmtInt, queueLabel } from "@/lib/format";
 
 export default function BenchmarksPage() {
@@ -12,7 +13,8 @@ export default function BenchmarksPage() {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [history, setHistory] = useState<Job[]>([]);
   const [error, setError] = useState<unknown>(null);
-  const [ds, setDs] = useState("osm_monaco");
+  const [stored, setStored] = useState<ResultListing[] | null>(null);
+  const [ds, setDs] = useState("");
   const [algorithm, setAlgorithm] = useState<"dijkstra" | "astar">("dijkstra");
   const [heuristic, setHeuristic] = useState("haversine");
   const [selected, setSelected] = useState<string[]>(["binary_heap", "radix_heap", "lpq"]);
@@ -31,8 +33,13 @@ export default function BenchmarksPage() {
 
   useEffect(() => {
     Promise.all([api.datasets(), api.queues(), api.models(), api.benchmarks()])
-      .then(([d, q, m, h]) => { setDatasets(d); setQueues(q); setModels(m); setHistory(h); })
+      .then(([d, q, m, h]) => {
+        setDatasets(d); setQueues(q); setModels(m); setHistory(h);
+        // Default to a dataset that is actually prepared on this machine.
+        setDs((cur) => cur || d.find((x) => x.id === "osm_monaco" && x.status === "READY")?.id || d.find((x) => x.status === "READY")?.id || "");
+      })
       .catch(setError);
+    api.researchResults().then(setStored).catch(() => setStored([]));
   }, []);
 
   const dataset = datasets?.find((d) => d.id === ds) ?? null;
@@ -127,8 +134,9 @@ export default function BenchmarksPage() {
             {queues.map((q) => (
               <label key={q.id} className="check">
                 <input type="checkbox" checked={selected.includes(q.id)} onChange={() => toggle(q.id)}
-                  disabled={q.requires_model && dsModels.length === 0} />
+                  disabled={(q.requires_model && dsModels.length === 0) || q.engine_available === false} />
                 {q.name}{q.requires_model && dsModels.length === 0 ? <span className="dim small"> (no model for this dataset)</span> : null}
+                {q.engine_available === false ? <span className="dim small"> (not in this engine build)</span> : null}
               </label>
             ))}
             {selected.includes("lpq_model") ? (
@@ -163,6 +171,36 @@ export default function BenchmarksPage() {
           <ResultView s={summary} />
         </>
       ) : job && job.state === "COMPLETED" && !summary ? <Loading /> : !job ? <Empty title="No benchmark selected">Run one above or open a previous one below.</Empty> : null}
+
+      <div className="panel" data-testid="stored-results">
+        <h2>Stored benchmark results</h2>
+        <p className="small muted">
+          Result files written by <code>lpq_benchmark</code> and the reproduction scripts under <code>results/raw/</code>
+          (including <code>headline/</code> and <code>local/</code>). They are measurements from whichever machine produced them; nothing here is bundled demonstration data.
+        </p>
+        {!stored ? <Loading /> : stored.length === 0 ? (
+          <Empty title="No stored results on this machine">
+            Run <code>scripts/demo/reproduce_benchmark.sh</code> (or <code>.ps1</code> on Windows) or <code>scripts/bench/run_headline.sh</code>, then reload.
+          </Empty>
+        ) : (
+          <table className="data">
+            <thead><tr><th>File</th><th>Dataset</th><th>Records</th><th>Configurations</th><th>Fastest (median)</th></tr></thead>
+            <tbody>
+              {stored.map((r) => (
+                <tr key={r.file}>
+                  <td className="mono small" style={{ wordBreak: "break-all" }}>
+                    {r.error ? r.file : <Link href={`/research?file=${encodeURIComponent(r.file)}`}>{r.file}</Link>}
+                  </td>
+                  <td>{r.dataset ?? "—"}</td>
+                  <td>{r.error ? <span className="dim">{r.error}</span> : r.records}</td>
+                  <td className="small">{r.error ? "" : r.configurations.length}</td>
+                  <td className="small">{r.fastest_by_median ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
 
       <div className="panel">
         <h2>History</h2>

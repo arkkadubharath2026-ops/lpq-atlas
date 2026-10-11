@@ -1,4 +1,5 @@
 "use client";
+import { Fragment } from "react";
 import { explain, type Replay, type TraceEvent } from "@/lib/trace";
 import type { RunResult } from "@/lib/types";
 import { fmtDistance, fmtInt, fmtNs, fmtNum, fmtPct, isLearned, queueLabel } from "@/lib/format";
@@ -111,6 +112,22 @@ export function Telemetry({ r, unit }: { r: RunResult; unit?: string }) {
 function LpqResultPanel({ r }: { r: RunResult }) {
   const l = r.lpq!;
   const m = l.metrics;
+  // The engine's other learned queues (e.g. lpq_optimized) may report a different
+  // block than the research LPQ; show what is there instead of assuming its shape.
+  if (!m || !l.verification || !l.candidate || !l.correction || !l.window) {
+    const scalars = Object.entries(l as unknown as Record<string, unknown>).filter(
+      ([, v]) => typeof v === "number" || typeof v === "string" || typeof v === "boolean",
+    );
+    return (
+      <>
+        <h3>Learned queue</h3>
+        <p className="small muted">This queue reports its own statistics, shown as the engine wrote them.</p>
+        <dl className="kv">
+          {scalars.map(([k, v]) => (<Fragment key={k}><dt>{k.replace(/_/g, " ")}</dt><dd>{String(v)}</dd></Fragment>))}
+        </dl>
+      </>
+    );
+  }
   return (
     <>
       <h3>Learned queue</h3>
@@ -127,8 +144,8 @@ function LpqResultPanel({ r }: { r: RunResult }) {
         <dt>Fallback scans</dt><dd>{fmtInt(m.fallback_scans)} ({fmtPct(m.fallback_rate, 2)})</dd>
         <dt>Entries examined</dt><dd>{fmtInt(m.entries_examined)}</dd>
         <dt>Entries skipped</dt><dd>{fmtInt(m.entries_skipped)}</dd>
-        <dt>Verif. comparisons</dt><dd>{fmtInt(r.lpq!.verification.comparisons)}</dd>
-        <dt>Window expansions</dt><dd>{fmtInt(r.lpq!.candidate.expansions)}</dd>
+        <dt>Verif. comparisons</dt><dd>{fmtInt(l.verification.comparisons)}</dd>
+        <dt>Window expansions</dt><dd>{fmtInt(l.candidate.expansions)}</dd>
         <dt>First-attempt / corrected / expanded</dt>
         <dd>{fmtInt(l.correction.first_attempt)} / {fmtInt(l.correction.first_attempt_corrected)} / {fmtInt(l.correction.expanded)}</dd>
         <dt>Bucket width / window</dt><dd>{fmtInt(l.bucket_width)} / {l.window[0]}–{l.window[1]}</dd>

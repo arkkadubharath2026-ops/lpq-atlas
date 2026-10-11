@@ -5,8 +5,8 @@
 #            API <-> engine contract tests against the freshly built binaries
 #   fuzz     clang + libFuzzer + ASan/UBSan, a bounded run per target
 #   web      lint, typecheck, unit tests and a production build of the UI
-#   e2e      the real stack on the OSM Monaco extract (acquired and converted by
-#            the project's own pipeline), driven by Playwright
+#   e2e      the real stack on the bundled demo_road graph (committed source files,
+#            converted by the project's own pipeline, no network), driven by Playwright
 name: ci
 
 on:
@@ -108,8 +108,11 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install -r python/requirements.txt -r atlas/api/requirements.txt
-      - name: Prepare the OSM Monaco dataset (pinned snapshot, checksum-verified)
-        run: python scripts/data/prepare_datasets.py osm_monaco
+      # demo_road is committed under datasets/demo/ and digest-pinned, so this step needs no
+      # network. (The previous step downloaded a dated Geofabrik Monaco snapshot; Geofabrik
+      # prunes dated files, and the pinned one returned HTTP 404 in CI.)
+      - name: Prepare the bundled demo_road dataset
+        run: python scripts/demo/prepare_demo.py
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -124,3 +127,35 @@ jobs:
           (cd atlas/web && npx next start -p 3000 &)
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:8000/api/health && curl -sf http://127.0.0.1:3000/ >/dev/null && break; sleep 2; done
           cd atlas/web && npx playwright test
+
+  # Native Windows evidence for the setup scripts: parse every PowerShell script under
+  # Windows PowerShell 5.1 and run the read-only doctor. It does not build or run the app on
+  # Windows. continue-on-error: informational until its first results have been reviewed.
+  windows-scripts:
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      # The Windows runner's "python" is the Microsoft Store alias, which the
+      # doctor (correctly) refuses to count. Install the same Python the other
+      # jobs use so the doctor checks the scripts, not the runner image.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Parse every PowerShell script
+        shell: powershell
+        run: |
+          $bad = 0
+          Get-ChildItem scripts -Recurse -Filter *.ps1 | ForEach-Object {
+            $errs = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errs)
+            foreach ($e in $errs) { $bad++; Write-Host "$($_.FullName):$($e.Extent.StartLineNumber) $($e.Message)" }
+          }
+          if ($bad -gt 0) { exit 1 }
+      - name: doctor (read-only)
+        shell: powershell
+        # Point the doctor at the interpreter setup-python just installed, so it
+        # does not have to find it among the launcher and Store-alias candidates.
+        env:
+          LPQ_SETUP_PYTHON: ${{ env.pythonLocation }}\python.exe
+        run: powershell -ExecutionPolicy Bypass -File scripts\setup\doctor.ps1

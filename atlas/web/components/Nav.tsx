@@ -3,13 +3,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const LINKS = [
+  ["/", "Quick Compare"],
   ["/explore", "Route Explorer"],
-  ["/compare", "Compare"],
+  ["/compare", "Detailed Compare"],
   ["/benchmarks", "Benchmarks"],
   ["/research", "Research"],
   ["/models", "Models"],
   ["/datasets", "Datasets"],
   ["/learn", "Architecture / Learn"],
+  ["/overview", "Overview"],
 ] as const;
 
 export function Nav() {
@@ -21,7 +23,7 @@ export function Nav() {
       </Link>
       <nav className="nav" aria-label="Primary">
         {LINKS.map(([href, label]) => (
-          <Link key={href} href={href} aria-current={path?.startsWith(href) ? "page" : undefined}>
+          <Link key={href} href={href} aria-current={(href === "/" ? path === "/" : path?.startsWith(href)) ? "page" : undefined}>
             {label}
           </Link>
         ))}

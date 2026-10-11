@@ -129,6 +129,33 @@ struct ResultRecord {
     bool target_reachable = false;
     std::string termination;
 
+    /// The queue configuration this record was measured under. Optional so that
+    /// records from before this existed still serialise identically. Without it a
+    /// bucket-width sweep leaves records that cannot be told apart.
+    struct QueueConfig {
+        std::string   label;             ///< the name the row is reported under
+        std::string   queue;             ///< the queue implementation
+        std::uint64_t bucket_width = 0;  ///< 0 for queues with no buckets
+        std::uint64_t ring_size    = 0;
+        std::int64_t  front        = -1; ///< -1: not applicable
+        std::string   strategy;          ///< "modular" | "direct" | ""
+        std::uint32_t position     = 0;  ///< place in this query's measurement order
+
+        /// For a queue that resolves to another one (lpq_optimized): which queue
+        /// it actually ran, why, and what deciding cost. Empty otherwise. A row
+        /// whose resolved queue is a classical heap is that heap's result and
+        /// must be read as such.
+        std::string   resolved_queue;
+        std::string   resolution_reason;
+        double        predicted_ratio = 0.0;     ///< vs radix heap; 0 if not predicted
+        std::uint64_t profile_ns      = 0;       ///< weight-profile computation, once per graph
+        std::string   policy_source;
+        std::string   profile_source;            ///< computed | computed_and_cached | cached
+        std::string   resolution_method;         ///< autotune | autotune_cached | policy | default
+        std::uint64_t calibration_ns = 0;        ///< autotune measurement cost (0 when cached)
+    };
+    std::optional<QueueConfig> queue_config;
+
     /// Set when the configuration could not run at all -- for example a radix
     /// heap requested for floating-point weights. A record is still emitted, so
     /// a missing row in a results table is explained rather than absent.
@@ -161,6 +188,28 @@ inline void write_record(JsonWriter& w, const ResultRecord& r) {
     w.key_value("supported", r.supported());
     if (!r.supported()) {
         w.key_value("unsupported_reason", r.unsupported_reason);
+    }
+    if (r.queue_config) {
+        const auto& qc = *r.queue_config;
+        w.begin_object("queue_config");
+        w.key_value("label", qc.label);
+        w.key_value("queue", qc.queue);
+        w.key_value("bucket_width", qc.bucket_width);
+        w.key_value("ring_size", qc.ring_size);
+        w.key_value("front", qc.front);
+        w.key_value("strategy", qc.strategy);
+        w.key_value("order_position", static_cast<std::uint64_t>(qc.position));
+        if (!qc.resolved_queue.empty()) {
+            w.key_value("resolved_queue", qc.resolved_queue);
+            w.key_value("resolution_reason", qc.resolution_reason);
+            w.key_value("predicted_ratio_vs_radix", qc.predicted_ratio);
+            w.key_value("profile_ns", qc.profile_ns);
+            w.key_value("policy_source", qc.policy_source);
+            w.key_value("profile_source", qc.profile_source);
+            w.key_value("resolution_method", qc.resolution_method);
+            w.key_value("calibration_ns", qc.calibration_ns);
+        }
+        w.end_object();
     }
 
     // --- Timing --------------------------------------------------------------

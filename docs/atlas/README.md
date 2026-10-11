@@ -75,6 +75,11 @@ path as every other dataset. Provenance is in `datasets/metadata/<id>.osm.json`.
 python scripts/data/prepare_datasets.py osm_monaco osm_liechtenstein
 ```
 
+> The configs pin dated Geofabrik snapshots. Geofabrik prunes old dated extracts: the
+> `monaco-260925` file returned **HTTP 404** in CI on 2026-10-11, so these two datasets
+> cannot be prepared until a current snapshot is chosen and its SHA-256 re-pinned. The
+> end-to-end CI job therefore uses the bundled offline `demo_road` graph instead.
+
 ## Running it
 
 A step-by-step user guide is in [INSTRUCTION_MANUAL.md](../../INSTRUCTION_MANUAL.md).
@@ -91,7 +96,8 @@ to the `atlas-work` volume, separate from a host API's `results/atlas/`.
 ```bash
 cmake --preset release && cmake --build build/release        # engine (from source)
 pip install -r python/requirements-dev.txt -r atlas/api/requirements.txt
-python scripts/data/prepare_datasets.py osm_monaco            # 0.7 MB download
+python scripts/demo/prepare_demo.py                            # bundled demo_road, offline
+# optional: python scripts/data/prepare_datasets.py osm_monaco   # needs a live Geofabrik snapshot (see below)
 
 python -m uvicorn atlas_api.app:app --app-dir atlas/api --port 8000
 cd atlas/web && npm ci && npm run build && npx next start -p 3000

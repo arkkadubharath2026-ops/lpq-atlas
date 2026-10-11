@@ -1,0 +1,35 @@
+{
+  "dataset_id": "demo_road",
+  "source_path": "datasets/processed/staging/demo_road.gr",
+  "source_format": "dimacs",
+  "processed_path": "datasets/processed/demo_road.lpqgraph",
+  "graph_checksum_fnv1a64": 16992849351070453139,
+  "weight_type": "uint32",
+  "node_count": 19600,
+  "edge_count": 55986,
+  "arc_count": 55986,
+  "directed": true,
+  "density": 2.8564285714285713,
+  "min_weight": 16,
+  "max_weight": 561,
+  "mean_weight": 157.71771514307147,
+  "stddev_weight": 74.146409511222274,
+  "max_path_cost_bound": 10995039,
+  "min_out_degree": 1,
+  "max_out_degree": 9,
+  "mean_out_degree": 2.8564285714285713,
+  "stddev_out_degree": 0.93694003685031091,
+  "isolated_nodes": 0,
+  "has_coordinates": true,
+  "has_node_id_mapping": false,
+  "normalization": {
+    "directedness": "directed",
+    "self_loops": "drop",
+    "parallel_edges": "keep",
+    "edges_listed": "once"
+  },
+  "weights": {
+    "synthesized": false,
+    "source": "dataset"
+  }
+}
