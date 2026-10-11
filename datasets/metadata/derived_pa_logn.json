@@ -1,0 +1,51 @@
+{
+  "arc_count": 3083796,
+  "base_graph_checksum_fnv1a64": 18076285945588879189,
+  "dataset_id": "derived_pa_logn",
+  "density": 2.8341316726894417,
+  "derived": true,
+  "derived_from": "snap_roadnet_pa",
+  "description": "DERIVED DATASET WITH SYNTHETIC WEIGHTS. Topology, node numbering and coordinates are those of snap_roadnet_pa; every edge weight was replaced by `lpq_reweight --transform lognormal:200:1.0 --seed 202`. This is not a real road network and its timings must not be attributed to snap_roadnet_pa.",
+  "directed": false,
+  "edge_count": 1541898,
+  "graph_checksum_fnv1a64": 1685147347645205609,
+  "has_coordinates": false,
+  "has_node_id_mapping": true,
+  "isolated_nodes": 0,
+  "max_out_degree": 9,
+  "max_path_cost_bound": 22410322236,
+  "max_weight": 20596,
+  "mean_out_degree": 2.8341316726894417,
+  "mean_weight": 329.09060132382297,
+  "min_out_degree": 1,
+  "min_weight": 1,
+  "node_count": 1088092,
+  "normalization": {
+    "directedness": "undirected",
+    "edges_listed": "both",
+    "parallel_edges": "keep",
+    "self_loops": "drop"
+  },
+  "processed_path": "datasets/processed/derived_pa_logn.lpqgraph",
+  "seed": 202,
+  "source_format": "binary",
+  "source_path": "datasets/processed/snap_roadnet_pa.lpqgraph",
+  "stddev_out_degree": 1.0169297356137863,
+  "stddev_weight": 429.1190885055412,
+  "transform": "lognormal:200:1.0",
+  "weight_type": "uint32",
+  "weights": {
+    "clamped_high_draws": 0,
+    "clamped_low_draws": 0,
+    "derived_from": "snap_roadnet_pa",
+    "distribution": "lognormal",
+    "parameters": {
+      "median": 200.0,
+      "sigma": 1.0
+    },
+    "seed": 202,
+    "synthesized": true,
+    "tool": "lpq_reweight",
+    "transform": "lognormal:200:1.0"
+  }
+}

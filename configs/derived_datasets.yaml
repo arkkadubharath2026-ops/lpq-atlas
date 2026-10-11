@@ -1,0 +1,119 @@
+# The fixed set of DERIVED datasets: real topologies, SYNTHETIC weights.
+#
+# Every entry is reproducible from the repository:
+#   python -m lpq_tools.data.derive --from-manifest configs/derived_datasets.yaml
+# Seeds are explicit. graph_checksum_fnv1a64 pins the output; the integer-only
+# transforms (unit, uniform, scale, clip, bimodal) are exact on any platform,
+# lognormal and pareto use libm and are pinned to the generating host's libm.
+# Processed graphs (datasets/processed/) are git-ignored; this file, the
+# metadata and the query manifests are what is committed.
+# Derived graphs are never real road networks.
+datasets:
+- id: derived_ny_unit
+  base: dimacs_ny
+  transform: unit
+  seed: 101
+  graph_checksum_fnv1a64: 12908952319195301393
+  node_count: 264346
+  min_weight: 1
+  max_weight: 1
+  mean_weight: 1
+- id: derived_ny_u16
+  base: dimacs_ny
+  transform: uniform:1:16
+  seed: 102
+  graph_checksum_fnv1a64: 4082977365263452233
+  node_count: 264346
+  min_weight: 1
+  max_weight: 16
+  mean_weight: 8.49400282893141
+- id: derived_ny_u256
+  base: dimacs_ny
+  transform: uniform:1:256
+  seed: 103
+  graph_checksum_fnv1a64: 16580479731714550537
+  node_count: 264346
+  min_weight: 1
+  max_weight: 256
+  mean_weight: 128.25529061955777
+- id: derived_ny_u4096
+  base: dimacs_ny
+  transform: uniform:1:4096
+  seed: 104
+  graph_checksum_fnv1a64: 6819433322356734445
+  node_count: 264346
+  min_weight: 1
+  max_weight: 4096
+  mean_weight: 2047.8126718684846
+- id: derived_ny_u65536
+  base: dimacs_ny
+  transform: uniform:1:65536
+  seed: 105
+  graph_checksum_fnv1a64: 18120796928036933513
+  node_count: 264346
+  min_weight: 1
+  max_weight: 65536
+  mean_weight: 32799.24765686534
+- id: derived_ny_logn
+  base: dimacs_ny
+  transform: lognormal:300:1.2
+  seed: 106
+  graph_checksum_fnv1a64: 15851806369793006857
+  node_count: 264346
+  min_weight: 1
+  max_weight: 75511
+  mean_weight: 616.3861654897621
+- id: derived_ny_pareto
+  base: dimacs_ny
+  transform: pareto:20:1.3
+  seed: 107
+  graph_checksum_fnv1a64: 18176104213989930237
+  node_count: 264346
+  min_weight: 20
+  max_weight: 318280
+  mean_weight: 86.07894571885654
+- id: derived_ny_bimodal
+  base: dimacs_ny
+  transform: bimodal:10:30000:0.02
+  seed: 108
+  graph_checksum_fnv1a64: 12073867043997065585
+  node_count: 264346
+  min_weight: 10
+  max_weight: 30000
+  mean_weight: 595.1320576796767
+- id: derived_pa_u16
+  base: snap_roadnet_pa
+  transform: uniform:1:16
+  seed: 201
+  graph_checksum_fnv1a64: 15575753858990990649
+  node_count: 1088092
+  min_weight: 1
+  max_weight: 16
+  mean_weight: 8.497191124185907
+- id: derived_pa_logn
+  base: snap_roadnet_pa
+  transform: lognormal:200:1.0
+  seed: 202
+  graph_checksum_fnv1a64: 1685147347645205609
+  node_count: 1088092
+  min_weight: 1
+  max_weight: 20596
+  mean_weight: 329.09060132382297
+- id: derived_fb_u64
+  base: snap_facebook
+  transform: uniform:1:64
+  seed: 301
+  graph_checksum_fnv1a64: 4649869871872534321
+  node_count: 4039
+  min_weight: 1
+  max_weight: 64
+  mean_weight: 32.621540449259925
+- id: derived_fb_pareto
+  base: snap_facebook
+  transform: pareto:5:1.2
+  seed: 302
+  graph_checksum_fnv1a64: 13805887105124669705
+  node_count: 4039
+  min_weight: 5
+  max_weight: 87851
+  mean_weight: 26.64289276242718

@@ -154,3 +154,16 @@ target_link_libraries(lpq_export PRIVATE
     lpq::compiler_settings)
 target_compile_options(lpq_export PRIVATE
     "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wno-old-style-cast>")
+
+# ------------------------------------------------------------------------------
+# lpq_reweight -- derive a same-topology graph with a different weight
+# distribution (synthetic weights; see the header of lpq_reweight.cpp).
+# Offline preparation like lpq_convert, never timed.
+# ------------------------------------------------------------------------------
+add_executable(lpq_reweight lpq_reweight.cpp)
+target_link_libraries(lpq_reweight PRIVATE
+    lpq::graph
+    lpq::metrics
+    lpq::compiler_settings)
+target_compile_options(lpq_reweight PRIVATE
+    "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wno-old-style-cast>")

@@ -1,0 +1,51 @@
+{
+  "arc_count": 733846,
+  "base_graph_checksum_fnv1a64": 15161404696693572585,
+  "dataset_id": "derived_ny_u4096",
+  "density": 2.776081347930364,
+  "derived": true,
+  "derived_from": "dimacs_ny",
+  "description": "DERIVED DATASET WITH SYNTHETIC WEIGHTS. Topology, node numbering and coordinates are those of dimacs_ny; every edge weight was replaced by `lpq_reweight --transform uniform:1:4096 --seed 104`. This is not a real road network and its timings must not be attributed to dimacs_ny.",
+  "directed": true,
+  "edge_count": 733846,
+  "graph_checksum_fnv1a64": 6819433322356734445,
+  "has_coordinates": true,
+  "has_node_id_mapping": false,
+  "isolated_nodes": 0,
+  "max_out_degree": 8,
+  "max_path_cost_bound": 1082757120,
+  "max_weight": 4096,
+  "mean_out_degree": 2.776081347930364,
+  "mean_weight": 2047.8126718684846,
+  "min_out_degree": 1,
+  "min_weight": 1,
+  "node_count": 264346,
+  "normalization": {
+    "directedness": "directed",
+    "edges_listed": "once",
+    "parallel_edges": "keep",
+    "self_loops": "drop"
+  },
+  "processed_path": "datasets/processed/derived_ny_u4096.lpqgraph",
+  "seed": 104,
+  "source_format": "binary",
+  "source_path": "datasets/processed/dimacs_ny.lpqgraph",
+  "stddev_out_degree": 0.9813653564147851,
+  "stddev_weight": 1183.0103218683473,
+  "transform": "uniform:1:4096",
+  "weight_type": "uint32",
+  "weights": {
+    "clamped_high_draws": 0,
+    "clamped_low_draws": 0,
+    "derived_from": "dimacs_ny",
+    "distribution": "uniform",
+    "parameters": {
+      "maximum": 4096.0,
+      "minimum": 1.0
+    },
+    "seed": 104,
+    "synthesized": true,
+    "tool": "lpq_reweight",
+    "transform": "uniform:1:4096"
+  }
+}

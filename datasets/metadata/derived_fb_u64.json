@@ -1,0 +1,51 @@
+{
+  "arc_count": 176468,
+  "base_graph_checksum_fnv1a64": 27545307309881865,
+  "dataset_id": "derived_fb_u64",
+  "density": 43.69101262688784,
+  "derived": true,
+  "derived_from": "snap_facebook",
+  "description": "DERIVED DATASET WITH SYNTHETIC WEIGHTS. Topology, node numbering and coordinates are those of snap_facebook; every edge weight was replaced by `lpq_reweight --transform uniform:1:64 --seed 301`. This is not a real road network and its timings must not be attributed to snap_facebook.",
+  "directed": false,
+  "edge_count": 88234,
+  "graph_checksum_fnv1a64": 4649869871872534321,
+  "has_coordinates": false,
+  "has_node_id_mapping": true,
+  "isolated_nodes": 0,
+  "max_out_degree": 1045,
+  "max_path_cost_bound": 258432,
+  "max_weight": 64,
+  "mean_out_degree": 43.69101262688784,
+  "mean_weight": 32.621540449259925,
+  "min_out_degree": 1,
+  "min_weight": 1,
+  "node_count": 4039,
+  "normalization": {
+    "directedness": "undirected",
+    "edges_listed": "once",
+    "parallel_edges": "keep",
+    "self_loops": "drop"
+  },
+  "processed_path": "datasets/processed/derived_fb_u64.lpqgraph",
+  "seed": 301,
+  "source_format": "binary",
+  "source_path": "datasets/processed/snap_facebook.lpqgraph",
+  "stddev_out_degree": 52.41411556737521,
+  "stddev_weight": 18.49356898978387,
+  "transform": "uniform:1:64",
+  "weight_type": "uint32",
+  "weights": {
+    "clamped_high_draws": 0,
+    "clamped_low_draws": 0,
+    "derived_from": "snap_facebook",
+    "distribution": "uniform",
+    "parameters": {
+      "maximum": 64.0,
+      "minimum": 1.0
+    },
+    "seed": 301,
+    "synthesized": true,
+    "tool": "lpq_reweight",
+    "transform": "uniform:1:64"
+  }
+}
