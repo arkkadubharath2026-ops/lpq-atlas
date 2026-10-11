@@ -17,7 +17,31 @@ execution trace; compare two configurations on the same query; run the benchmark
 from the browser; inspect models, datasets and stored research results. Everything shown
 is produced by the C++ engine.
 
-Quick start: `docker compose up --build`, then open <http://localhost:3000>.
+### Quick start
+
+On a fresh `git clone` (Windows or Linux), with no network access needed after the
+dependencies are installed. Full prerequisites, per-OS install commands and a
+troubleshooting table: **[docs/local-setup.md](docs/local-setup.md)**.
+
+```bash
+# Linux / macOS / Git Bash                           # Windows PowerShell (see docs/local-setup.md)
+bash scripts/setup/doctor.sh                         # scripts\setup\doctor.ps1
+bash scripts/setup/run.sh --test                     # scripts\setup\run.ps1 -Test
+bash scripts/demo/reproduce_benchmark.sh             # scripts\demo\reproduce_benchmark.ps1
+```
+
+1. `doctor` checks for a C++20 compiler, CMake, Ninja, Python 3.11 to 3.13 and Node 20+,
+   and prints the install command for anything missing.
+2. `run --test` sets the clone up on first use (virtualenv, `npm ci`, release build,
+   the offline synthetic `demo_road` dataset), runs the C++, Python, API and web tests,
+   then starts the API on <http://127.0.0.1:8000> and the web UI on <http://127.0.0.1:3000>.
+   Stop it with Ctrl+C.
+3. `reproduce_benchmark` runs a baseline-versus-alternatives latency comparison
+   (`lpq_benchmark --interleave`) on this machine and writes the raw results to a new
+   file under `results/raw/local/`. Timings depend on the machine and are not
+   claimed here; see [docs/experiments/](docs/experiments/README.md) for recorded results.
+
+Docker alternative: `docker compose up --build`, then open <http://localhost:3000>.
 
 * **How to use it (start here):** [INSTRUCTION_MANUAL.md](INSTRUCTION_MANUAL.md)
 * Technical guide and run instructions: [docs/atlas/README.md](docs/atlas/README.md)
