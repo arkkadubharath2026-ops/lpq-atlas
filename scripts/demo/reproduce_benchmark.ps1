@@ -26,7 +26,7 @@ param(
     [int]$CpuCore = -1,
     # Baseline first, then the other classical queues, then the learned queue.
     # Which of these is fastest is exactly what this run measures.
-    [string]$Compare = 'binary_heap@baseline;pairing_heap@pairing_heap;bucket_queue@bucket_queue;lpq_direct@lpq_direct',
+    [string]$Compare = 'binary_heap@baseline;radix_heap@radix_heap;pairing_heap@pairing_heap;bucket_queue@bucket_queue;lpq_direct@lpq_direct;lpq_optimized@lpq_optimized',
     [string[]]$Dataset = @()
 )
 . "$PSScriptRoot/../setup/_common.ps1"

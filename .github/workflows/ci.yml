@@ -127,3 +127,25 @@ jobs:
           (cd atlas/web && npx next start -p 3000 &)
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:8000/api/health && curl -sf http://127.0.0.1:3000/ >/dev/null && break; sleep 2; done
           cd atlas/web && npx playwright test
+
+  # Native Windows evidence for the setup scripts: parse every PowerShell script under
+  # Windows PowerShell 5.1 and run the read-only doctor. It does not build or run the app on
+  # Windows. continue-on-error: informational until its first results have been reviewed.
+  windows-scripts:
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse every PowerShell script
+        shell: powershell
+        run: |
+          $bad = 0
+          Get-ChildItem scripts -Recurse -Filter *.ps1 | ForEach-Object {
+            $errs = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errs)
+            foreach ($e in $errs) { $bad++; Write-Host "$($_.FullName):$($e.Extent.StartLineNumber) $($e.Message)" }
+          }
+          if ($bad -gt 0) { exit 1 }
+      - name: doctor (read-only)
+        shell: powershell
+        run: powershell -ExecutionPolicy Bypass -File scripts\setup\doctor.ps1

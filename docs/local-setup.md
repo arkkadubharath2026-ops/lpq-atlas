@@ -161,8 +161,8 @@ lpq_benchmark --algorithm dijkstra --dataset datasets/processed/<id>.lpqgraph \
     --experiment-id local-<UTC time>-<id> --output results/raw/local/<UTC time>-<id>.json
 ```
 
-* The default `--compare` spec is `binary_heap@baseline;pairing_heap@pairing_heap;bucket_queue@bucket_queue;lpq_direct@lpq_direct`:
-  the binary heap is the baseline, the other rows are alternatives. Which is fastest is what
+* The default `--compare` spec is `binary_heap@baseline;radix_heap@radix_heap;pairing_heap@pairing_heap;bucket_queue@bucket_queue;lpq_direct@lpq_direct;lpq_optimized@lpq_optimized`:
+  the binary heap is the baseline, the other rows are alternatives (`radix_heap` is the strongest classical one; `lpq_optimized` calibrates on first use and prints the queue it resolved to). Which is fastest is what
   the run measures; nothing is assumed. The syntax is `name[:w=N,ring=N,front=N][@label];...`.
 * `--interleave` measures queries in the outer loop and shuffles the order of the
   configurations for every query (seeded), so slow drift of the host (thermal state, frequency

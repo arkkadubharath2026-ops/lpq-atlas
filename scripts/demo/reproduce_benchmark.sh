@@ -28,7 +28,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/../setup/_common.sh"
 reps=11 warmup=3 core="" datasets=()
 # Baseline first, then the other classical queues, then the learned queue. Which
 # of these is fastest is exactly what this run measures; none is assumed to win.
-spec="binary_heap@baseline;pairing_heap@pairing_heap;bucket_queue@bucket_queue;lpq_direct@lpq_direct"
+spec="binary_heap@baseline;radix_heap@radix_heap;pairing_heap@pairing_heap;bucket_queue@bucket_queue;lpq_direct@lpq_direct;lpq_optimized@lpq_optimized"
 while [ $# -gt 0 ]; do
     case "$1" in
         --repetitions) reps="$2"; shift 2 ;;
