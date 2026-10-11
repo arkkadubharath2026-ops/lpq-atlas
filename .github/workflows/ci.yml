@@ -136,6 +136,12 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
+      # The Windows runner's "python" is the Microsoft Store alias, which the
+      # doctor (correctly) refuses to count. Install the same Python the other
+      # jobs use so the doctor checks the scripts, not the runner image.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
       - name: Parse every PowerShell script
         shell: powershell
         run: |
