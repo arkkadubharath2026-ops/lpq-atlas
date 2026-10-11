@@ -1,9 +1,17 @@
 // Critical flows (spec section 43), against the real API and engine.
+import fs from "node:fs";
+import path from "node:path";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 const API = process.env.ATLAS_API_URL ?? "http://127.0.0.1:8000";
 
-/** CI prepares only the small Monaco extract; tests needing more skip themselves. */
+/**
+ * CI prepares only the bundled, offline demo_road graph (scripts/demo/prepare_demo.py);
+ * set ATLAS_E2E_DATASET to run the same flows on another prepared dataset. Tests that need
+ * a dataset beyond that skip themselves, with the reason in the skip message.
+ */
+const DS = process.env.ATLAS_E2E_DATASET ?? "demo_road";
+
 async function ready(request: APIRequestContext, id: string): Promise<boolean> {
   const r = await request.get(`${API}/api/datasets/${id}`);
   return r.ok() && (await r.json()).status === "READY";
@@ -27,8 +35,8 @@ async function runAndGetId(page: Page): Promise<string> {
 }
 
 test("explore: select on the map, run Dijkstra then LPQ, metrics match the API, replay steps", async ({ page, request }) => {
-  await page.goto("/explore?dataset=osm_monaco");
-  await expect(page.getByTestId("dataset-select")).toHaveValue("osm_monaco");
+  await page.goto(`/explore?dataset=${DS}`);
+  await expect(page.getByTestId("dataset-select")).toHaveValue(DS);
   await expect(page.locator(".leaflet-container")).toBeVisible();
   await page.waitForTimeout(1500); // fitBounds + coordinate download
 
@@ -62,7 +70,7 @@ test("explore: select on the map, run Dijkstra then LPQ, metrics match the API, 
 });
 
 test("compare: same query side by side with the reference", async ({ page }) => {
-  await page.goto("/compare?dataset=osm_monaco&source=10&target=5000");
+  await page.goto(`/compare?dataset=${DS}&source=10&target=5000`);
   await expect(page.locator("input[type=number]").first()).toHaveValue("10");
   await page.getByTestId("compare-run").click();
   await expect(page.getByText("Measured differences")).toBeVisible({ timeout: 90_000 });
@@ -84,7 +92,7 @@ test("unreachable destination is reported, with no ratio", async ({ page, reques
 });
 
 test("backend failure is surfaced, not a blank panel", async ({ page }) => {
-  await page.goto("/explore?dataset=osm_monaco");
+  await page.goto(`/explore?dataset=${DS}`);
   await page.getByTestId("source-node").fill("10");
   await page.getByTestId("target-node").fill("20");
   await page.route("**/api/runs", (route) => route.abort("connectionrefused"));
@@ -99,6 +107,42 @@ test("research and model pages render stored artifacts", async ({ page, request 
   await expect(page.getByText("Paired comparison against")).toBeVisible();
   await page.goto("/models/dimacs_ny_static");
   await expect(page.getByText(/Training\/Evaluation split: DISJOINT/)).toBeVisible();
-  await page.goto("/datasets/osm_monaco");
-  await expect(page.getByText("Turn restrictions")).toBeVisible();
+});
+
+test("dataset page shows the graph facts of the prepared dataset", async ({ page, request }) => {
+  await page.goto(`/datasets/${DS}`);
+  await expect(page.getByRole("heading", { name: "Graph" })).toBeVisible();
+  await expect(page.getByText("Compatible")).toBeVisible();
+  // The OpenStreetMap panel exists only for OSM-derived datasets.
+  const info = await (await request.get(`${API}/api/datasets/${DS}`)).json();
+  if (info.osm) await expect(page.getByText("Turn restrictions")).toBeVisible();
+});
+
+// Benchmark result discovery. The reproduction scripts write results/raw/headline/ and
+// results/raw/local/; the Benchmarks page must list those, not only results/raw/*.json.
+// This writes one clearly-labelled synthetic file into the (git-ignored) local/ group
+// and removes it afterwards. It tests discovery and loading, not any performance claim.
+test("benchmarks page discovers results written by the reproduction scripts", async ({ page }) => {
+  const dir = path.resolve(process.cwd(), "..", "..", "results", "raw", "local");
+  const name = `e2e-discovery-${Date.now()}.json`;
+  const rec = (pq: string, ns: number, s: number) => ({
+    algorithm: "dijkstra", pq, mode: "exact", dataset: DS, graph_nodes: 4, source: s, target: s + 1,
+    supported: true, timing: { median_ns: ns, relative_mad: 0.01, cpu_pinned: false },
+    pq_operations: { comparisons: 1, pops: 1, settled_nodes: 1, relaxations: 1 },
+    correctness: { exact_match: true, target_reachable: true }, environment: { cpu: "e2e fixture" },
+  });
+  const records = [0, 1, 2, 3].flatMap((s) => [rec("binary_heap", 1000 + s, s), rec("radix_heap", 900 + s, s)]);
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, name);
+  fs.writeFileSync(file, JSON.stringify({ experiment_id: "e2e-discovery-fixture", generated_at: "2026-01-01T00:00:00Z", records }));
+  try {
+    await page.goto("/benchmarks");
+    const panel = page.getByTestId("stored-results");
+    await expect(panel.getByRole("link", { name: `local/${name}` })).toBeVisible();
+    await panel.getByRole("link", { name: `local/${name}` }).click();
+    await expect(page).toHaveURL(/\/research\?file=local%2F/);
+    await expect(page.getByText("Paired comparison against")).toBeVisible();
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
 });

@@ -14,6 +14,10 @@ dataset_id: osm_liechtenstein
 description: >
   OpenStreetMap drivable road network of Liechtenstein (Geofabrik snapshot 2026-09-25).
 
+# NOTE (verified in CI on 2026-10-11): the dated Geofabrik snapshot named below returned
+# HTTP 404 -- Geofabrik prunes old dated extracts. The sha256 pin therefore only protects
+# a download that still exists; if it 404s, either pick a current dated snapshot and
+# re-pin its digest, or use the bundled offline `demo_road` (CI's e2e job does).
 source_format: osm_pbf
 files:
   - url: https://download.geofabrik.de/europe/liechtenstein-260925.osm.pbf

@@ -16,7 +16,11 @@ export default function ResearchPage() {
   const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
-    api.researchResults().then((l) => { setList(l); setFile(l.find((x) => !x.error)?.file ?? null); }).catch(setError);
+    api.researchResults().then((l) => {
+      setList(l);
+      const wanted = new URLSearchParams(window.location.search).get("file");
+      setFile(l.find((x) => x.file === wanted && !x.error)?.file ?? l.find((x) => !x.error)?.file ?? null);
+    }).catch(setError);
     api.researchNotes().then((n) => { setNotes(n); setNote(n.find((x) => x.id.endsWith("findings"))?.id ?? n[0]?.id ?? null); }).catch(setError);
   }, []);
 
@@ -44,8 +48,8 @@ export default function ResearchPage() {
                 <button key={r.file} type="button" role="option" aria-selected={file === r.file} disabled={Boolean(r.error)}
                   onClick={() => setFile(r.file)}
                   style={{ textAlign: "left", borderColor: file === r.file ? "var(--primary)" : undefined }}>
-                  <div className="mono small">{r.file}</div>
-                  <div className="small dim">{r.error ?? `${r.records} records · ${r.configurations.length} configs`}</div>
+                  <div className="mono small" style={{ wordBreak: "break-all" }}>{r.file}</div>
+                  <div className="small dim">{r.error ?? `${r.dataset ? `${r.dataset} · ` : ""}${r.records} records · ${r.configurations.length} configs`}</div>
                 </button>
               ))}
             </div>

@@ -51,6 +51,7 @@ from atlas_api.schemas import (
     SnapRequest,
 )
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Path as ApiPath
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from lpq_tools.data.pipeline import PipelineError, prepare_dataset
@@ -171,7 +172,7 @@ def get_dataset(dataset_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/datasets/{dataset_id}/prepare", status_code=202)
-def prepare(dataset_id: str) -> dict[str, Any]:
+def prepare(dataset_id: str = ApiPath(pattern=r"^[a-z0-9_]{1,64}$")) -> dict[str, Any]:
     cfg_path = settings.root / "configs" / "datasets" / f"{dataset_id}.yaml"
     if not cfg_path.exists():
         raise HTTPException(404, detail={"error": "not_found", "message": "no dataset config"})
@@ -698,16 +699,20 @@ def get_benchmark_results(bench_id: str, raw: bool = False) -> Any:
 def research_results() -> list[dict[str, Any]]:
     out = []
     for p in analysis.list_result_files(settings.root):
+        rid = analysis.result_id(settings.root, p)
+        group = rid.rpartition("/")[0]
         try:
             s = analysis.summarise_file(p, compare=False)
-        except (ValueError, KeyError, TypeError):
-            out.append({"file": p.name, "error": "malformed result file"})
+        except (ValueError, KeyError, TypeError, OSError):
+            out.append({"file": rid, "group": group, "error": "malformed result file"})
             continue
         out.append(
             {
-                "file": p.name,
+                "file": rid,
+                "group": group,
                 "experiment_id": s["experiment_id"],
                 "generated_at": s["generated_at"],
+                "dataset": s["dataset"],
                 "dataset_nodes": s["graph_nodes"],
                 "records": s["records"],
                 "configurations": [c["key"] for c in s["configurations"]],
@@ -717,14 +722,21 @@ def research_results() -> list[dict[str, Any]]:
     return out
 
 
-@app.get("/api/research/results/{file}")
+@app.get("/api/research/results/{file:path}")
 def research_result(
     file: str, baseline: str | None = Query(None, pattern=r"^[a-z_0-9]+$")
 ) -> dict[str, Any]:
-    for p in analysis.list_result_files(settings.root):
-        if p.name == file:
-            return analysis.summarise_file(p, baseline)
-    raise HTTPException(404, detail={"error": "not_found", "message": "unknown result file"})
+    p = analysis.find_result_file(settings.root, file)
+    if p is None:
+        raise HTTPException(404, detail={"error": "not_found", "message": "unknown result file"})
+    try:
+        s = analysis.summarise_file(p, baseline)
+    except (ValueError, KeyError, TypeError, OSError):
+        raise HTTPException(
+            422, detail={"error": "malformed", "message": "result file could not be read"}
+        ) from None
+    s["file"] = file
+    return s
 
 
 @app.get("/api/research/notes")

@@ -189,7 +189,7 @@ export const api = {
   researchResults: () => request<ResultListing[]>("/api/research/results"),
   researchResult: (file: string, baseline?: string) =>
     request<ResultSummary>(
-      `/api/research/results/${encodeURIComponent(file)}${baseline ? `?baseline=${baseline}` : ""}`,
+      `/api/research/results/${file.split("/").map(encodeURIComponent).join("/")}${baseline ? `?baseline=${baseline}` : ""}`,
     ),
   researchNotes: () => request<Note[]>("/api/research/notes"),
 };

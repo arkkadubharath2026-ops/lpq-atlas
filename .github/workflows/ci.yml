@@ -5,8 +5,8 @@
 #            API <-> engine contract tests against the freshly built binaries
 #   fuzz     clang + libFuzzer + ASan/UBSan, a bounded run per target
 #   web      lint, typecheck, unit tests and a production build of the UI
-#   e2e      the real stack on the OSM Monaco extract (acquired and converted by
-#            the project's own pipeline), driven by Playwright
+#   e2e      the real stack on the bundled demo_road graph (committed source files,
+#            converted by the project's own pipeline, no network), driven by Playwright
 name: ci
 
 on:
@@ -108,8 +108,11 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install -r python/requirements.txt -r atlas/api/requirements.txt
-      - name: Prepare the OSM Monaco dataset (pinned snapshot, checksum-verified)
-        run: python scripts/data/prepare_datasets.py osm_monaco
+      # demo_road is committed under datasets/demo/ and digest-pinned, so this step needs no
+      # network. (The previous step downloaded a dated Geofabrik Monaco snapshot; Geofabrik
+      # prunes dated files, and the pinned one returned HTTP 404 in CI.)
+      - name: Prepare the bundled demo_road dataset
+        run: python scripts/demo/prepare_demo.py
       - uses: actions/setup-node@v4
         with:
           node-version: 22

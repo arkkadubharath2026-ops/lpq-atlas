@@ -318,7 +318,11 @@ export interface ResultSummary {
 }
 
 export interface ResultListing {
+  /** Path below results/raw/ with "/" separators, e.g. "headline/dimacs_ny_dijkstra.json". */
   file: string;
+  /** Subdirectory of results/raw/ ("" for top-level files), e.g. "headline" or "local". */
+  group?: string;
+  dataset?: string | null;
   experiment_id: string;
   generated_at: string;
   dataset_nodes: number | null;

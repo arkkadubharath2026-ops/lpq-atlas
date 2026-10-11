@@ -156,6 +156,47 @@ def _summarise(
     }
 
 
+# Stored-result contract. The benchmark harness and the reproduction scripts write
+# immutable JSON into results/raw/, grouped in subdirectories:
+#
+#   results/raw/*.json                  curated or hand-run experiments
+#   results/raw/headline/*.json         scripts/bench/run_headline.sh
+#   results/raw/local/*.json            scripts/demo/reproduce_benchmark.{sh,ps1}
+#
+# Every *.json below results/raw/ (to MAX_RESULT_DEPTH levels) is a result file. Its
+# id is its path relative to results/raw/ with "/" separators ("headline/x.json"), which
+# is what the API lists and accepts. Symbolic links are ignored, so an id can never
+# name a file outside results/raw/. Nothing here is committed or hard-coded: an empty
+# or missing directory is simply an empty listing.
+MAX_RESULT_DEPTH = 3
+
+
+def results_dir(root: Path) -> Path:
+    return root / "results" / "raw"
+
+
+def result_id(root: Path, path: Path) -> str:
+    return path.relative_to(results_dir(root)).as_posix()
+
+
 def list_result_files(root: Path) -> list[Path]:
-    raw = root / "results" / "raw"
-    return sorted(p for p in raw.glob("*.json") if p.is_file())
+    raw = results_dir(root)
+    if not raw.is_dir():
+        return []
+    found: list[Path] = []
+    for p in raw.rglob("*.json"):
+        if p.is_symlink() or not p.is_file():
+            continue
+        if len(p.relative_to(raw).parts) > MAX_RESULT_DEPTH + 1:
+            continue
+        found.append(p)
+    return sorted(found, key=lambda p: result_id(root, p))
+
+
+def find_result_file(root: Path, rid: str) -> Path | None:
+    """The listed result file with this id, else None. Matches by listing, never by
+    joining the caller's string onto a path, so '..' and absolute paths cannot match."""
+    for p in list_result_files(root):
+        if result_id(root, p) == rid:
+            return p
+    return None
