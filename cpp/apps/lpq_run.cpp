@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -39,6 +40,8 @@
 #include <vector>
 
 #include "lpq/adaptation/controller_observer.hpp"
+#include "lpq/adaptation/online_model_check.hpp"
+#include "lpq/adaptation/online_session.hpp"
 #include "lpq/algorithms/astar.hpp"
 #include "lpq/algorithms/dijkstra.hpp"
 #include "lpq/algorithms/heuristics.hpp"
@@ -57,6 +60,7 @@
 #include "lpq/metrics/json_writer.hpp"
 #include "lpq/metrics/result_record.hpp"
 #include "lpq/models/logistic_predictor.hpp"
+#include "lpq/models/model_report.hpp"
 #include "lpq/pq/binary_heap.hpp"
 #include "lpq/pq/fibonacci_heap.hpp"
 #include "lpq/pq/pairing_heap.hpp"
@@ -76,6 +80,7 @@ constexpr int kRunSchemaVersion = 1;
 using Scorer    = StaticNodeScorer<LogisticPredictor>;
 using LpqPlain  = LearnedPriorityQueue<W, ConstantNodeScorer>;
 using LpqStatic = LearnedPriorityQueue<W, Scorer>;
+using LpqOnline = LearnedPriorityQueue<W, OnlineSession::Scorer>;
 
 // -----------------------------------------------------------------------------
 // Errors are categorised so the API can map them to safe user-facing messages
@@ -101,6 +106,16 @@ struct Options {
     std::string   pq        = "binary_heap";
     std::string   model;
     bool          adaptive_learning = false;
+
+    // --- lpq_online (M5-O4) ---------------------------------------------------------------
+    std::string   online_model;               ///< warm-start artifact (.lpqmodel)
+    std::string   online_report;              ///< its .report.json
+    std::string   online_start = "warm";      ///< warm | cold
+    std::string   online_update_mode = "periodic";
+    std::string   online_apply = "between_queries";
+    bool          allow_graph_mismatch = false;
+    bool          allow_width_mismatch = false;
+    bool          online_no_provenance = false;
     std::string   policy;  ///< queue policy file for --pq lpq_optimized (empty: none)
     bool          autotune = true;  ///< lpq_optimized: measure candidates on this graph and machine
     std::string   mode    = "exact";
@@ -132,11 +147,23 @@ void print_usage() {
   --algorithm <name>      dijkstra (default) | astar
   --heuristic <name>      auto (default) | zero | euclidean | manhattan | haversine
   --pq <name>             binary_heap (default) | four_ary_heap | pairing_heap |
-                          fibonacci_heap | radix_heap | lpq | lpq_model | lpq_adaptive |
+                          fibonacci_heap | radix_heap | lpq | lpq_model | lpq_adaptive | lpq_online |
                           lpq_optimized (exact; measures candidate queues on this
                           graph and machine, Dijkstra only, A* uses radix)
   --model <path>          trained model; required by, and only valid with, lpq_model
   --adaptive-learning     with lpq_adaptive: also update the model online
+  --online-model <path>   warm-start model artifact for --pq lpq_online (required unless cold)
+  --online-model-report <path>
+                          the .report.json written with that artifact; its graph checksum and
+                          bucket width are checked against this run
+  --online-start <s>      warm (default) | cold (zero-initialised; no artifact)
+  --online-update-mode <m>  disabled | every_event | periodic (default) | adaptive. Updates
+                          are applied BETWEEN queries: the search itself runs on the start model
+  --online-apply <p>      between_queries (the only policy implemented)
+  --allow-graph-mismatch  accept a model trained on another graph (recorded in the result)
+  --allow-width-mismatch  accept a model trained for another bucket width (recorded)
+  --online-model-no-provenance
+                          accept a model with no report (recorded)
   --mode <name>           exact (default) | approximate (learned queues only)
   --epsilon <e>           slack for approximate mode, 0 < e <= 1
   --lpq-window <lo:hi>    learned-queue candidate window (default 2:32)
@@ -194,6 +221,22 @@ void print_usage() {
             o.model = next_arg(argc, argv, i, "--model");
         } else if (a == "--adaptive-learning") {
             o.adaptive_learning = true;
+        } else if (a == "--online-model") {
+            o.online_model = next_arg(argc, argv, i, "--online-model");
+        } else if (a == "--online-model-report") {
+            o.online_report = next_arg(argc, argv, i, "--online-model-report");
+        } else if (a == "--online-start") {
+            o.online_start = next_arg(argc, argv, i, "--online-start");
+        } else if (a == "--online-update-mode") {
+            o.online_update_mode = next_arg(argc, argv, i, "--online-update-mode");
+        } else if (a == "--online-apply") {
+            o.online_apply = next_arg(argc, argv, i, "--online-apply");
+        } else if (a == "--allow-graph-mismatch") {
+            o.allow_graph_mismatch = true;
+        } else if (a == "--allow-width-mismatch") {
+            o.allow_width_mismatch = true;
+        } else if (a == "--online-model-no-provenance") {
+            o.online_no_provenance = true;
         } else if (a == "--mode") {
             o.mode = next_arg(argc, argv, i, "--mode");
         } else if (a == "--epsilon") {
@@ -269,7 +312,8 @@ void print_usage() {
     }
     static const std::vector<std::string> kQueues = {
         "binary_heap", "four_ary_heap", "pairing_heap", "fibonacci_heap",
-        "radix_heap",  "lpq",           "lpq_model",    "lpq_adaptive", "lpq_optimized"};
+        "radix_heap",  "lpq",           "lpq_model",    "lpq_adaptive", "lpq_optimized",
+        "lpq_online"};
     if (std::find(kQueues.begin(), kQueues.end(), o.pq) == kQueues.end()) {
         invalid("unknown --pq: " + o.pq);
     }
@@ -287,6 +331,38 @@ void print_usage() {
     }
     if (o.adaptive_learning && o.pq != "lpq_adaptive") {
         invalid("--adaptive-learning only affects --pq lpq_adaptive");
+    }
+    {
+        const bool online_flags =
+            !o.online_model.empty() || !o.online_report.empty() || o.allow_graph_mismatch ||
+            o.allow_width_mismatch || o.online_no_provenance || o.online_start != "warm" ||
+            o.online_update_mode != "periodic" || o.online_apply != "between_queries";
+        if (o.pq != "lpq_online") {
+            if (online_flags) invalid("--online-* and --allow-* model flags only affect --pq lpq_online");
+        } else {
+            if (o.online_start != "warm" && o.online_start != "cold") {
+                invalid("--online-start expects warm or cold");
+            }
+            if (o.online_update_mode != "disabled" && o.online_update_mode != "every_event" &&
+                o.online_update_mode != "periodic" && o.online_update_mode != "adaptive") {
+                invalid("--online-update-mode expects disabled, every_event, periodic or adaptive");
+            }
+            if (o.online_apply != "between_queries") {
+                invalid("--online-apply " + o.online_apply +
+                        " is not implemented; only between_queries is");
+            }
+            if (o.online_start == "cold") {
+                if (!o.online_model.empty() || !o.online_report.empty() || o.allow_graph_mismatch ||
+                    o.allow_width_mismatch || o.online_no_provenance) {
+                    invalid("a cold start has no artifact: --online-model, --online-model-report "
+                            "and the --allow-* / no-provenance flags do not apply");
+                }
+            } else if (o.online_model.empty()) {
+                invalid("--pq lpq_online needs --online-model <artifact>: there is no default "
+                        "model, and a model trained for one graph is not assumed to suit another "
+                        "(or --online-start cold for a zero-initialised model)");
+            }
+        }
     }
     if (!learned && (o.window_min != 2 || o.window_max != 32 || o.bucket_width != 0)) {
         invalid("--lpq-window and --lpq-bucket-width only apply to learned queues");
@@ -334,6 +410,18 @@ struct Context {
     std::string          heuristic;  ///< resolved; empty for dijkstra
     double               heuristic_scale = 1.0;
     const Scorer*        scorer          = nullptr;
+    OnlineSession*       online          = nullptr;  ///< lpq_online: the live model and learner
+    struct OnlineRunInfo {
+        std::string              start = "warm";
+        std::string              artifact_name;
+        std::uint64_t            artifact_fnv1a64 = 0;
+        std::uint64_t            artifact_bytes   = 0;
+        std::string              report_name;
+        std::optional<ModelReport> report;
+        OnlineModelCompat        compat;
+        std::uint64_t            graph_checksum = 0;
+        std::uint64_t            bucket_width   = 0;
+    } online_info;
 
     // lpq_optimized: what the queue policy resolved to, and what deciding cost.
     QueueChoice          choice;
@@ -376,7 +464,8 @@ ShortestPathResult<W> search(const Context& c, Queue& queue, Obs* obs) {
 }
 
 template <typename Queue>
-constexpr bool kIsLearned = std::is_same_v<Queue, LpqPlain> || std::is_same_v<Queue, LpqStatic>;
+constexpr bool kIsLearned = std::is_same_v<Queue, LpqPlain> || std::is_same_v<Queue, LpqStatic> ||
+                            std::is_same_v<Queue, LpqOnline>;
 
 template <typename Queue>
 Queue make_queue(const Context& c) {
@@ -393,6 +482,9 @@ Queue make_queue(const Context& c) {
         if constexpr (std::is_same_v<Queue, LpqStatic>) {
             q.set_scorer(c.scorer);
         }
+        if constexpr (std::is_same_v<Queue, LpqOnline>) {
+            q.set_scorer(&c.online->scorer());
+        }
         return q;
     } else if constexpr (std::is_same_v<Queue, PooledBucketQueue<W>>) {
         return Queue{static_cast<Dist>(c.choice.width), c.choice.ring};
@@ -401,8 +493,24 @@ Queue make_queue(const Context& c) {
     }
 }
 
+/// What the learner did in a run (D-12). Attachment, recorded events, applied updates and a
+/// measured change of the weights are separate facts; none says the learner helped.
+struct LearnerReport {
+    bool                  attached = false;
+    OnlineLearningMetrics m;
+    bool                  has_model = false;  ///< a live model was updated (lpq_online only)
+    bool                  weights_changed = false;
+    bool                  halted = false;
+    std::uint64_t         start_hash = 0;
+    std::uint64_t         end_hash = 0;
+    std::uint64_t         without_prediction = 0;
+    std::size_t           buffer_memory_bytes = 0;
+    bool                  accounting_balanced = true;
+};
+
 /// Everything one execution produced, gathered before any JSON is written.
 struct Execution {
+    std::optional<LearnerReport>       learner;
     ShortestPathResult<W> result;
     std::optional<LpqMetrics>          lpq;
     std::optional<CandidateMetrics>    candidate;
@@ -458,6 +566,11 @@ Execution execute(const Context& c) {
     queue.reserve_nodes(c.g->num_nodes());
     if constexpr (kIsLearned<Queue>) {
         if (is_adaptive) queue.set_observer(&adaptive);
+        if constexpr (std::is_same_v<Queue, LpqOnline>) {
+            // Only the authoritative run records events; the traced and timed runs below must not
+            // add to what the learner sees.
+            queue.set_observer(&c.online->observer());
+        }
         ex.bucket_width = derive_bucket_width(c.meta, Queue::Substrate::kBucketCount,
                                               c.o.bucket_width);
         queue.reset_metrics();
@@ -465,6 +578,20 @@ Execution execute(const Context& c) {
     }
     ex.result = search<Queue, NullSearchObserver>(c, queue, nullptr);
     if constexpr (kIsLearned<Queue>) {
+        if (is_adaptive) {
+            // lpq_adaptive's learner only ever records. Captured now: the next reset clears it.
+            LearnerReport lr;
+            lr.attached            = c.o.adaptive_learning;
+            lr.m                   = learner.metrics();
+            lr.accounting_balanced = learner.accounting_balanced();
+            lr.buffer_memory_bytes = c.o.adaptive_learning ? learner.memory_bytes() : 0;
+            ex.learner             = lr;
+        } else if constexpr (!std::is_same_v<Queue, LpqOnline>) {
+            ex.learner = LearnerReport{};  // lpq and lpq_model have no learner
+        }
+        if constexpr (std::is_same_v<Queue, LpqOnline>) {
+            queue.set_observer(nullptr);
+        }
         ex.lpq          = queue.metrics();
         ex.candidate    = queue.candidate_metrics();
         ex.verification = queue.verification_metrics();
@@ -550,6 +677,25 @@ Execution execute(const Context& c) {
             },
             cfg);
     }
+
+    if constexpr (std::is_same_v<Queue, LpqOnline>) {
+        // Between-query update: the search above (and the traced and timed repeats) ran on the
+        // start model; only now are the recorded events applied.
+        OnlineSession& session = *c.online;
+        (void)session.end_query();
+        LearnerReport lr;
+        lr.attached            = true;
+        lr.m                   = session.learner().metrics();
+        lr.has_model           = true;
+        lr.halted              = session.learner().halted();
+        lr.start_hash          = session.start_hash();
+        lr.end_hash            = session.current_hash();
+        lr.weights_changed     = session.weights_changed();
+        lr.without_prediction  = session.observer().extractions_without_prediction();
+        lr.buffer_memory_bytes = session.learner().memory_bytes();
+        lr.accounting_balanced = session.learner().accounting_balanced();
+        ex.learner             = lr;
+    }
     return ex;
 }
 
@@ -564,6 +710,116 @@ const char* coordinate_system_name(CoordinateSystem s) {
         case CoordinateSystem::kGeographic: return "geographic";
     }
     return "unknown";
+}
+
+std::string hex64(std::uint64_t v) {
+    char buf[17];
+    std::snprintf(buf, sizeof buf, "%016llx", static_cast<unsigned long long>(v));
+    return buf;
+}
+
+/// The measured status of the online learner (D-12). `online_learning` elsewhere in the result is
+/// derived from this block: true only when updates were applied and the weights changed.
+void write_learner(JsonWriter& w, const Context& c, const LearnerReport& lr) {
+    const auto& m = lr.m;
+    w.begin_object("learner");
+    w.key_value("schema", static_cast<std::int64_t>(1));
+    w.key_value("attached", lr.attached);
+    w.key_value("events_recorded", m.events_recorded);
+    w.key_value("examples_recorded", m.examples_recorded);
+    w.key_value("events_applied", m.events_applied);
+    w.key_value("examples_applied", m.examples_applied);
+    w.key_value("events_dropped", m.events_dropped);
+    w.key_value("events_rolled_back", m.events_rolled_back);
+    w.key_value("events_discarded_disabled", m.events_discarded_disabled);
+    w.key_value("events_discarded_halted", m.events_discarded_halted);
+    w.key_value("updates_applied", m.updates_performed);
+    w.key_value("largest_batch", m.largest_batch);
+    w.key_value("rollbacks", m.rollbacks);
+    w.key_value("halted", lr.halted);
+    w.key_value("accounting_balanced", lr.accounting_balanced);
+    w.key_value("extractions_without_prediction", lr.without_prediction);
+    w.key_value("buffer_memory_bytes", static_cast<std::uint64_t>(lr.buffer_memory_bytes));
+    w.key_value("weights_changed", lr.weights_changed);
+    if (lr.has_model) {
+        w.key_value("weights_hash_start", hex64(lr.start_hash));
+        w.key_value("weights_hash_end", hex64(lr.end_hash));
+    } else {
+        w.key_null("weights_hash_start");
+        w.key_null("weights_hash_end");
+    }
+    if (c.o.pq == "lpq_online") {
+        const auto& oi = c.online_info;
+        w.key_value("evaluation", "single_query_session");
+        w.key_value("apply_policy", c.o.online_apply);
+        w.key_value("update_mode", c.o.online_update_mode);
+        w.key_value("start", oi.start);
+        w.key_value("label_definition", "online_first_choice_extractable_v1");
+        w.key_value("note",
+                    "Updates are applied after the search, so the search ran on the start model. "
+                    "An applied update is not an improvement: nothing here measures whether the "
+                    "model got better.");
+        w.begin_object("model");
+        if (oi.start == "cold") {
+            w.key_value("kind", "logistic");
+            w.key_value("source", "zero_initialised");
+        } else {
+            w.key_value("kind", "logistic");
+            w.key_value("source", "artifact");
+            w.key_value("artifact_name", oi.artifact_name);
+            w.key_value("artifact_bytes", oi.artifact_bytes);
+            w.key_value("artifact_fnv1a64", hex64(oi.artifact_fnv1a64));
+            w.key_value("hash_note",
+                        "FNV-1a identifies these bytes; it is not a digest. The SHA-256 is recorded "
+                        "by the caller.");
+            w.key_value("feature_layout_version", static_cast<std::int64_t>(kFeatureLayoutVersion));
+            w.key_value("feature_count", static_cast<std::uint64_t>(kFeatureCount));
+            w.begin_object("compatibility");
+            w.key_value("provenance", oi.compat.provenance);
+            w.key_value("graph_match", oi.compat.graph_match);
+            w.key_value("width_match", oi.compat.width_match);
+            w.key_value("run_graph_checksum", std::to_string(oi.graph_checksum));
+            w.key_value("run_bucket_width", oi.bucket_width);
+            w.begin_array("overrides");
+            for (const auto& o : oi.compat.overrides) w.value(std::string_view(o));
+            w.end_array();
+            w.key_value("suitability", oi.compat.suitability);
+            w.end_object();
+            if (oi.report) {
+                const ModelReport& r = *oi.report;
+                w.begin_object("report");
+                w.key_value("file", oi.report_name);
+                w.key_value("dataset_id", r.dataset_id);
+                if (r.graph_checksum) w.key_value("graph_checksum", std::to_string(*r.graph_checksum));
+                else w.key_null("graph_checksum");
+                if (r.bucket_width) w.key_value("bucket_width", *r.bucket_width);
+                else w.key_null("bucket_width");
+                if (r.query_seed) w.key_value("query_seed", *r.query_seed);
+                else w.key_null("query_seed");
+                if (r.query_count) w.key_value("query_count", *r.query_count);
+                else w.key_null("query_count");
+                if (r.manifest_name.empty()) {
+                    w.key_null("training_manifest");
+                } else {
+                    w.begin_object("training_manifest");
+                    w.key_value("name", r.manifest_name);
+                    w.key_value("sha256", r.manifest_sha256);
+                    w.key_value("selection", r.manifest_selection);
+                    w.end_object();
+                }
+                w.end_object();
+            } else {
+                w.key_null("report");
+            }
+        }
+        w.end_object();
+    } else if (lr.attached) {
+        w.key_value("label_definition", "legacy_events_without_features");
+        w.key_value("note",
+                    "lpq_adaptive records one event per extraction with empty features, and no "
+                    "model exists to update, so nothing is learned.");
+    }
+    w.end_object();
 }
 
 void write_environment(JsonWriter& w, const HardwareInfo& hw) {
@@ -771,10 +1027,18 @@ void write_result(std::ostream& os, const Context& c, const Execution& ex,
         w.value(static_cast<std::uint64_t>(c.o.window_max));
         w.end_array();
         // D-02: say exactly what the learned component is in this run.
-        w.key_value("scorer", c.o.pq == "lpq_model" ? "static_precomputed_model_scores"
-                                                    : "constant_control_no_model");
+        w.key_value("scorer", c.o.pq == "lpq_model"
+                                  ? "static_precomputed_model_scores"
+                              : c.o.pq == "lpq_online" ? "online_logistic_static_features_on_demand"
+                                                       : "constant_control_no_model");
         w.key_value("adaptive_controller", c.o.pq == "lpq_adaptive");
-        w.key_value("online_learning", c.o.pq == "lpq_adaptive" && c.o.adaptive_learning);
+        // Measured, not configured: true only when updates were applied and the weights differ
+        // from where they started. (Until M5-O1 this read "a learner was attached", which could
+        // be true while no weight ever changed.)
+        const LearnerReport none{};
+        const LearnerReport& lr = ex.learner ? *ex.learner : none;
+        w.key_value("online_learning", lr.m.updates_performed > 0 && lr.weights_changed);
+        write_learner(w, c, lr);
         if (c.o.pq == "lpq_model") {
             w.key_value("model_path_name", std::filesystem::path(c.o.model).filename().string());
             w.key_value("scorer_build_ns", scorer_ns);
@@ -1015,6 +1279,86 @@ int main(int argc, char** argv) {
             c.scorer  = scorer.get();
         }
 
+        // --- lpq_online: validate the warm-start artifact before any query runs --------------
+        //
+        // Loading proves only that the container is well formed. check_online_model adds what the
+        // loader cannot know: that the weights are finite and sit on static features, and that the
+        // report travelling with the artifact names this graph and this bucket width. An override
+        // is recorded in the result, and a model that passes is still reported as "not assessed".
+        std::unique_ptr<GraphFeatures> online_features;
+        std::unique_ptr<OnlineSession> online_session;
+        if (o.pq == "lpq_online") {
+            t0 = std::chrono::steady_clock::now();
+            Context::OnlineRunInfo& oi = c.online_info;
+            oi.start                   = o.online_start;
+            oi.graph_checksum          = loaded.checksum;
+            oi.bucket_width            = derive_bucket_width(
+                c.meta, LpqOnline::Substrate::kBucketCount, o.bucket_width);
+
+            LogisticPredictor start_model;
+            if (o.online_start == "warm") {
+                std::ifstream in(o.online_model, std::ios::binary);
+                if (!in) {
+                    throw CategorisedError("model", "cannot open the model file");
+                }
+                std::ostringstream buffer;
+                buffer << in.rdbuf();
+                const std::string bytes = buffer.str();
+                oi.artifact_name        = std::filesystem::path(o.online_model).filename().string();
+                oi.artifact_bytes       = bytes.size();
+                std::uint64_t h         = 14695981039346656037ULL;
+                for (const char byte : bytes) {
+                    h ^= static_cast<unsigned char>(byte);
+                    h *= 1099511628211ULL;
+                }
+                oi.artifact_fnv1a64 = h;
+                try {
+                    std::istringstream is(bytes);
+                    start_model = LogisticPredictor::load(is);
+                } catch (const std::exception& e) {
+                    throw CategorisedError("model", std::string("model rejected: ") + e.what());
+                }
+
+                std::optional<ModelReport> report;
+                if (!o.online_report.empty()) {
+                    std::ifstream rin(o.online_report, std::ios::binary);
+                    if (!rin) {
+                        throw CategorisedError("model", "cannot open the model report");
+                    }
+                    std::ostringstream rbuf;
+                    rbuf << rin.rdbuf();
+                    try {
+                        report = parse_model_report(rbuf.str());
+                    } catch (const ModelReportError& e) {
+                        throw CategorisedError("model", e.what());
+                    }
+                    oi.report_name = std::filesystem::path(o.online_report).filename().string();
+                }
+                OnlineModelPolicy policy;
+                policy.allow_graph_mismatch = o.allow_graph_mismatch;
+                policy.allow_width_mismatch = o.allow_width_mismatch;
+                policy.allow_no_provenance  = o.online_no_provenance;
+                try {
+                    oi.compat = check_online_model(start_model, report, oi.graph_checksum,
+                                                   oi.bucket_width, policy);
+                } catch (const OnlineModelError& e) {
+                    throw CategorisedError("model", e.what());
+                }
+                oi.report = report;
+            }
+
+            OnlineLearningConfig lc;
+            lc.mode = o.online_update_mode == "disabled"      ? UpdateMode::kDisabled
+                      : o.online_update_mode == "every_event" ? UpdateMode::kEveryEvent
+                      : o.online_update_mode == "adaptive"    ? UpdateMode::kAdaptive
+                                                              : UpdateMode::kPeriodic;
+            lc.start = o.online_start == "cold" ? StartPolicy::kCold : StartPolicy::kWarm;
+            online_features = std::make_unique<GraphFeatures>(g, c.meta);
+            online_session  = std::make_unique<OnlineSession>(*online_features, start_model, lc);
+            c.online        = online_session.get();
+            scorer_ns       = ns_since(t0);
+        }
+
         // --- optimised queue: profile the graph, ask the policy ----------------
         if (o.pq == "lpq_optimized") {
             const std::string cache =
@@ -1087,6 +1431,7 @@ int main(int argc, char** argv) {
             else ex = execute<PooledBucketQueue<W>>(c);
         }
         else if (o.pq == "lpq_model") ex = execute<LpqStatic>(c);
+        else if (o.pq == "lpq_online") ex = execute<LpqOnline>(c);
         else ex = execute<LpqPlain>(c);  // lpq and lpq_adaptive share a type
 
         std::ostringstream os;

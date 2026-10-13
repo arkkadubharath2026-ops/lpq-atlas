@@ -168,12 +168,30 @@ export interface Counters {
   peak_queue_size: number;
 }
 
+/**
+ * What the online learner actually did in a run (D-12). Attachment, recorded events, applied updates and
+ * a measured change of the weights are separate facts; none of them says the learner helped.
+ * Absent in results produced before this block existed.
+ */
+export interface LearnerStatus {
+  schema: number;
+  attached: boolean;
+  events_recorded: number;
+  events_applied: number;
+  events_dropped: number;
+  updates_applied: number;
+  weights_changed: boolean;
+  [key: string]: unknown;
+}
+
 export interface LpqResult {
   bucket_width: number;
   window: [number, number];
   scorer: string;
   adaptive_controller: boolean;
+  /** Measured: true only when updates were applied and the weights changed. Older results: "learner attached". */
   online_learning: boolean;
+  learner?: LearnerStatus;
   model_path_name?: string;
   scorer_build_ns?: number;
   scorer_memory_bytes?: number;

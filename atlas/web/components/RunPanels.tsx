@@ -1,8 +1,14 @@
 "use client";
 import { Fragment } from "react";
 import { explain, type Replay, type TraceEvent } from "@/lib/trace";
-import type { RunResult } from "@/lib/types";
+import { learnerBadge } from "@/lib/learner";
+import type { LpqResult, RunResult } from "@/lib/types";
 import { fmtDistance, fmtInt, fmtNs, fmtNum, fmtPct, isLearned, queueLabel } from "@/lib/format";
+
+function LearnerStatusBadge({ l }: { l: LpqResult }) {
+  const b = learnerBadge(l);
+  return <span className={b.tone === "plain" ? "badge" : `badge ${b.tone}`} title="Attachment, recorded events and applied updates are separate facts; none of them says the learner helped.">{b.label}</span>;
+}
 
 /** Authoritative metrics: every number here is read from the engine's result file. */
 export function Telemetry({ r, unit }: { r: RunResult; unit?: string }) {
@@ -133,10 +139,10 @@ function LpqResultPanel({ r }: { r: RunResult }) {
       <h3>Learned queue</h3>
       <div className="row">
         <span className="badge learned">
-          {l.scorer === "static_precomputed_model_scores" ? "static precomputed model scores" : "constant control scorer (no model)"}
+          {l.scorer === "static_precomputed_model_scores" ? "static precomputed model scores" : l.scorer === "constant_control_no_model" ? "constant control scorer (no model)" : l.scorer}
         </span>
         {l.adaptive_controller ? <span className="badge learned">adaptive controller</span> : null}
-        {l.online_learning ? <span className="badge learned">online learning</span> : <span className="badge">no online learning</span>}
+        <LearnerStatusBadge l={l} />
       </div>
       <dl className="kv">
         <dt>Extractions</dt><dd>{fmtInt(m.extractions)}</dd>
