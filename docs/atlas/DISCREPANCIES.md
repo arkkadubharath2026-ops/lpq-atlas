@@ -180,7 +180,25 @@ entries true.
   (`prediction_event.hpp:59,93`) and produced by the predictors. No code in `lpq/`,
   `verification/`, `adaptation/` or the apps reads it to decide control flow. Whether it should
   gate extraction, and whether that helps, is untested.
-* **Status:** recorded; to be tested as a hypothesis in M7 and M9, not assumed.
+* **Tested (2026-10-13, candidate branch `completion/m5-candidate`): confidence does not gate
+  extraction, and on the LPQ path it is not even populated.** `git grep` over `cpp/include` and
+  `cpp/apps`: the only reads of a `.confidence` member are inside the predictors' own
+  calibration code; no code in `lpq/`, `verification/`, `adaptation/` or the apps branches on it.
+  `CandidateBetter` orders by `score` then node id. The two sites that build a `Candidate` from a
+  queue entry (`learned_priority_queue.hpp`, the bucket scan and `refill`) copy `node`, `key` and
+  `score` and leave `confidence` at its default `0.0F`, because the bucket substrate stores no
+  confidence. `PredictionEvent::from_verification` takes a confidence argument but has no caller
+  outside tests. So the "calibrated probability" in the field's comment is never produced on this
+  path. Regression test (pins current behaviour, does not endorse it):
+  `CandidateManager.ConfidenceDoesNotChangeTheWindowItsOrderOrItsAccounting` and
+  `CandidateManager.ALowConfidenceCandidateStillBeatsAConfidentOneWithALowerScore` in
+  `cpp/tests/lpq/test_candidate_manager.cpp`. Offering the same stream with confidence set to
+  none, certain, inverted against the score and seeded-arbitrary gives the identical window
+  order and rejection count.
+* **Status:** the claim "confidence-aware candidate extraction" (PRD §2) is **not implemented**.
+  Whether it should be, and whether it would help, is still untested; building a gated variant is
+  a prerequisite for PRD §21 item 3 (`docs/experiments/prd-section-21-status.md`). If it is ever
+  wired in, the two tests above must be changed on purpose.
 
 ### D-15. Model artifacts do not embed the provenance specdoc §30 asks for
 
@@ -218,7 +236,18 @@ entries true.
   while running: it aborts when `ratio > 1 + epsilon` (`lpq_benchmark.cpp` lines 882 to 886), and
   the run exited 0. So the run is checked, but a stored file cannot say which epsilon it was
   checked against.
-* **Status:** recorded; **no code changed** in M3. Fix due with M8 and M10 (result schema).
+* **Status:** **fixed on the candidate branch `completion/m5-candidate` (2026-10-13).**
+  `ResultRecord` has an optional `epsilon`, written as `correctness.epsilon` when, and only when,
+  the record's mode is `approximate` (including the record for a queue that has no approximation
+  mechanism, whose `supported` is false). Exact and adaptive records are byte-identical to before:
+  no key, not a null and not a zero. `schema_version` stays 1 because the change is additive and
+  optional; a reader that ignores unknown keys, which includes `lpq_tools.evaluation.results`,
+  is unaffected, and files written earlier simply lack the key. Tests:
+  `ResultRecord.ApproximateRecordsCarryTheConfiguredEpsilonExactly` and
+  `ResultRecord.RecordsWithoutAnEpsilonSerialiseExactlyAsBefore` (`cpp/tests/metrics/`), and
+  `python/tests/test_approximate_epsilon.py`, which runs the real `lpq_benchmark`. Files written
+  before the fix still cannot say which epsilon they ran against. The online-learning record
+  (`learner`) is unchanged.
 
 ### D-18. Dataset-pipeline hazards found while re-sourcing Monaco
 

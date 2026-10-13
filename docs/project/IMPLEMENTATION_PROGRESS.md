@@ -27,6 +27,7 @@ and `claude/sleepy-heisenberg-fhr3me` (docs) are unchanged.
 | M5 online learning O1 to O4 (branch `completion/m5-online-o1-o4`, on the D-21 head) | PASS; O4 checkpoint approved | approved |
 | M5 online learning O5 (in-search updates) | **deferred** (not required by any core feature) | |
 | M5 online learning O6 to O9 (benchmark, API/UI, regression, docs) | core path done; **pending review** | **pending** |
+| Candidate integration: D-20 onto the M5 head, D-14 test, D-17 fix, PRD §21 table (branch `completion/m5-candidate`, local) | PASS for the scoped items | **pending** |
 
 ---
 
@@ -584,3 +585,71 @@ historical 45% figure, and no performance claim is made.
 ### Owner decision needed
 1. Review `git diff 51a8b4c..completion/m5b-d20-order-check`.
 2. Should `generate_tables.sh` also tabulate the order-check file (it reads only the ablation file today)?
+
+---
+
+## Candidate integration: D-20 onto the M5 head, D-14 test, D-17 fix, PRD §21 status
+Status: PASS for the scoped items; local only, nothing pushed
+Date: 2026-10-13
+Base commit SHA: `ce912c5f24cfbccab8d5bbdd96d1270f64d56dd6` (published M5 head, unchanged)
+Working branch: `completion/m5-candidate` (local, no upstream; scratch worktree `cand`). The two published branches
+`completion/m5-online-o1-o4` and `completion/m5b-d20-order-check` are untouched.
+
+### Hosted CI on the published SHAs (read only)
+Both runs are workflow `ci`, event `push`, attempt 1, conclusion success, with five jobs and no skipped job:
+`engine` (ubuntu-24.04, g++-13 release: configure, build, ctest, Python tooling tests, API contract tests),
+`fuzz` (ubuntu-24.04, clang-18 + libFuzzer, four targets, 60 s each), `web` (ubuntu-24.04, Node 22: lint, typecheck,
+unit tests, build), `e2e` (ubuntu-24.04, Playwright against the bundled `demo_road` graph) and `windows-scripts`
+(windows-latest, `continue-on-error`: parses every PowerShell script and runs the read-only doctor). Coverage limits,
+from the workflow file: the C++ unit tests are built with GCC 13 only; Clang 18 is used only for the four fuzz targets
+(the workflow header says ASan/UBSan; I did not inspect the CMake flags behind that), configured with the tests
+switched off, so the ctest suite has no Clang build and no sanitizer build in CI; there is no native Windows engine
+build. Run ids 38399195247 (ce912c5) and
+38399195088 (f411ea2).
+
+### D-20 integration
+`git cherry-pick f411ea2` onto `ce912c5` (new commit `719081a`). One textual conflict, in this progress log (the status
+table and the end of the file, both sides appended); resolved by keeping both. `run_main_experiments.sh` merged
+without a conflict: the D-21 training-loop hunk and the D-20 order-check hunks touch different regions. I read the
+merged script rather than trusting the merge: it still selects the training set through `select_training_manifest`
+(protocol C) and passes `training_manifest` to the trainer, and the order-check run and the shared `check_counts`
+are present. `bash -n` clean on both reproduce scripts.
+
+### Verification actually run
+| command | result |
+|---|---|
+| `python -m pytest -q tests/test_order_check.py tests/test_script_modes.py` | 20 passed |
+| `scripts/reproduce/run_main_experiments.sh` (binaries from the M5 build, byte-identical sources) | exit 0, 11 min 13 s; the training step reported the NY and Facebook sets source-disjoint from the benchmark manifests (protocol C); ablation and order check each 400 records |
+| comparison counts, ablation file and order-check file | all four rungs equal the recorded values in both files: 203,801,439 / 71,839,857 / 177,580,603 / 177,732,303 |
+| `scripts/reproduce/generate_figures.sh` | exit 0, both order scatter figures written |
+The embedded commit flag in those binaries reads "dirty working tree" (the warning the runner prints); the counts do
+not depend on it. Timings from that run were not inspected or used.
+
+### D-14: does confidence gate extraction?
+No. See D-14 in `docs/atlas/DISCREPANCIES.md`: nothing reads `Candidate::confidence`, and the LPQ never sets it.
+Two tests in `cpp/tests/lpq/test_candidate_manager.cpp` pin the current behaviour. They pass, and both fail when
+`CandidateBetter` is temporarily changed to order by confidence first (mutation applied, observed red, reverted; the
+header is byte-identical to `ce912c5`). The PRD claim of confidence-aware extraction is not implemented.
+
+### D-17: epsilon in approximate-mode records
+`ResultRecord::epsilon` (optional), written as `correctness.epsilon` only for `mode == "approximate"`, set in
+`lpq_benchmark.cpp` for measured and unsupported rows. `schema_version` is unchanged; exact and adaptive records are
+byte-identical to before (test). Tests: two C++ tests in `test_json_and_records.cpp`, and
+`python/tests/test_approximate_epsilon.py` (4 tests through the real binary). Against the M5 binary, 3 of the 4 fail
+with `KeyError: 'epsilon'`; against the rebuilt binary all 4 pass. The online-learning contract is untouched:
+`test_online_benchmark.py` (5 tests, the ones that read `lpq_online` records) passes unchanged on the rebuilt binary.
+Built targets only: `test_lpq`, `test_metrics`, `lpq_benchmark`; `test_metrics` 88/88 and the 21 `CandidateManager`
+tests pass.
+
+### Not run, deliberately
+The full ctest suite and the full Python, API and web suites were not rerun; the change touches one serialiser, one
+record field and one test file for `CandidateManager`, and the focused runs above cover them. Hosted CI on the
+candidate will be the full check once it is pushed, which has not been asked for.
+
+### PRD §21
+`docs/experiments/prd-section-21-status.md`: 1 of 14 met, 8 partly met, 5 not met. Status only; no experiment run.
+
+### Remaining gaps
+Everything in M6 to M14 except the pieces above. In particular: no end-to-end timing account (M6), MLP and tree
+decision (M7), approximate-mode distributions and matrix (M8), the M9 experiments, D-15 beyond the training manifest,
+the sanitizer/Clang ctest and Windows engine jobs (M12), and the literature and release gates (M13, M14).
