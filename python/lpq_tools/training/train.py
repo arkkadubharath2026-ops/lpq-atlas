@@ -43,14 +43,17 @@ imbalance does not flatter.
 
 from __future__ import annotations
 
+import dataclasses
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score, roc_auc_score
 
+from lpq_tools.data.queries import read_manifest
 from lpq_tools.training.dataset import (
     STATIC_FEATURE_NAMES,
     TrainingSet,
@@ -61,6 +64,7 @@ from lpq_tools.training.model_io import (
     expand_static_weights,
     write_linear_model,
 )
+from lpq_tools.utilities.hashing import sha256_file
 
 
 @dataclass(frozen=True)
@@ -106,6 +110,11 @@ class TrainingReport:
 
     weights: dict[str, float]
     bias: float
+
+    #: Which query manifest produced the training set: name, SHA-256, selection rule, seed and query
+    #: count (see :func:`describe_training_manifest`). None when the caller did not say; reports
+    #: written before this field existed lack the key altogether.
+    training_manifest: dict[str, Any] | None = None
 
     @property
     def precision_lift(self) -> float:
@@ -288,6 +297,39 @@ def train_static_scorer(
     return [float(w) for w in model.coef_[0]], float(model.intercept_[0]), report
 
 
+def describe_training_manifest(path: str | Path, data: TrainingSet) -> dict[str, Any]:
+    """The provenance record for the manifest a training set was collected from.
+
+    The record is checked against the training set before it is trusted: a manifest for another
+    dataset or graph, or with another seed or query count, cannot be what produced this set, and
+    recording it would be worse than recording nothing. (Seed and count do not tell protocol B from
+    protocol C apart, which is why the SHA-256 is recorded.)
+    """
+    path = Path(path)
+    manifest = read_manifest(path)
+    if manifest.dataset_id != data.dataset_id:
+        raise ValueError(
+            f"{path.name} is for dataset {manifest.dataset_id!r}, the training set for {data.dataset_id!r}"
+        )
+    if manifest.graph_checksum is not None and manifest.graph_checksum != data.graph_checksum:
+        raise ValueError(f"{path.name} was generated for a different graph than the training set")
+    if manifest.seed != data.query_seed:
+        raise ValueError(
+            f"{path.name} has seed {manifest.seed}, the training set was collected at seed {data.query_seed}"
+        )
+    if len(manifest.pairs) != data.query_count:
+        raise ValueError(
+            f"{path.name} has {len(manifest.pairs)} queries, the training set was collected from {data.query_count}"
+        )
+    return {
+        "name": path.name,
+        "sha256": sha256_file(path),
+        "selection": manifest.selection,
+        "seed": manifest.seed,
+        "query_count": len(manifest.pairs),
+    }
+
+
 def train_from_file(
     training_set: str | Path,
     model_out: str | Path,
@@ -296,15 +338,25 @@ def train_from_file(
     seed: int,
     l2_inverse_strength: float = 1.0,
     test_fraction: float = 0.25,
+    training_manifest: str | Path | None = None,
 ) -> TrainingReport:
-    """Reads a training set, fits, writes a loadable model and its report."""
+    """Reads a training set, fits, writes a loadable model and its report.
+
+    *training_manifest* is the query manifest the training set was collected from. When given,
+    its name and SHA-256 are recorded in the report so that the model can later be tied to the
+    exact queries it was trained on.
+    """
     data = read_training_set_file(training_set)
+    provenance = (
+        describe_training_manifest(training_manifest, data) if training_manifest is not None else None
+    )
     static_weights, bias, report = train_static_scorer(
         data,
         seed=seed,
         l2_inverse_strength=l2_inverse_strength,
         test_fraction=test_fraction,
     )
+    report = dataclasses.replace(report, training_manifest=provenance)
 
     model_path = Path(model_out)
     model_path.parent.mkdir(parents=True, exist_ok=True)

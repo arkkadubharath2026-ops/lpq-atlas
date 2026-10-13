@@ -97,6 +97,22 @@ export interface SplitReport {
   shared_pairs: number;
   shared_endpoints: number;
   detail: string;
+  /** Source nodes both manifests use (absent in results produced before D-21). */
+  shared_sources?: number;
+  /** The rule behind `status`: pair (legacy) or source (corrected protocol). */
+  level?: "pair" | "source";
+}
+
+/** How the model's training manifest was identified (D-21). */
+export interface TrainingManifestProvenance {
+  /** True when the model report itself names the manifest. */
+  recorded: boolean;
+  source: "recorded" | "inferred_from_dataset_filename" | "none";
+  status: "verified" | "hash_mismatch" | "manifest_missing" | "not_recorded";
+  name?: string;
+  sha256?: string | null;
+  selection?: string | null;
+  note?: string;
 }
 
 export interface ModelInfo {
@@ -112,6 +128,7 @@ export interface ModelInfo {
   loader_ok?: boolean;
   training_dataset?: string;
   training_manifest?: string;
+  training_manifest_provenance?: TrainingManifestProvenance;
   splits: SplitReport[];
   split_status: string;
   mode: string;

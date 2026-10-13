@@ -282,6 +282,48 @@ class Registry:
         return _model_info(str(path), path.stat().st_mtime, str(self.s.tool("lpq_model_info")))
 
 
+def _training_manifest(
+    report: dict[str, Any], dataset: str | None, manifests: Path
+) -> tuple[Path | None, dict[str, Any]]:
+    """Which query manifest trained this model, and how far that can be trusted.
+
+    A report written by the current trainer records the manifest's name and SHA-256, and that
+    record is used: the file is looked up by the recorded name and accepted only if its hash still
+    matches. If it is missing or has changed, nothing is substituted and the split is UNKNOWN. A
+    report from before the record existed falls back to the old dataset-named file and says so,
+    because that file is a guess about which manifest was used.
+    """
+    recorded = report.get("training_manifest")
+    if isinstance(recorded, dict) and recorded.get("name"):
+        info: dict[str, Any] = {
+            "recorded": True,
+            "source": "recorded",
+            "name": recorded["name"],
+            "sha256": recorded.get("sha256"),
+            "selection": recorded.get("selection"),
+        }
+        candidate = manifests / Path(str(recorded["name"])).name
+        if not candidate.is_file():
+            info["status"] = "manifest_missing"
+            return None, info
+        if sha256_file(candidate) != recorded.get("sha256"):
+            info["status"] = "hash_mismatch"
+            return None, info
+        info["status"] = "verified"
+        return candidate, info
+    info = {"recorded": False, "source": "none", "status": "not_recorded"}
+    legacy = manifests / f"{dataset}_training_queries.yaml" if dataset else None
+    if legacy is not None and legacy.is_file():
+        info["source"] = "inferred_from_dataset_filename"
+        info["name"] = legacy.name
+        info["note"] = (
+            "This report does not record its training manifest; the file was inferred from the "
+            "dataset name and may not be the one used."
+        )
+        return legacy, info
+    return None, info
+
+
 @lru_cache(maxsize=32)
 def _model_info(path_s: str, _mtime: float, info_tool: str) -> dict[str, Any]:
     path = Path(path_s)
@@ -334,12 +376,15 @@ def _model_info(path_s: str, _mtime: float, info_tool: str) -> dict[str, Any]:
     )
     dataset = report.get("dataset_id")
     manifests = path.parents[2] / "experiments" / "manifests"
-    training = manifests / f"{dataset}_training_queries.yaml"
+    training, provenance = _training_manifest(report, dataset, manifests)
+    out["training_manifest_provenance"] = provenance
     splits = []
-    if dataset and training.exists():
+    if training is not None:
         out["training_manifest"] = training.name
         for ev in sorted(manifests.glob(f"{dataset}_queries*.yaml")):
             splits.append(check_split(training, ev).as_dict())
+    elif provenance.get("name"):
+        out["training_manifest"] = provenance["name"]
     out["splits"] = splits
     out["split_status"] = (
         "UNKNOWN"

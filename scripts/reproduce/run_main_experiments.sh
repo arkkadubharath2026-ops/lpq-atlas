@@ -77,8 +77,10 @@ say "collecting training sets"
 # (docs/experiments/static-scorer-training.md, "Protocols compared").
 # select_training_manifest (common.sh) picks the set and refuses to continue if
 # it shares a source with any benchmark manifest.
+declare -A TRAINING_MANIFEST
 for dataset in "${MAIN_DATASETS[@]}"; do
     manifest="$(select_training_manifest "$dataset")"
+    TRAINING_MANIFEST["$dataset"]="$manifest"
     printf "    %s\n" "$(basename "$manifest")"
 
     "$COLLECT" --dataset "${REPO_ROOT}/datasets/processed/${dataset}.lpqgraph" \
@@ -100,12 +102,17 @@ for dataset in "${MAIN_DATASETS[@]}"; do
         "$(native_path "${MODELS_DIR}/training/${dataset}.lpqtrain")" \
         "$(native_path "${MODELS_DIR}/exported/${dataset}_static.lpqmodel")" \
         "$(native_path "${MODELS_DIR}/exported/${dataset}_static.report.json")" \
-        "$TRAINING_SEED" <<'PYEOF' || die "training failed for ${dataset}"
+        "$TRAINING_SEED" \
+        "$(native_path "${TRAINING_MANIFEST[$dataset]}")" <<'PYEOF' || die "training failed for ${dataset}"
 import sys
 from lpq_tools.training.train import train_from_file, format_report
 
-training_set, model_out, report_out, seed = sys.argv[1:5]
-print(format_report(train_from_file(training_set, model_out, report_out, seed=int(seed))))
+training_set, model_out, report_out, seed, manifest = sys.argv[1:6]
+# The manifest the training set was collected from is recorded in the report (name and
+# SHA-256), so the model can later be tied to the exact queries it was trained on.
+print(format_report(train_from_file(
+    training_set, model_out, report_out, seed=int(seed), training_manifest=manifest
+)))
 PYEOF
 done
 

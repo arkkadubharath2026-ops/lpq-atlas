@@ -196,8 +196,15 @@ lpq_collect --dataset datasets/processed/snap_facebook.lpqgraph \
 python -c "from lpq_tools.training.train import train_from_file; \
 train_from_file('models/training/snap_facebook_source_disjoint.lpqtrain', \
   'models/training/snap_facebook_source_disjoint.lpqmodel', \
-  'models/training/snap_facebook_source_disjoint.report.json', seed=20260923)"
+  'models/training/snap_facebook_source_disjoint.report.json', seed=20260923, \
+  training_manifest='experiments/manifests/snap_facebook_training_queries_source_disjoint.yaml')"
 ```
+
+The `training_manifest=` argument (D-21) records the manifest's name, SHA-256, selection rule, seed and query count in
+the model's `.report.json`; the pipeline passes it, and the Atlas model page reads it. It is checked against the training
+set (dataset, graph checksum, seed, query count) before it is recorded. Reports from before D-21 have no such record and
+the model page says so. The `training_manifest` key does not change the protocol A/B/C results above: it adds a field to
+the report, and a report written without it has `null` there.
 
 The benchmark manifest is unchanged (sha256 `c495353a76f4e5abd4a1f0e1c0be18aa960022f8a5df839ba33c8716fb643b49`).
 `scripts/reproduce/run_main_experiments.sh` now trains `snap_facebook` on this protocol C manifest and

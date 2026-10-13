@@ -86,6 +86,10 @@ a shared search. `snap_facebook` trains on
 `dimacs_ny_training_queries.yaml`, which was checked against the 100-query and
 30-query benchmark manifests. The earlier pre-correction and pair-disjoint
 protocols are kept as labelled historical evidence, not reproduced by this script.
+The training manifest's name and SHA-256 are recorded in each model's `.report.json`, and the Atlas model page
+reads them (it no longer guesses the manifest from the dataset name). The split guard
+(`python/lpq_tools/training/leakage.py`) holds a manifest that declares `source_disjoint` selection to source-level
+separation; any other manifest keeps the legacy pair-level verdict, with its shared sources reported.
 
 ## Environment
 

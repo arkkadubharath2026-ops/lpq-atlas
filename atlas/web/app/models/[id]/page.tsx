@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react";
 import { Bars } from "@/components/Charts";
 import { ErrorBox, Loading } from "@/components/States";
 import { api } from "@/lib/api";
-import type { ModelInfo } from "@/lib/types";
+import type { ModelInfo, TrainingManifestProvenance } from "@/lib/types";
 import { fmtNum } from "@/lib/format";
 
 const FEATURE_DOC: Record<string, string> = {
@@ -15,6 +15,23 @@ const FEATURE_DOC: Record<string, string> = {
   adjacent_weight_spread: "(max − min) outgoing weight / graph max weight",
   degree_relative_to_mean: "Out-degree / mean out-degree",
 };
+
+/** Says how the training manifest was identified, and whether that can be trusted. */
+function provenanceText(p: TrainingManifestProvenance | undefined): string {
+  if (!p) return "not reported (older API)";
+  switch (p.status) {
+    case "verified":
+      return `recorded in the model report; SHA-256 verified${p.selection ? ` (${p.selection})` : ""}`;
+    case "hash_mismatch":
+      return "recorded in the model report, but the file has changed since training — not trusted";
+    case "manifest_missing":
+      return "recorded in the model report, but that file is not in the repository";
+    default:
+      return p.source === "inferred_from_dataset_filename"
+        ? "not recorded in this (older) report; inferred from the dataset name, so it may not be the manifest used"
+        : "not recorded in this report";
+  }
+}
 
 export default function ModelInspector({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -64,6 +81,7 @@ export default function ModelInspector({ params }: { params: Promise<{ id: strin
           <dl className="kv small">
             <dt>Dataset</dt><dd>{m.training_dataset}</dd>
             <dt>Training queries</dt><dd>{m.training_manifest ?? "not found"}</dd>
+            <dt>Manifest provenance</dt><dd>{provenanceText(m.training_manifest_provenance)}</dd>
             <dt>Query seed / count</dt><dd>{String(rep.query_seed ?? "?")} / {String(rep.query_count ?? "?")}</dd>
             <dt>Training seed</dt><dd>{String(rep.seed ?? "?")}</dd>
             <dt>L2 inverse strength</dt><dd>{String(rep.l2_inverse_strength ?? "?")}</dd>
@@ -75,11 +93,11 @@ export default function ModelInspector({ params }: { params: Promise<{ id: strin
       <div className="panel">
         <h2>Training / evaluation split</h2>
         <div className="row" style={{ marginBottom: 8 }}>
-          <span className={`badge ${m.split_status === "DISJOINT" ? "ok" : "bad"}`}>Training/Evaluation split: {m.split_status}</span>
+          <span className={`badge ${m.split_status === "DISJOINT" ? "ok" : m.split_status === "OVERLAPPING" ? "bad" : "warn"}`}>Training/Evaluation split: {m.split_status}</span>
           <span className="small muted">Checked automatically against every evaluation manifest of the dataset.</span>
         </div>
         <table className="data">
-          <thead><tr><th>Evaluation manifest</th><th>Status</th><th className="num">Train q</th><th className="num">Eval q</th><th className="num">Shared pairs</th><th className="num">Shared endpoints</th></tr></thead>
+          <thead><tr><th>Evaluation manifest</th><th>Status</th><th className="num">Train q</th><th className="num">Eval q</th><th className="num">Shared pairs</th><th className="num">Shared endpoints</th><th className="num">Shared sources</th><th>Rule</th></tr></thead>
           <tbody>
             {m.splits.map((s) => (
               <tr key={s.evaluation_manifest}>
@@ -87,6 +105,7 @@ export default function ModelInspector({ params }: { params: Promise<{ id: strin
                 <td><span className={`badge ${s.status === "DISJOINT" ? "ok" : s.status === "OVERLAPPING" ? "bad" : "warn"}`}>{s.status}</span></td>
                 <td className="num">{s.training_queries}</td><td className="num">{s.evaluation_queries}</td>
                 <td className="num">{s.shared_pairs}</td><td className="num">{s.shared_endpoints}</td>
+                <td className="num">{s.shared_sources ?? "?"}</td><td>{s.level ?? "pair"}</td>
               </tr>
             ))}
           </tbody>

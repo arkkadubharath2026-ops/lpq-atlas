@@ -23,6 +23,7 @@ and `claude/sleepy-heisenberg-fhr3me` (docs) are unchanged.
 | M4 reproducibility and tooling | PASS for the five scoped items; limits below | **pending** |
 | M5-P1 D-19 training protocols (branch `completion/m5a-d19-protocols`) | PASS | **pending** |
 | M5-P2 D-20 order-check producer | not started | |
+| M5-D21 split guard and model provenance (branch `completion/m5c-d21-provenance`, on the D-19 branch) | PASS | **pending** |
 | M5 online learning (O1 to O9) | not started; design approved in principle | |
 
 ---
@@ -414,3 +415,49 @@ file name.
 1. Review `git diff 51a8b4c..completion/m5a-d19-protocols`.
 2. D-21: make `lpq_tools/training/leakage.py` and the Atlas model page source-level, and record the training manifest name and
    SHA-256 in the model report?
+
+---
+
+## Milestone M5-D21: source-level split guard and recorded model provenance
+Status: PASS
+Date: 2026-10-13
+Base commit SHA: `3865889` (head of `completion/m5a-d19-protocols`, which supplies the source-disjoint manifest and `shared_sources`)
+Working branch: `completion/m5c-d21-provenance` (local, no upstream; scratch worktree `m5c`)
+
+### What I found
+- The existing guard treats a shared source as informational and the Atlas model page looked the training manifest up as
+  `<dataset>_training_queries.yaml`, so a model trained on the protocol C set would have been described against the
+  protocol B set (D-21). The model report could not tell them apart: both have seed 917 and 200 queries. [Verified in P1]
+- The derived-dataset manifests were not examined: no focused check showed a dependency on this change.
+
+### What changed (small, additive)
+`python/lpq_tools/training/leakage.py` (`level` pair|source, `shared_sources`; automatic: a manifest declaring
+`source_disjoint` selection is held to source level, every other manifest keeps the legacy pair-level verdict),
+`python/lpq_tools/training/train.py` (`describe_training_manifest`, `training_manifest=` argument, report field
+`training_manifest` {name, sha256, selection, seed, query_count}, validated against the training set before it is recorded),
+`scripts/reproduce/run_main_experiments.sh` (passes the manifest it selected), `atlas/api/atlas_api/registry.py` (uses the
+recorded manifest, verifies its SHA-256, reports `training_manifest_provenance`; older reports fall back to the old inference
+and are labelled), `atlas/web/lib/types.ts` and `atlas/web/app/models/[id]/page.tsx` (provenance text, shared-sources and rule
+columns, UNKNOWN shown as a warning), `docs/atlas/DISCREPANCIES.md` (D-21), `docs/experiments/static-scorer-training.md`,
+`docs/reproducing.md`, this log. New tests: 12 in `test_leakage.py`, 7 in `test_train_provenance.py`, 7 in
+`atlas/api/tests/test_model_provenance.py`, written before the code (collection errors or failures first). No C++, CI,
+dependency, historical result or manifest change.
+
+### Verification actually run (worktree `m5c`; binaries copied from `m4`, byte-identical)
+| command | exit | result |
+|---|---|---|
+| `scripts/reproduce/run_main_experiments.sh` | 0 | 5 min 41 s; the four NY ablation counts match (203,801,439 / 71,839,857 / 177,580,603 / 177,732,303); the Facebook model and training set are byte-identical to the protocol C artifacts (`f5413deb…`, `b3261e0b…`) and the NY model to the earlier one; the new reports differ from the earlier ones only by the `training_manifest` key |
+| recorded in the reports | | `snap_facebook`: `snap_facebook_training_queries_source_disjoint.yaml`, sha256 `e0105cbe…`; `dimacs_ny`: `dimacs_ny_training_queries.yaml`, sha256 `65ab749c…` |
+| `_model_info` on the real exported models with the real `lpq_model_info` | | Facebook: provenance verified/recorded, DISJOINT at **source** level against all 3 Facebook benchmark manifests (0 shared sources); New York: verified/recorded, DISJOINT at **pair** level, the 1,000-query manifest shows 2 shared sources (legacy rule, now visible) |
+| `python -m pytest -q` in `python/` | 0 | **388 passed, 2 skipped** (v2 result file absent; Monaco extraction skips, no PBF here) |
+| `python -m pytest -q` in `atlas/api/` | 0 | **94 passed, 1 skipped** (the API registry is a shared interface, so the suite was re-run) |
+| `tsc --noEmit`, `eslint` on the two changed web files (node_modules borrowed by a temporary symlink, removed afterwards) | 0, 0 | clean |
+The web unit and Playwright suites were not re-run: the web change is two additive type fields and a display row.
+
+### Remaining
+Model reports still embed no other provenance (D-15). The legacy fallback for reports without a record is a guess, labelled as such.
+The guard's automatic source-level rule applies only to manifests that declare `source_disjoint`; whether to retro-fit the older
+manifests is an owner decision.
+
+### Owner decision needed
+1. Review `git diff 3865889..completion/m5c-d21-provenance`.

@@ -311,8 +311,25 @@ entries true.
   `snap_facebook` model trained on the protocol C manifest is therefore described against the protocol B manifest,
   and the model report does not record which manifest trained it (D-15), so the two cannot be told apart from the
   report (both have seed 917 and 200 queries).
-* **Status:** recorded; **no code changed** (outside the scope approved for M5-P1). Options for the owner: make
-  the guard source-level, and record the training manifest name and SHA-256 in the model report.
+* **Status:** **resolved in M5-D21** on the local branch `completion/m5c-d21-provenance` (based on the D-19 branch,
+  which provides the source-disjoint manifest and `shared_sources`).
+  * *Guard:* `compare_manifests` and `check_split` take `level` (`pair` or `source`) and always report
+    `shared_sources`. With no explicit level, a training manifest that declares `source_disjoint` selection is held
+    to source level; every other manifest keeps the legacy pair-level verdict, so no existing workflow changes
+    behaviour (the existing tests pass unchanged), but its shared sources are now visible (45 for the pair-disjoint
+    Facebook set).
+  * *Report:* `train_from_file(..., training_manifest=...)` records `{name, sha256, selection, seed, query_count}`
+    after checking the manifest against the training set; `run_main_experiments.sh` passes it. Without it the key is
+    `null`; reports from before D-21 lack the key.
+  * *Atlas model page:* `_model_info` uses the recorded manifest, accepts it only if its SHA-256 still matches, and
+    reports `verified`, `hash_mismatch`, `manifest_missing` or `not_recorded` in `training_manifest_provenance`. A
+    mismatch or a missing file gives split status UNKNOWN; nothing is substituted. An older report falls back to the
+    old dataset-named file and is labelled `inferred_from_dataset_filename`. The web page shows the provenance, the
+    rule used and the shared-source count.
+  * *Not done:* the model report still embeds no other provenance (D-15: graph and library versions, model file
+    hash); the derived-dataset manifests (`derived_*_training_queries.yaml`) were not examined, no focused check
+    having shown a dependency.
+
 
 ### D-20. The order-check results file has no producer in the documented workflow
 
