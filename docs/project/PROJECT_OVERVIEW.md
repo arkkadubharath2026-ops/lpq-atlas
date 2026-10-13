@@ -15,16 +15,27 @@ and remaining work, read [PROJECT_STATUS.md](PROJECT_STATUS.md).
 | **[doc]** | taken from a project document; not re-run in this session |
 | **[PR #1]** | from the open draft PR `claude/affectionate-gates-53lchk` (v2 work); the code is on that branch, not on `main` |
 
-Two states of the repository matter, and they are not the same:
+Two states of the research repository matter, and they are not the same:
 
 * **`main` (commit `4e7ad00`)** — the "v1" research state: the original engine, the first
-  measurements, and LPQ Atlas v1. This is also the checkout this document was written from.
+  measurements, and LPQ Atlas v1. This document was first written from this checkout.
 * **PR #1 branch (head `e6dde1c`, 21 commits ahead of `main`)** — the "v2" state: an
   autotuned exact queue (`lpq_optimized`), a reworked LPQ extraction path, a queue-policy
-  trainer, Quick Compare in the UI, local setup scripts, and corrections to several v1
-  claims. It is an open **draft** PR and is **not merged**.
+  trainer, Quick Compare in the UI, local setup scripts, and a results report
+  (`docs/experiments/v2-results.md`) that records the audit's retraction of a v1 claim. It is
+  an open **draft** PR and is **not merged**.
 
-Where the two disagree, this document says so.
+A third, local-only branch, `completion/v2-baseline`, is `e6dde1c` plus this document pair
+and the M2 documentation corrections. It has not been pushed.
+
+Where the states disagree, this document says so.
+
+> **Revision note (M2, 2026-10-13).** The first version of this document said the PR #1
+> documents supersede the v1 34% adaptive-controller claim. **That was wrong**: v2 edits none
+> of the four documents that state it. The claim is **historical and retracted**, and is
+> annotated as such on this branch only. The §10 table also now carries the M1 baseline for
+> the v2 head and the hosted CI results, including the failing run #28. See
+> [PROJECT_STATUS.md](PROJECT_STATUS.md), revision note, for the full list of changes.
 
 ---
 
@@ -428,12 +439,17 @@ A* [doc: `docs/experiments/astar.md`]: removes 54% of comparisons from the class
 and 33% from the LPQ, so the LPQ's relative cost rises to 3.632× under A*. Euclidean only;
 `manhattan` and `haversine` were not run.
 
-**The v1 claim that the adaptive controller cuts comparisons by 34% is withdrawn in v2**
-(§8.2). The v1 document recorded it as the one place the learned machinery beat its own
-baseline; the v2 audit found that the adaptive configuration's comparison count equals the
-plain bucket queue's (116,608,480 vs 116,552,995), so the gain came from retreating to a
-classical scan, not from learning. The v1 `findings.md` and abstract still carry the 34%
-statement; the PR #1 documents supersede them.
+**Historical, retracted: the v1 claim that the adaptive controller cuts comparisons by 34%.**
+v1 recorded it as the one place the learned machinery beat its own baseline (116,608,480 vs
+177,580,603 comparisons at identical pop counts). The v2 audit reports that the adaptive
+configuration's count is within 0.05% of the plain classical bucket queue's (116,552,995),
+so the reduction came from retreating to a classical scan, not from learning [PR #1
+`v2-results.md` §3; the two counts are **[doc]**, not re-run here]. **v2 does not validate the
+claim; it contradicts the attribution.** The original statement remains in
+`experiments/paper/findings.md`, `docs/atlas/ABSTRACT.md`,
+`docs/experiments/adaptive-controller.md` and `docs/experiments/README.md` on `main`, on the
+PR #1 branch and on the docs branch; v2 does not edit those files. On `completion/v2-baseline`
+each now carries a dated retraction notice with the original text left in place.
 
 ### 8.2 v2 results on PR #1 [PR #1 `docs/experiments/v2-results.md`]
 
@@ -464,8 +480,10 @@ Findings from the v2 work:
 * **Learned queue-policy:** a ridge policy over weight statistics was evaluated with nested
   leave-one-topology-out. It **never beat radix** (0 of 17 held-out graphs). It is not the
   default. This is a negative result, kept.
-* **Retractions:** the 34% adaptive claim (§8.1) and the claim that online learning runs
-  (§5.5) are both withdrawn.
+* **Retractions (recorded in `v2-results.md` §3 and the PR description only):** the 34%
+  adaptive claim (§8.1) is retracted, and the v1 wording that put the online learner inside
+  the measured system is not supported: `OnlineLearner::maybe_update` and `flush` have no call
+  site outside tests (§5.5; confirmed by `git grep` here).
 
 PR #1's own limits section: one graph with a verified gain; A\* not improved; Windows scripts
 verified only under PowerShell 7 on Linux; the old Monaco OSM download fails in the sandbox.
@@ -561,9 +579,12 @@ PR #1 adds `scripts/setup/{doctor,setup,run,test}` (bash and PowerShell) and
 | C++ tests | **verified here**: `main` 847/847; PR #1 914/914, 0 warnings (PR #1 checked in a separate worktree) |
 | Python tests | **verified here**: `main` 222 passed, 8 skipped; PR #1 300 passed, 12 skipped (the PR text claims 311 passed) |
 | API contract tests | **verified here**: `main` 26/26; PR #1 87 passed, 1 skipped (the PR text claims 77) |
-| Web lint, tests, build | **verified here** on `main`: lint 0 errors (7 warnings), unit tests 5/5, build succeeds. PR #1's web job is green in hosted CI (not re-run locally) |
-| Hosted CI on `main` | **no run seen** in the five most recent workflow runs, which were all on PR #1's branch |
-| Hosted CI on PR #1 | **all 5 jobs green** on the latest commit `e6dde1c` (run 38148343456, 2026-10-11): `engine`, `web`, `fuzz`, `windows-scripts`, `e2e` [GitHub Actions, read via API] |
+| Web lint, tests, build | **verified here**: `main` lint 0 errors (7 warnings), unit tests 5/5, build succeeds; v2 head (M1) `npm ci`, lint (0 errors, 7 warnings), typecheck, unit tests 41/41 and build all exit 0 |
+| End-to-end (Playwright) | **verified here** on the v2 head, `demo_road` graph: 8 passed, 2 skipped (unreachable-destination flow and research/model pages skip for missing data). **Real OSM is untested** |
+| v2 head, other suites (M1) | **verified here**: C++ 914/914, Python 300 passed + 12 skipped (all for missing data), API 87 passed + 1 skipped. Single executions. |
+| Hosted CI on `main` | no run on the `main` branch itself was among the 8 most recent runs inspected; **untested**. The workflow triggers on every push |
+| Hosted CI on PR #1 | [run #27](https://github.com/arkkadubharath2026-ops/lpq-atlas/actions/runs/38148343456), `e6dde1c`, 2026-10-11: **all 5 jobs green** (`engine`, `web`, `fuzz`, `windows-scripts`, `e2e`). Its `e2e` job runs on the bundled `demo_road`, not on real OSM [GitHub Actions, read via API] |
+| Hosted CI on the docs commit | [run #28](https://github.com/arkkadubharath2026-ops/lpq-atlas/actions/runs/38364982184), `b2049c2`, 2026-10-13: `engine`, `web`, `fuzz` succeeded; **`e2e` failed** at the OSM Monaco preparation step with `HTTP 404 Not Found` [GitHub Actions, job log read via API] |
 | Fuzz | 4 libFuzzer targets; bounded CI job green; long campaigns not run |
 | Sanitisers | ASan/UBSan debug preset defined; [doc] clean ASan/UBSan/LSan runs on Clang recorded earlier |
 | Hardware counters | **unavailable** on every host used; documented, never estimated |
@@ -605,8 +626,13 @@ PR #1 adds `scripts/setup/{doctor,setup,run,test}` (bash and PowerShell) and
 9. **Dynamic features** (queue and search-state features) are not in the optimised path.
 10. **Comparison count is not runtime.** The project measured a queue doing 12.9% fewer
     comparisons than a binary heap while running about 4.6× slower.
-11. **Hosted CI is on an unmerged draft PR**, not on `main`.
-12. **OSM acquisition is currently broken** for the pinned snapshot (§10).
+11. **CI is red on the v1 workflow and green on the v2 workflow for different reasons.** The
+    v1 workflow (on `main` and the docs branch) fails at the OSM download; the v2 workflow
+    avoids the download by using `demo_road`, so its green result says nothing about real OSM.
+    No hosted run on the `main` branch itself was inspected.
+12. **OSM acquisition is currently broken** for the pinned Monaco snapshot (CI `HTTP 404`
+    on 2026-10-11 and again on 2026-10-13). Liechtenstein uses the same snapshot date and is
+    untested.
 13. **Turn restrictions are not modelled** in OSM graphs; weights are distances, not travel
     times.
 

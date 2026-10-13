@@ -1,5 +1,28 @@
 # The adaptive controller, measured end to end
 
+> **RETRACTION NOTICE: historical document (added 2026-10-13, M2 documentation audit; the
+> text below is unchanged).**
+>
+> * **The headline claim is retracted.** This document reports a 34% reduction in comparisons
+>   and calls it "the first measurement in this project where the learned machinery improves
+>   on its own baseline". The v2 audit reports that the classical bucket queue alone performs
+>   **116,552,995** comparisons on the same workload, against **116,608,480** for the adaptive
+>   configuration, a difference of 0.05% ([v2-results.md](v2-results.md) §3). The reduction is
+>   therefore attributed to the controller retreating to a classical scan, **not to learning**.
+>   Those two figures are documented in v2-results.md; they were not re-run in this audit.
+>   **v2 does not validate this claim. It contradicts the attribution.**
+> * **The online learner never updated a model.** Where this document says the controller and
+>   online learner "now" run inside a real search, only the controller's decisions and the
+>   learner's *event recording* do. `OnlineLearner::maybe_update` and `flush` have no call site
+>   outside tests (checked with `git grep` on 2026-10-13: the only non-test calls are
+>   `learner_->record` in `controller_observer.hpp` and `learner.reset()` in the apps). No model
+>   weight changes in any benchmark or API run, so the statement that the measurement "covers
+>   controller and learner together" does not mean any learning took place.
+> * The wall-clock caveat, the single-graph caveat and the unattributed-lever caveat below
+>   remain correct as written.
+>
+> See `docs/atlas/DISCREPANCIES.md` entries D-02 and D-11.
+
 ESD.md §40 requires that "online updates work". Until this measurement the
 controller and the online learner had never run inside a real search: both were
 unit-tested against synthetic event streams, and neither had a caller outside

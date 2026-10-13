@@ -8,6 +8,33 @@ does not run, the OSM acquisition step is broken, and several required experimen
 ablations do not exist yet. Section 6 lists what is left, in order.
 
 Companion document: [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) (what the project is).
+Progress log: [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md).
+
+> **Revision note (M2, 2026-10-13, branch `completion/v2-baseline`).** This document was first
+> written on 2026-10-13 from the `main` checkout. The audit in milestones M0 and M1 found
+> errors in it. They are corrected in place below, and listed here so the change is visible:
+>
+> 1. **The 34% adaptive-controller claim.** The first version said PR #1's documents supersede
+>    it and that it would be "corrected on merge". **That was wrong.** PR #1 does not edit
+>    `findings.md`, `ABSTRACT.md`, `adaptive-controller.md` or `docs/experiments/README.md`;
+>    all four still state the claim on `main`, on the PR #1 branch and on the docs branch. The
+>    retraction exists only in `docs/experiments/v2-results.md` §3 and the PR #1 description.
+>    On **this branch only**, M2 annotates those four files with a dated retraction notice and
+>    leaves the original text in place. The claim is **historical and retracted**. Nothing in v2
+>    validated it. The v2 audit reports the opposite (see M10).
+> 2. **Dependency conflict removed as a repository defect.** The first version listed a
+>    `starlette` / `sse-starlette` pin conflict in `atlas/api/requirements.txt`. No file in the
+>    repository mentions `sse-starlette`. In the audit sandbox it is required by the `mcp`
+>    package, which is not a project dependency. See M16.
+> 3. **CI facts updated.** Hosted CI has run (see M19). Run #28 on the docs commit failed at the
+>    OSM step, and v2's green run uses the bundled `demo_road`, not real OSM.
+> 4. **v2 test baseline added.** The M1 baseline ran the v2 head in a clean worktree. Counts
+>    are in §0.1 and §7.
+> 5. **Script modes made precise.** 20 files remain at mode 100644 on v2: 8 `.sh`, 7 `.ps1`,
+>    5 `.py`. Only the `.sh` files that the docs run directly need the executable bit (M16).
+> 6. **Percentages were not re-scored.** The criteria and evidence behind the milestone scores
+>    did not change, so no score changed. The corrections above change wording and facts, not
+>    the matrices.
 
 ---
 
@@ -22,25 +49,46 @@ Companion document: [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) (what the project
 * **Overall** is the equal-weight average of the 22 milestones (§2), which comes to 71%. The
   research-criteria figure (70%) and the platform figure (93%) are shown separately because
   they answer different questions. The research figure is the one that governs "finished".
-* **Evidence labels.** **[verified here]** means I ran it in this session. **[CI]** means a
+* **Evidence labels.** **[verified here]** means I ran it in the audit sandbox on 2026-10-13
+  (the first-session runs on `main` and the M1 baseline on the v2 head). **[CI]** means a
   hosted GitHub Actions job I read through the API. **[doc]** means it is stated in a project
   document and was not re-run. **[PR #1]** means it is on the open draft PR, not on `main`.
+  **[untested]** means the check was skipped or not run, with the reason given.
 
 ### 0.1 The two states of the repository
 
 | state | what it is | verified here |
 |---|---|---|
 | `main` @ `4e7ad00` (= local checkout `claude/sleepy-heisenberg-fhr3me`) | v1: original engine, first measurements, LPQ Atlas v1 | build 147 targets, 0 warnings; ctest 847/847; pytest 222 passed, 8 skipped; API 26/26; web lint 0 errors / 7 warnings, tests 5/5, build OK |
-| PR #1 branch `claude/affectionate-gates-53lchk` @ `e6dde1c` (21 commits ahead, **open draft, not merged**) | v2: autotuned exact queue, direct extraction, policy trainer, Quick Compare, local setup, corrections | build 155 targets, 0 warnings; ctest 914/914; pytest 300 passed, 12 skipped; API 87 passed, 1 skipped; hosted CI 5/5 jobs green [CI] |
+| PR #1 branch `claude/affectionate-gates-53lchk` @ `e6dde1c` (21 commits ahead, **open draft, not merged**) | v2: autotuned exact queue, direct extraction, policy trainer, Quick Compare, local setup, and `v2-results.md` (which records the 34% retraction) | **M1 baseline, clean worktree:** configure and build exit 0, 155 targets, 0 warnings; ctest 914/914 (unit 886, differential 24, fuzz-smoke 4); pytest 300 passed, 12 skipped; API 87 passed, 1 skipped; web `npm ci`, lint (0 errors, 7 warnings), typecheck, unit tests 41/41, build all exit 0; Playwright e2e 8 passed, 2 skipped. Hosted CI run #27 on this commit: 5/5 jobs green [CI] |
+| `completion/v2-baseline` (local only, no upstream) | `e6dde1c` plus the docs commit (cherry-pick of `b2049c2`) plus the M2 documentation corrections | documentation only; no code, dependency, workflow or benchmark change relative to `e6dde1c` |
 
-PR #1's own text claims Python 311 passed and API 77 passed. My run found 300 passed / 12
-skipped and 87 passed / 1 skipped. The test *pass/fail* result agrees; the reported counts do
-not, and the PR text should be corrected.
+**What is and is not verified for v2.**
+* The counts above were produced by the M1 run on `e6dde1c`. They are single executions, so
+  flakiness is not ruled out.
+* The 12 Python skips are all missing-data skips: `snap_facebook` not prepared (7 tests in
+  `test_training_dataset.py`), the Monaco snapshot not acquired (`test_osm.py`), the
+  `dimacs_ny` graph or profile missing (`test_policy_core.py`, `test_policy_export.py`), and a
+  v2 result file not present. So the **training and leakage pipeline, OSM extraction, and
+  policy export are not exercised against real data** by this baseline. **[untested]**
+* The 2 skipped Playwright tests are the unreachable-destination flow (needs `snap_roadnet_pa`)
+  and the research/model pages (need stored NY results and a NY model). The unreachable-route
+  flow (specdoc §43 item 10) is therefore **[untested]** at the UI level in this baseline.
+* The 1 skipped API test is skipped by design (the failure path cannot be provoked once
+  `lpq_optimized` exists).
+* Not run in M1: the libFuzzer job, the Debug ASan/UBSan preset, `ctest --preset release-fast`,
+  any Windows build, any benchmark, the reproduction scripts. **[untested]**
 
-**Where the two states disagree, this document follows PR #1**, because it corrects v1 claims
-after an audit. The v1 documents on `main` (`experiments/paper/findings.md`,
-`docs/atlas/ABSTRACT.md`, `docs/experiments/adaptive-controller.md`) still carry the withdrawn
-34% adaptive claim and the statement that online learning is part of the measured system.
+PR #1's own text claims Python **311** passed and API **77** passed. The M1 run found Python
+**300 passed + 12 skipped** and API **87 passed + 1 skipped**. The pass/fail result agrees, the
+reported counts do not, and the PR text should be corrected. (Not edited in M2: the PR is out
+of scope. A proposed replacement is in `IMPLEMENTATION_PROGRESS.md`.) The PR's C++ count (914)
+and web unit count (41) match.
+
+**Where the two states disagree, this document follows the code and CI evidence, not PR #1's
+prose.** In particular, v2 does **not** correct the v1 documents that state the 34% adaptive
+claim (see the revision note and M10). The v2 audit's retraction lives in `v2-results.md` §3
+and the PR description only.
 
 ---
 
@@ -51,9 +99,9 @@ after an audit. The v1 documents on `main` (`experiments/paper/findings.md`,
 | Does the engine build and pass its tests? | **Yes** | [verified here] both states; [CI] PR #1 |
 | Is LPQ exact mode correct? | **Yes** — every benchmark and API result is checked against the reference Dijkstra and aborts on mismatch | [verified here] tests; [doc] benchmark runner |
 | Does the learned component make the queue faster end to end? | **Not on the measured workloads**, except one NY Dijkstra result where the speedup is from queue engineering and a calibrated queue choice, not from learning | [doc] v1 findings; [PR #1] v2-results §4–§8 |
-| Does online learning run? | **No.** `OnlineLearner::maybe_update` and `flush` have no call site outside tests | [PR #1] v2-results §3; consistent with v1 code |
-| Is the OSM pipeline usable from the pinned sources? | **No.** The pinned Monaco snapshot returned HTTP 404 in CI on 2026-10-11 | [PR #1] `configs/datasets/osm_monaco.yaml` comment |
-| Is the Atlas platform usable? | **Yes**, with the OSM caveat and the lint warnings | [verified here] API and web; [CI] PR #1 e2e |
+| Does online learning run? | **No.** `OnlineLearner::maybe_update` and `flush` have no call site outside tests | [verified here] `git grep` on both the `main`-derived and v2 trees: defined at `online_learner.hpp:246` and `:259`, referenced only by `test_online_learner.cpp`; [PR #1] `v2-results.md` §3 agrees |
+| Is the OSM pipeline usable from the pinned sources? | **No.** The pinned Monaco snapshot returned HTTP 404 in CI on 2026-10-11 and again on 2026-10-13. Liechtenstein uses the same snapshot date and is **[untested]** | [PR #1] `configs/datasets/osm_monaco.yaml` comment; [CI] run #28, `e2e` step 7, `HTTP 404 Not Found` |
+| Is the Atlas platform usable? | **Yes** on the bundled `demo_road` graph, with the OSM caveat and 7 lint warnings. Real-OSM operation is **[untested]** | [verified here] M1 e2e 8 passed, 2 skipped; [CI] run #27 |
 
 ---
 
@@ -67,9 +115,11 @@ Overall average: **71%** over 22 milestones.
 * **Done:** a full inventory was made from the source (313 tracked files on `main`); the
   build and test suites were run from clean configure in both states; the discrepancy register
   exists (`docs/atlas/DISCREPANCIES.md`); result and trace schemas are versioned.
-* **Remaining:** the discrepancy register is stale. D-06 says "not yet run on GitHub", but five
-  hosted runs exist on PR #1. The register does not record the v2 corrections (online learning,
-  the 34% attribution). Update it (see §5).
+* **Remaining:** the discrepancy register was stale: D-06 said "not yet run on GitHub", but
+  hosted runs exist, and the register did not record the v2 audit findings (online learning,
+  the 34% attribution). **Addressed in M2 on this branch only** (`DISCREPANCIES.md` entries
+  D-01, D-02, D-06 updated and D-11 to D-16 added). The same files on `main`, the docs branch
+  and the PR #1 branch are unchanged and still stale.
 
 ### M1 — Build system and clean build — **95%**
 * **Criteria:** CMake presets; clean build on Linux and Windows; C++20 compiler selection
@@ -174,8 +224,15 @@ Overall average: **71%** over 22 milestones.
 * **Criteria:** controller selects modes from measured gain; hysteresis and dwell; fallback
   works; controller overhead measured; controller's contribution separated from other levers.
 * **Done:** [verified here] the controller has upper and lower thresholds and a dwell time, and
-  the fallback is exercised. [PR #1] the v1 "34% fewer comparisons" was shown to equal the plain
-  bucket queue (116,552,995 vs 116,608,480), so it is not a controller effect.
+  the fallback is exercised.
+* **Retracted claim (historical).** v1 reported that the adaptive configuration performed
+  "34% fewer comparisons at identical pop counts" (116,608,480 vs 177,580,603) and called it the
+  one place the learned machinery beat its own baseline. **That claim is retracted.** The v2
+  audit reports that the same comparison count (116,608,480) is within 0.05% of the classical
+  bucket queue's 116,552,995, which means the reduction came from retreating to a classical scan
+  and not from learning [PR #1] `docs/experiments/v2-results.md` §3. The numbers 116,552,995
+  and 116,608,480 are **[doc]**: I did not re-run this comparison. v2 does not validate the
+  34% claim. It contradicts the attribution.
 * **Remaining:** the controller's three levers are not separated. It adapts within a query, not
   across queries. The adaptive configuration is not shown to beat the classical bucket queue,
   so the controller's benefit is currently **zero measured**. It is not known whether
@@ -187,8 +244,10 @@ Overall average: **71%** over 22 milestones.
   real run.
 * **Done:** [verified here] `OnlineLearner`, `PredictionEvent` and EWMA are implemented and
   unit-tested in isolation. The update path is bounded (`max_weight_delta`, learning rate, L2).
-* **Gap:** `maybe_update` and `flush` have no call site outside tests [PR #1 audit]. No benchmark
-  or API run changes model weights. Acceptance criterion PRD §25.5 is **not met**.
+* **Gap:** `maybe_update` and `flush` have no call site outside tests [verified here, `git grep`
+  on both trees; the PR #1 audit agrees]. By that source evidence no benchmark or API run can
+  change model weights; this was not additionally confirmed by logging weights during a run.
+  Acceptance criterion PRD §25.5 is **not met**.
 * **Remaining:** wire the learner into the search at a bounded interval; add a test that weights
   change during a real query; measure update latency; measure the effect (which may be negative).
 
@@ -264,16 +323,31 @@ Overall average: **71%** over 22 milestones.
   targets and passed 831/831 tests (this was before the v2 changes). Seeds are explicit (42, 20260923).
   Python requirements are pinned.
 * **Gaps:**
-  * `scripts/build/refresh_graph.sh` and the other shell scripts are tracked as **mode 100644**,
-    not executable. `bash scripts/build/refresh_graph.sh` works, but the documented
-    `scripts/build/refresh_graph.sh` fails with *Permission denied*. [verified here]
-  * `pip install -r atlas/api/requirements.txt` on this host reported a dependency conflict:
-    `sse-starlette` needs `starlette>=0.49.1`, but `fastapi==0.118.0` resolved `starlette` 0.48.0.
-    The API tests still pass. [verified here]
+  * **Executable bits.** On the v2 head 20 files under `scripts/` are mode 100644 [verified
+    here, `git ls-tree`]: 8 `.sh`, 7 `.ps1`, 5 `.py`. Eleven other scripts are 100755.
+    The `.ps1` and `.py` files are run through their interpreter and need no bit. Of the 8 `.sh`
+    files, 7 are documented as run directly: `scripts/build/linux_checks.sh`,
+    `scripts/build/refresh_graph.sh`, `scripts/profile/check_counters.sh`,
+    `scripts/reproduce/build_all.sh`, `generate_figures.sh`, `generate_tables.sh` and
+    `run_main_experiments.sh`. The eighth, `scripts/reproduce/common.sh`, is only sourced. On the
+    `main` checkout, `scripts/build/refresh_graph.sh` failed with *Permission denied* [verified
+    here, first session]. The other six were not individually executed.
+  * **No repository dependency conflict was found.** The first version of this document listed
+    a `starlette` / `sse-starlette` conflict as a repository defect. That was an error.
+    `sse-starlette` is not referenced anywhere in the repository (`git grep` on both refs).
+    In the audit sandbox `pip show sse-starlette` reports it is required by the `mcp` package,
+    which is not a project dependency; installing the project's `fastapi==0.118.0` (which
+    resolves `starlette` 0.48.0) next to it produced pip's warning. A dry-run of the documented
+    requirements (`python/requirements-dev.txt`, `atlas/api/requirements.txt`) on the v2 head
+    would change nothing [verified here], and the CI `engine` job installs them and passes
+    [CI]. Not reproduced in a clean virtual environment, which is a task for M10, so the
+    statement is **inferred** until then.
   * Raw results and processed graphs are not in the repository.
   * The OSM step (M12) cannot run from the pinned URL.
-* **Remaining:** make the scripts executable in git, resolve the pip conflict, repair the OSM
-  step, and run the full reproduction once from a clean clone with datasets acquired.
+* **Remaining:** make the 7 directly-run shell scripts executable in git (this is a source
+  change, deferred to M4), repair the OSM step, confirm in a clean virtual environment that the
+  requirements install without a conflict (M10), and run the full reproduction once from a clean
+  clone with datasets acquired.
 
 ### M17 — Atlas backend (API) — **92%**
 * **Criteria:** registry for datasets and models; source/target resolution; real engine jobs;
@@ -307,34 +381,55 @@ Overall average: **71%** over 22 milestones.
 ### M19 — Hardening: CI, fuzzing, security, cross-platform — **80%**
 * **Criteria:** hosted CI covering build, tests, Python, API, web and contract tests; fuzzing;
   cross-platform builds; security; observability.
-* **Done:** [CI] PR #1, run 38148343456 (commit `e6dde1c`): `engine`, `web`, `fuzz`,
-  `windows-scripts` and `e2e` all succeeded. [doc] libFuzzer targets, and sanitiser runs on
-  Clang recorded earlier.
+* **Done (two hosted runs, read through the GitHub API):**
+  * [CI] [run #27](https://github.com/arkkadubharath2026-ops/lpq-atlas/actions/runs/38148343456),
+    PR #1 head `e6dde1c`, 2026-10-11: `engine`, `web`, `fuzz`, `windows-scripts` and `e2e` all
+    succeeded. The `e2e` job passes because the v2 workflow prepares the **bundled `demo_road`**
+    graph (`ci.yml` line 114), not a real OSM region.
+  * [CI] [run #28](https://github.com/arkkadubharath2026-ops/lpq-atlas/actions/runs/38364982184),
+    the docs commit `b2049c2` on `claude/sleepy-heisenberg-fhr3me`, 2026-10-13, using `main`'s
+    workflow: `engine` (which runs the C++, research-tooling and API contract tests), `web` and
+    `fuzz` succeeded; **`e2e` failed** at step 7 "Prepare the OSM Monaco dataset (pinned
+    snapshot, checksum-verified)" with `monaco-260925.osm.pbf: HTTP 404 Not Found`. The later
+    `e2e` steps were skipped. This is an input-availability failure, not a test failure.
+  * [doc] libFuzzer targets, and sanitiser runs on Clang recorded earlier.
 * **Gaps:**
-  * The CI workflow is on an **unmerged draft PR**. Nothing on `main` has run it.
-  * The Windows engine build is not in CI (M1).
+  * No hosted run on the `main` branch itself was among the 8 most recent runs inspected (the
+    others were on the PR #1 and docs branches), so CI status of `main` is **[untested]**. The
+    workflow file exists on `main` and triggers on every push.
+  * `main`'s workflow always fails at the OSM step today, so a push to `main` would show red
+    until M3. The PR #1 workflow avoids this only by using `demo_road`.
+  * The Windows engine build is not in CI. v2's `windows-scripts` job parses PowerShell and
+    runs the read-only doctor, and is marked `continue-on-error: true`. Its history includes
+    several failed attempts before the final green run.
   * The fuzz job is bounded (about 4 minutes); long fuzzing is not run.
-  * The `windows-scripts` job was marked `continue-on-error` during setup work, and its
-    history shows several failed attempts. Its current green result is from the final commit.
-* **Remaining:** merge the PR so CI runs on `main`; add a Windows engine build job; lengthen
-  fuzzing on a schedule.
+* **Remaining:** repair the OSM step (M3) or otherwise make `e2e` independent of the dead
+  URL, merge the PR so CI runs on `main`, add a Windows engine build job, and lengthen fuzzing
+  on a schedule.
 
 ### M20 — Research documentation and abstract alignment — **75%**
 * **Criteria:** abstract revised to describe measured work; negative results visible; no
   cache-miss claims; no "expected outcome" language; no claim that LPQ universally outperforms;
   literature review and novelty statement current.
 * **Done:** [doc] the revised abstract states the mixed results; the discrepancy register is
-  thorough; findings are visible, including the retraction of the 34% claim on PR #1. PR #1 adds
-  `docs/research/literature-and-novelty.md`, which positions the work against Benomar and
-  Coester (NeurIPS 2024).
+  thorough; the 34% retraction is recorded in PR #1's `v2-results.md` §3 and the PR description.
+  PR #1 adds `docs/research/literature-and-novelty.md`, which positions the work against
+  Benomar and Coester (NeurIPS 2024).
 * **Gaps:**
-  * `main` still carries superseded claims: the 34% adaptive result in `findings.md`, the abstract
-    and `adaptive-controller.md`, and the statement that online learning is in the measured system.
-  * D-06 (CI "not yet run") is stale.
+  * The 34% adaptive claim is **still stated, un-retracted, in four documents** on `main`, on
+    the PR #1 branch and on the docs branch: `experiments/paper/findings.md`,
+    `docs/atlas/ABSTRACT.md`, `docs/experiments/adaptive-controller.md` and
+    `docs/experiments/README.md` [verified here, `git grep`]. Merging PR #1 would **not** fix
+    this. **M2 annotates all four on this branch only**, leaving the original text.
+  * The `docs/atlas/README.md` and `ABSTRACT.md` wording about the adaptive controller and
+    "online" learning describes components that are implemented but, per the v2 audit and
+    `git grep` on both branches, not wired into any run (`maybe_update`/`flush`). M2 adds
+    a status note in `DISCREPANCIES.md` (D-02) and does not rewrite those sentences.
+  * D-06 (CI "not yet run") was stale; updated on this branch (M2).
   * A **fresh** literature review (PRD §27) has not been done. The v2 note is a first pass, and its
     own text flags some statements as unverified.
-* **Remaining:** correct `main`'s superseded documents (or merge PR #1, which does so); update
-  D-06; complete the literature review before any publication claim.
+* **Remaining:** carry the M2 annotations into any branch that is eventually merged; complete
+  the literature review before any publication claim.
 
 ### M21 — Integration and release — **0%**
 * **Criteria:** the v2 work is reviewed and merged into the default branch; the release builds
@@ -420,7 +515,7 @@ Scores: 1 = met, 0.5 = partly met (gap named), 0 = not met.
 | §52 Backend | 10 | 9.5 | 95% | injection-free claim not independently audited |
 | §53 Frontend | 14 | 13.0 | 93% | OSM map depends on broken acquisition; loading states unverified |
 | §54 OSM | 12 | 11.0 | 92% | **reproducible PBF acquisition: 0** (pinned URL 404) |
-| §55 Research integrity | 11 | 10.0 | 91% | `main` documents carry superseded claims; charts not traceable to stored raw results here |
+| §55 Research integrity | 11 | 10.0 | 91% | the retracted 34% claim is still stated in four documents on every branch except this one; charts not traceable to stored raw results here |
 | | **57** | **53.0** | **93%** | |
 
 ---
@@ -436,7 +531,8 @@ reported*, whatever the result. The project may finish with a negative answer on
    extraction time).
 2. **Does online learning help?** It is not running. Once it is, the result may be neutral or
    negative. Both are acceptable outcomes if reported.
-3. **Does the adaptive controller help?** Currently no measured benefit. The 34% claim is withdrawn.
+3. **Does the adaptive controller help?** Currently no measured benefit. The 34% claim is
+   retracted (historical; see M10 and D-11).
 4. **Does the learned model generalise?** Held-out AUC is 0.79 on Facebook and 0.53 on NY. The
    leave-one-topology-out policy never beat radix on any held-out graph.
 5. **Cache and branch behaviour.** Not measurable on the development host.
@@ -448,17 +544,21 @@ online-learning and ablation side.
 
 ---
 
-## 5. Document corrections needed (verified discrepancies)
+## 5. Document corrections (verified discrepancies)
 
-| # | where | says | verified state | action |
+Status column: **done on this branch** means M2 changed the file on `completion/v2-baseline`;
+the same file is unchanged on `main`, the docs branch and the PR #1 branch.
+
+| # | where | says | verified state | status |
 |---|---|---|---|---|
-| 1 | `docs/atlas/DISCREPANCIES.md` D-06 | CI "not yet run on GitHub" | five hosted runs; latest green on PR #1 | update, after merge |
-| 2 | `experiments/paper/findings.md`, `docs/atlas/ABSTRACT.md`, `docs/experiments/adaptive-controller.md` on `main` | the adaptive controller removes 34% of comparisons; learned machinery improves on its baseline | the 34% equals the plain bucket queue | superseded by PR #1; correct on merge |
-| 3 | `docs/atlas/DISCREPANCIES.md` D-02, `docs/atlas/README.md` | "online ML" wording is resolved in the UI | online learning is not active in any run | state explicitly as not active |
-| 4 | `docs/atlas/DISCREPANCIES.md` D-01 | OSM "Resolved" | pinned Monaco snapshot 404 in CI | reopen; re-pin or mirror |
-| 5 | PR #1 description | Python 311 passed; API 77 passed | observed 300 passed / 12 skipped; 87 passed / 1 skipped | correct the text |
-| 6 | `scripts/build/*.sh` (git mode) | documented as runnable | tracked as 100644 | `chmod +x` in git |
-| 7 | `atlas/api/requirements.txt` | pins the web layer | pip reports a `starlette` conflict with `sse-starlette` | add a compatible pin |
+| 1 | `docs/atlas/DISCREPANCIES.md` D-06 | CI "not yet run on GitHub" | hosted runs exist: #27 green on PR #1, #28 red at the OSM step | done on this branch |
+| 2 | `experiments/paper/findings.md`, `docs/atlas/ABSTRACT.md`, `docs/experiments/adaptive-controller.md`, `docs/experiments/README.md` | the adaptive controller removes 34% of comparisons; learned machinery improves on its baseline | retracted: the figure equals the plain bucket queue [doc: `v2-results.md` §3]. **v2 does not edit these four files** | annotated on this branch (retraction notice, original text kept); **open** on every other branch |
+| 3 | `docs/atlas/DISCREPANCIES.md` D-02 | "online ML" wording is resolved in the UI | `OnlineLearner::maybe_update` and `flush` have no call site outside tests on `main` and on the PR #1 branch [verified here, `git grep`] | done on this branch |
+| 4 | `docs/atlas/DISCREPANCIES.md` D-01 | OSM "Resolved" | pinned Monaco snapshot returns HTTP 404 in CI (2026-10-11 and run #28, 2026-10-13); Liechtenstein untested | reopened on this branch |
+| 5 | PR #1 description | Python 311 passed; API 77 passed | observed 300 passed + 12 skipped; 87 passed + 1 skipped | recorded in `IMPLEMENTATION_PROGRESS.md` with proposed text; **PR not edited** (out of scope for M2) |
+| 6 | git file modes of 7 `.sh` files | documented as run directly | tracked as 100644 on `main` and on v2 | recorded as D-13; **fix deferred to M4** (source change) |
+| 7 | this document, first version: `atlas/api/requirements.txt` | pip conflict between `starlette` and `sse-starlette` | not a repository defect: `sse-starlette` is absent from the repo; the sandbox's `mcp` package requires it | corrected here; recorded as D-16 |
+| 8 | this document, first version: "PR #1 documents supersede the 34% claim; corrected on merge" | | false: v2 edits none of the four documents | corrected here |
 
 ---
 
@@ -491,15 +591,19 @@ Each item states the acceptance criterion it closes and how to know it is done.
 
 7. **Merge PR #1** after review, then undraft it. Re-run the verification from a clean clone of
    `main`. *Closes:* PRD §25.8 (partly), M21.
-8. **Correct the superseded `main` documents** (item 2 in §5) and update D-06 and D-02.
+8. **Carry the M2 documentation corrections into the branch that is eventually merged**
+   (items 1 to 4 and 8 in §5). *Status:* done on `completion/v2-baseline`; merging PR #1 alone
+   would not do it.
 9. **Embed model metadata in the artifact**: checksum, seed, training-query identifier, feature
    schema, hyperparameters, metrics (specdoc §30). *Closes:* §51 and §30 gaps.
 10. **Decide the MLP and tree models**: evaluate them on the task, or record that they are dropped
     under the simplest-model rule (PRD §10). *Closes:* PRD §21 item 9.
 11. **Generate and inspect the figures and tables** from a reproduction run. Check each against its
     raw source. *Closes:* PRD §25.13, ESD §40 #9.
-12. **Make the scripts executable** in git (`git update-index --chmod=+x`), and resolve the pip
-    `starlette` conflict. *Closes:* M16.
+12. **Make the 7 directly-run `.sh` scripts executable** in git (`git update-index
+    --chmod=+x`), and confirm in a clean virtual environment that the documented requirements
+    install without a conflict (the earlier "pip conflict" is not a repository defect; see
+    M16 and D-16). *Closes:* M16.
 13. **Fresh literature review** before any publication claim. *Closes:* PRD §25.14, README §19 #18.
 
 ### Priority 3 — hardening and platform
@@ -527,14 +631,26 @@ Each item states the acceptance criterion it closes and how to know it is done.
 | API contract tests (`main`) | `python -m pytest -q` in `atlas/api/` | 26 passed |
 | API contract tests (PR #1) | same, in the worktree | 87 passed, 1 skipped |
 | Web on `main` | `npm ci`, `npm run lint`, `npm test`, `npm run build` | lint 0 errors / 7 warnings; tests 5/5; build exit 0 |
-| Hosted CI (PR #1, `e6dde1c`) | GitHub Actions API | run 38148343456: `engine`, `web`, `fuzz`, `windows-scripts`, `e2e` all succeeded |
-| PR #1 state | GitHub pull request API | open, draft, base `main`, mergeable state clean |
+| Web on the v2 head (M1) | `npm ci`, `npm run lint`, `typecheck`, `npm test`, `npm run build` in a clean worktree | all exit 0; lint 0 errors / 7 warnings; unit tests 41/41; `npm ci` reports 11 audit vulnerabilities (1 moderate, 8 high, 2 critical), not acted on |
+| End-to-end on the v2 head (M1) | `scripts/demo/prepare_demo.py`, API + `next start`, `npx playwright test` (preinstalled Chromium via `ATLAS_CHROMIUM_PATH`) | exit 0; 8 passed, 2 skipped (missing `snap_roadnet_pa`; missing NY results/model) |
+| Hosted CI, PR #1 `e6dde1c` | GitHub Actions API | [run #27](https://github.com/arkkadubharath2026-ops/lpq-atlas/actions/runs/38148343456): `engine`, `web`, `fuzz`, `windows-scripts`, `e2e` all succeeded (`e2e` on `demo_road`) |
+| Hosted CI, docs commit `b2049c2` | GitHub Actions API, job log tail | [run #28](https://github.com/arkkadubharath2026-ops/lpq-atlas/actions/runs/38364982184): `engine`, `web`, `fuzz` succeeded; `e2e` failed at step 7, `monaco-260925.osm.pbf: HTTP 404 Not Found` |
+| PR #1 state | GitHub pull request API | open, draft, base `main`, head `e6dde1c`, mergeable state clean (re-read 2026-10-13) |
+| Branch ancestry | `git merge-base`, `git diff --name-only` | docs commit and v2 share merge-base `4e7ad00` and change disjoint files; cherry-pick of `b2049c2` applied cleanly |
+| Online learner call sites | `git grep` for `maybe_update` / `flush` on both branches | defined at `online_learner.hpp:246` and `:259`; referenced only by `cpp/tests/adaptation/test_online_learner.cpp` |
+| `confidence` field | `git grep` over `cpp/include`, `cpp/apps` on v2 | declared (`candidate_manager.hpp:108`) and copied into `PredictionEvent`; produced by predictors; not read to gate extraction in `lpq/`, `verification/`, `adaptation/` or the apps |
+| `sse-starlette` | `git grep` on both refs; `pip show sse-starlette` | absent from the repository; required by `mcp` in the audit sandbox |
+| Script modes | `git ls-tree -r HEAD -- scripts` | 20 at 100644 (8 `.sh`, 7 `.ps1`, 5 `.py`); 11 at 100755 |
 | Graph index | `scripts/build/refresh_graph.sh` (run through `bash`) | 4,492 nodes, 9,385 edges, 218 communities (code-only) |
 | OSM Monaco URL | `curl -I` | connection reset by the egress proxy; the 404 is from the PR #1 config comment, not re-observed here |
 | Model metadata | read `python/lpq_tools/training/model_io.py` and `train.py` | artifact has no checksum, seed or metrics; the report does |
 
-**Not verified here:** web e2e on PR #1 (taken from hosted CI); the Windows build; any
-hardware counter; any figure or table; OSM acquisition from the pinned source.
+**Not verified here / skipped / not run [untested]:** the Windows build; any hardware counter;
+any figure or table; OSM acquisition from the pinned source (the sandbox cannot reach Geofabrik,
+and the 404 is CI-observed); Liechtenstein availability; the libFuzzer job; the Debug
+ASan/UBSan preset; `ctest --preset release-fast`; any benchmark; the reproduction scripts; the
+12 Python and 3 UI/API tests that skip for missing data or by design; repeated runs (every
+count above is a single execution).
 
 ---
 
@@ -546,5 +662,6 @@ hardware counter; any figure or table; OSM acquisition from the pinned source.
 * I did not re-run the experiments. The comparison counts and timings in the docs are cited,
   not reproduced.
 * The graph index was built code-only. Doc files are not in it.
-* This document was written on `main`'s checkout. It does not change any file except the two
-  documents in `docs/project/`. Nothing was committed or pushed.
+* This document was first written from the `main` checkout and revised in M2 on the local
+  branch `completion/v2-baseline`. Neither version was pushed. The percentages were not
+  re-scored in M2 (see the revision note).

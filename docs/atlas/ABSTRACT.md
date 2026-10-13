@@ -4,6 +4,20 @@
 from [experiments/paper/findings.md](../../experiments/paper/findings.md) and the stored
 results it cites.*
 
+> **RETRACTION NOTICE: parts of this draft are historical (added 2026-10-13, M2 documentation
+> audit; the abstract text below is unchanged).** Two statements below are **retracted** and
+> must not be quoted: the sentence beginning "The one configuration in which the learned
+> machinery improves on its own baseline is the adaptive controller, which removes 34% of
+> comparisons", and the closing clause "except under adaptive control". The v2 audit reports
+> that the classical bucket queue alone performs 116,552,995 comparisons against the adaptive
+> configuration's 116,608,480 ([v2-results.md](../experiments/v2-results.md) §3; documented,
+> not re-run in this audit), so the reduction is not attributable to learning. v2 does not
+> validate the claim. Likewise, the phrase "an optional adaptive controller steers the queue's
+> policy from verified outcomes" describes a controller only; it must not be read as online
+> *learning* running. `OnlineLearner::maybe_update` and `flush` have no call site outside
+> tests, so no model weight changes in any run. The rest of the draft is unchanged by this
+> notice and has not been re-verified here. See `DISCREPANCIES.md` D-02 and D-11.
+
 ---
 
 **Dynamic Approximate Shortest Path Using a Learned Priority Queue**

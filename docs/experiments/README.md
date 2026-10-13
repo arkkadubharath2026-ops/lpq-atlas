@@ -84,6 +84,14 @@ adaptive configuration performs **34% fewer comparisons at identical pop
 counts** — the same search, a third less queue work. The first measurement in
 this project where the learned machinery improves on its own baseline.
 
+> **Retracted (historical; note added 2026-10-13, M2).** The paragraph above is kept as
+> originally written. The v2 audit attributes the 34% to the controller retreating to a
+> classical scan: the classical bucket queue alone performs 116,552,995 comparisons against the
+> adaptive configuration's 116,608,480 ([v2-results.md](v2-results.md) §3; documented, not
+> re-run). It is **not** evidence that learning helped, and v2 does not validate it. The
+> "online learner" in that document only records events; `maybe_update` and `flush` have no
+> call site outside tests. See `adaptive-controller.md` and `docs/atlas/DISCREPANCIES.md` D-11.
+
 **[profiling.md](profiling.md)** — why no hardware performance counters appear
 anywhere in this directory. WSL2 exposes no CPU PMU, so cycles, cache misses and
 branch misses are **not measured** on the development host, and no figure in this

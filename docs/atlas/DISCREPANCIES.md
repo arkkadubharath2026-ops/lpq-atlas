@@ -8,12 +8,12 @@ building it. Nothing below was removed to make the documentation look consistent
 
 | id | item | status | evidence |
 |---|---|---|---|
-| D-01 | OSM promised, not implemented | **Resolved** | `python/lpq_tools/data/osm.py` (documented road policy), `configs/datasets/osm_*.yaml` (dated Geofabrik snapshots, SHA-256 pinned), `datasets/metadata/osm_*.osm.json` (provenance), `python/tests/test_osm.py`; Dijkstra, A* (haversine) and LPQ verified exact on `osm_monaco` / `osm_liechtenstein` |
-| D-02 | "online ML" broader than the central path | **Resolved in the UI** | every result states `lpq.scorer`, `adaptive_controller`, `online_learning`; the Models page states the static-scorer mode |
+| D-01 | OSM promised, not implemented | **Reopened (M2, 2026-10-13); originally recorded as Resolved.** The extraction code and its tests exist, but the pinned dated Geofabrik snapshot can no longer be downloaded: `monaco-260925.osm.pbf` returned `HTTP 404 Not Found` in CI on 2026-10-11 and again on 2026-10-13 ([run #28](https://github.com/arkkadubharath2026-ops/lpq-atlas/actions/runs/38364982184), step "Prepare the OSM Monaco dataset"). Liechtenstein uses the same snapshot date and is untested. The v2 workflow avoids the download by using the bundled `demo_road`, so v2's green `e2e` says nothing about real OSM. Original evidence follows. | `python/lpq_tools/data/osm.py` (documented road policy), `configs/datasets/osm_*.yaml` (dated Geofabrik snapshots, SHA-256 pinned), `datasets/metadata/osm_*.osm.json` (provenance), `python/tests/test_osm.py`; Dijkstra, A* (haversine) and LPQ verified exact on `osm_monaco` / `osm_liechtenstein` |
+| D-02 | "online ML" broader than the central path | **Resolved in the UI for the scorer label; reopened for online learning (M2, 2026-10-13).** `OnlineLearner::maybe_update` and `flush` have no call site outside tests on `main` and on the PR #1 branch (`git grep`, 2026-10-13): non-test code only calls `record()` (`controller_observer.hpp:99`) and `reset()`, so no model weight changes in any benchmark or API run. See D-11 and D-12. Original evidence follows. | every result states `lpq.scorer`, `adaptive_controller`, `online_learning`; the Models page states the static-scorer mode |
 | D-03 | rich features vs optimized path | **Exposed** | `lpq.features` lists the six static features used; the Model page shows which weights are non-zero as read by the C++ loader |
 | D-04 | model zoo vs selected model | **Resolved** | Models page separates implementations, trained artifacts, the queue that uses them, and split status |
 | D-05 | cache misses | **Unavailable, stated** | `hardware_counters.available = false` with the reason, in every result and on every page that would show them |
-| D-06 | no hosted CI | **Written; not yet run on GitHub** | `.github/workflows/ci.yml`: engine build + ctest, Python, API contract, libFuzzer, web lint/typecheck/tests/build, Playwright on OSM Monaco. Nothing has been pushed, so the hosted run is pending. Its steps were run locally on Linux (WSL Ubuntu 26.04): GCC 15.2 and Clang 21 Release `-Werror` and Clang Debug ASan+UBSan+LSan, each 847/847 with zero warnings; libFuzzer 60 s per target, no findings after defect 6's fix. The full stack also runs from `compose.yaml` (Playwright 5/5 against the containers) |
+| D-06 | no hosted CI | **Updated (M2, 2026-10-13); originally recorded as "Written; not yet run on GitHub". Hosted CI has since run; it is green on the v2 workflow and red on the v1 workflow.** [Run #27](https://github.com/arkkadubharath2026-ops/lpq-atlas/actions/runs/38148343456) on PR #1 `e6dde1c`: `engine`, `web`, `fuzz`, `windows-scripts`, `e2e` all succeeded (the `e2e` job uses `demo_road`). [Run #28](https://github.com/arkkadubharath2026-ops/lpq-atlas/actions/runs/38364982184) on the docs commit `b2049c2` with `main`'s workflow: `engine`, `web`, `fuzz` succeeded, `e2e` failed at the OSM Monaco download with `HTTP 404`. The Windows job parses PowerShell and runs a read-only doctor; there is no Windows engine build. No run on the `main` branch itself was inspected. The text below is what was recorded before any hosted run existed. | `.github/workflows/ci.yml`: engine build + ctest, Python, API contract, libFuzzer, web lint/typecheck/tests/build, Playwright on OSM Monaco. Nothing has been pushed, so the hosted run is pending. Its steps were run locally on Linux (WSL Ubuntu 26.04): GCC 15.2 and Clang 21 Release `-Werror` and Clang Debug ASan+UBSan+LSan, each 847/847 with zero warnings; libFuzzer 60 s per target, no findings after defect 6's fix. The full stack also runs from `compose.yaml` (Playwright 5/5 against the containers) |
 | D-07 | no formal fuzzing | **Resolved** | `cpp/fuzz/`: graph binary reader, model loader, experiment manifest reader, queue operation sequences; libFuzzer with clang, standalone smoke runs in ctest (`fuzz-smoke`). It found two real defects (1 and 6 below) |
 | D-08 | checked-in / absolute-path build state | **Resolved** | `build/` is ignored; the local `build/release` was configured from a different absolute path and could not rebuild, so it was set aside and the release preset reconfigured from source |
 | D-09 | expected outcome vs findings | **Visible** | Compare and Research never declare a winner; paired statistics report effect size and fraction of queries beside Holm-adjusted p-values; the revised abstract is [ABSTRACT.md](ABSTRACT.md) |
@@ -91,3 +91,96 @@ reader, plus two unseekable-stream tests.
 
 *Effect on stored results: none.* Every graph the project loads was written by
 `lpq_convert` and passes the new checks unchanged (all datasets load, all suites pass).
+
+## Findings added by the M0 to M2 audit (2026-10-13)
+
+Added on the local branch `completion/v2-baseline`. Each entry says how it was checked. "Verified"
+means a command was run in the audit sandbox on the commit named; "documented" means taken from
+a project document and not re-run. No code, workflow or benchmark was changed to make any of these
+entries true.
+
+### D-11. The 34% adaptive-controller claim is retracted but still stated in four documents
+
+* **Claimed:** `experiments/paper/findings.md` ("The adaptive controller is the one place the
+  machinery pays"), `docs/experiments/adaptive-controller.md`, `docs/experiments/README.md` and
+  `docs/atlas/ABSTRACT.md` say the adaptive configuration does 34% fewer comparisons and is the
+  one case where the learned machinery improves on its own baseline.
+* **Actual (documented):** `docs/experiments/v2-results.md` §3 reports that the classical bucket
+  queue alone performs 116,552,995 comparisons against the adaptive configuration's 116,608,480
+  (0.05% apart), so the reduction is attributed to retreating to a classical scan, not to
+  learning. These figures were not re-run in the audit.
+* **Verified:** v2 does **not** edit any of the four documents (`git diff --name-only` between
+  `main` and `e6dde1c`). The claim is therefore un-retracted in those files on `main`, on the PR #1
+  branch and on the docs branch. v2 does not validate the claim.
+* **Status:** historical and retracted. Dated retraction notices were added to all four files on
+  this branch; the original text is unchanged. **Open:** any other branch still states the claim
+  without a notice. A single interleaved re-run of `lpq_adaptive` against the classical bucket
+  queue would settle the attribution; it was not done and no figure was invented.
+
+### D-12. The `online_learning` label can read true while no learning happens
+
+* **Claimed:** each result states `lpq.online_learning`; the UI shows an "online learning" badge
+  when it is true (`atlas/web/components/RunPanels.tsx:139`). D-02 recorded this as resolved.
+  `v2-results.md` §3 says "Online learning is therefore not claimed anywhere".
+* **Actual (verified, `git grep` on `e6dde1c`):** `lpq_run.cpp:777` sets `online_learning` to
+  `pq == "lpq_adaptive" && adaptive_learning`, that is, true whenever the learner is *attached*
+  with `--adaptive`. The learner is only ever `record()`ed and `reset()` by non-test code;
+  `maybe_update` and `flush` have no call site outside tests. So the flag and badge can claim
+  online learning on runs where no model weight changes. Separately, v1 documents
+  (`adaptive-controller.md`, `findings.md`) do claim the learner ran inside a real search, which
+  contradicts v2's "not claimed anywhere".
+* **Status:** recorded; **no code changed** (documentation-only milestone). The label is to be
+  corrected when online learning is wired up and proved (milestone M5), not before.
+
+### D-13. Seven documented-as-executable shell scripts are tracked as mode 100644
+
+* **Claimed (verified by `git grep` of the script paths):** `CLAUDE.md` names
+  `scripts/build/refresh_graph.sh`; `ESD.md` §36 and `docs/reproducing.md` name
+  `scripts/reproduce/{build_all,run_main_experiments,generate_tables,generate_figures}.sh`;
+  `docs/reproducing.md` also names `scripts/build/linux_checks.sh`, and
+  `docs/experiments/profiling.md` names `scripts/profile/check_counters.sh`. They are presented
+  as commands to run, not as `bash <script>`. The README does not mention them.
+* **Actual (verified, `git ls-tree -r`):** on `main` and on `e6dde1c` the following are mode
+  100644: `scripts/build/linux_checks.sh`, `scripts/build/refresh_graph.sh`,
+  `scripts/profile/check_counters.sh`, `scripts/reproduce/build_all.sh`, `generate_figures.sh`,
+  `generate_tables.sh`, `run_main_experiments.sh`. (`scripts/reproduce/common.sh` is also 100644
+  but is only sourced.) 20 files under `scripts/` are 100644 on v2: these 8 `.sh`, 7 `.ps1`
+  and 5 `.py`; the `.ps1` and `.py` files are run through an interpreter. Eleven others are 100755.
+  Direct execution of `scripts/build/refresh_graph.sh` failed with *Permission denied* on `main`;
+  the other six were not individually executed.
+* **Status:** recorded; fix deferred to M4 because it is a source (file mode) change.
+
+### D-14. `confidence` is produced and recorded but does not gate extraction
+
+* **Claimed:** PRD §2 item 2 lists "confidence-aware candidate extraction" among the intended
+  contributions, and PRD §12 says the controller must use confidence to decide how aggressively to
+  trust predictions.
+* **Actual (verified, `git grep` over `cpp/include` and `cpp/apps` on `e6dde1c`):** `confidence`
+  is declared on `Candidate` (`candidate_manager.hpp:108`), copied into `PredictionEvent`
+  (`prediction_event.hpp:59,93`) and produced by the predictors. No code in `lpq/`,
+  `verification/`, `adaptation/` or the apps reads it to decide control flow. Whether it should
+  gate extraction, and whether that helps, is untested.
+* **Status:** recorded; to be tested as a hypothesis in M7 and M9, not assumed.
+
+### D-15. Model artifacts do not embed the provenance specdoc §30 asks for
+
+* **Claimed:** specdoc §30 requires metadata linking a model artifact to its feature schema,
+  training dataset, training queries, evaluation queries, hyperparameters, seed, metrics and
+  checksum.
+* **Actual (verified by reading `python/lpq_tools/training/model_io.py` and `train.py`; v2 does
+  not change the `training/` package):** `write_linear_model` writes weights, bias, temperature,
+  the feature-layout version and the online hyperparameters. The training report carries the
+  seed, graph checksum and query seed, but it is a separate object, not part of the artifact.
+* **Status:** recorded; fix deferred to M10.
+
+### D-16. A reported `starlette` / `sse-starlette` pip conflict is not a repository defect
+
+* **Reported:** a handoff note and the first version of `docs/project/PROJECT_STATUS.md` listed a
+  conflict in the project's API requirements.
+* **Actual (verified):** the string `sse-starlette` appears in no repository file on `main` or on
+  `e6dde1c`. In the audit sandbox `pip show sse-starlette` reports it is required by the `mcp`
+  package, which is not a project dependency. A `pip install --dry-run` of
+  `python/requirements-dev.txt` and `atlas/api/requirements.txt` on `e6dde1c` would install
+  nothing, and the CI `engine` job installs them and passes (run #27 and run #28).
+* **Status:** closed as not a repository defect. **Inferred**, because it was not reproduced in
+  a clean virtual environment; that confirmation is a task for M10.

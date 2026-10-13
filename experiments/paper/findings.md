@@ -182,6 +182,18 @@ nothing to learn from.**
 
 ### The adaptive controller is the one place the machinery pays
 
+> **RETRACTED: historical section (note added 2026-10-13, M2 documentation audit; the text of
+> this section is unchanged).** The heading and conclusion of this section are not supported.
+> The v2 audit reports that the classical bucket queue alone performs **116,552,995**
+> comparisons on this workload, against **116,608,480** for `lpq_adaptive`, a difference of
+> 0.05% ([v2-results.md](../../docs/experiments/v2-results.md) §3; documented, not re-run in
+> this audit). The 34% reduction therefore comes from the controller retreating to a
+> classical scan, not from learning, and **this is not a place where the learned machinery
+> pays**. v2 does not validate the claim. Also, the "online learner attached to a real search"
+> only records events: `OnlineLearner::maybe_update` and `flush` have no call site outside
+> tests, so no model weight changed. The same-pop-count observation below remains a true
+> statement about the two runs. See `docs/atlas/DISCREPANCIES.md` D-02 and D-11.
+
 Measured end to end on `dimacs_ny`, 100 queries, exact mode, with the controller
 and online learner attached to a real search for the first time:
 
@@ -277,7 +289,9 @@ project compares exact counts for this reason.
   slack stops mattering is unmeasured.
 - **A\* measured with one heuristic on one graph.** `manhattan` and `haversine`
   are implemented and were not run.
-- **The adaptive controller's 34% is unattributed.** It has three levers and the
+- **[Superseded 2026-10-13: the 34% has since been attributed to the classical scan; see the
+  retraction notice in the adaptive-controller section above.]** **The adaptive controller's
+  34% is unattributed.** It has three levers and the
   measurement does not separate them, adapts within a query but never across
   queries, and was run on one graph at a favourable ratio.
 
