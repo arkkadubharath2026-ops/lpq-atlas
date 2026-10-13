@@ -15,9 +15,11 @@ What it does, in order, with no network access:
   3. compares the resulting graph checksum with the one recorded in the
      committed datasets/metadata/demo_road.json, and fails if they differ.
 
-Step 2 calls the pipeline directly instead of scripts/data/prepare_datasets.py
-because that CLI rewrites datasets/metadata/index.json from only the datasets it
-was asked about, so preparing one dataset would replace the index of all of them.
+Step 2 calls the pipeline directly instead of scripts/data/prepare_datasets.py.
+Calling it directly leaves datasets/metadata/index.json untouched, so demo_road
+is not added to that committed index. (The CLI used to rewrite the index from only
+the datasets it was asked about, which was the original reason for the direct
+call; it now merges into the index and preserves the other entries.)
 """
 
 from __future__ import annotations

@@ -20,9 +20,8 @@ _PYTHON_ROOT = Path(__file__).resolve().parents[2] / "python"
 if str(_PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(_PYTHON_ROOT))
 
-from lpq_tools.data.pipeline import prepare_all, summarise  # noqa: E402
+from lpq_tools.data.pipeline import prepare_all, summarise, update_index  # noqa: E402
 from lpq_tools.data.sources import DatasetConfig, load_all_dataset_configs  # noqa: E402
-from lpq_tools.utilities.jsonio import write_json  # noqa: E402
 from lpq_tools.utilities.paths import RepoPaths  # noqa: E402
 
 
@@ -82,8 +81,11 @@ def main(argv: list[str] | None = None) -> int:
         for result in sorted(results, key=lambda r: r.dataset_id):
             print("  " + result.summary().replace("\n", "\n  "))
         index_path = paths.metadata / "index.json"
-        write_json(index_path, summarise(results, paths.root))
-        print(f"\nIndex written to {index_path}")
+        # Merged, not rewritten: the index is committed, and writing it from only the
+        # datasets prepared in this run would delete the entries of all the others.
+        update_index(index_path, summarise(results, paths.root))
+        print(f"\nIndex updated at {index_path} (entries for {len(results)} prepared dataset(s) "
+              "replaced; every other entry preserved)")
 
     if failures:
         print("\nFailed:", file=sys.stderr)

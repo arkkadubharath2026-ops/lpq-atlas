@@ -140,9 +140,11 @@ upstream bytes are unchanged (otherwise the digest check rejects it). Keep the P
 `--skip-download` to reproduce. `osm_liechtenstein` still names a Geofabrik snapshot that returned
 HTTP 404 (observed in CI on 2026-10-11 and 2026-10-13) and is **unavailable until re-sourced**.
 Geofabrik also fails with *connection reset* in some sandboxes. Fall back to `dimacs_ny` or
-`demo_road` if a download fails for you. Note that `prepare_datasets.py` rewrites
-`datasets/metadata/index.json` from only the datasets it was asked to prepare, so a git diff of
-that file after preparing one dataset is expected.
+`demo_road` if a download fails for you. `prepare_datasets.py` merges what it prepared into
+`datasets/metadata/index.json` and leaves every other entry as it was (it used to rewrite the file
+from only the datasets it was asked about, so a diff showing the other entries deleted is **not**
+expected any more; if you see one, something is wrong). A dataset that has never been indexed is
+added as a new entry.
 
 ## Reproducing the latency benchmark
 

@@ -439,3 +439,66 @@ def summarise(results: list[PreparationResult], root: Path | None = None) -> dic
             for r in sorted(results, key=lambda r: r.dataset_id)
         ]
     }
+
+
+def _index_entries(index_path: Path, document: Any) -> dict[str, dict[str, Any]]:
+    """The entries of a parsed index keyed by id, or PipelineError if it is malformed."""
+    listed = document.get("datasets") if isinstance(document, dict) else None
+    if not isinstance(listed, list):
+        raise PipelineError(
+            f"{index_path} is not an index: expected an object with a 'datasets' list. "
+            "It was not overwritten."
+        )
+    entries: dict[str, dict[str, Any]] = {}
+    for item in listed:
+        dataset_id = item.get("dataset_id") if isinstance(item, dict) else None
+        if not isinstance(dataset_id, str):
+            raise PipelineError(
+                f"{index_path} has an entry without a string 'dataset_id'. It was not overwritten."
+            )
+        if dataset_id in entries:
+            raise PipelineError(
+                f"{index_path} lists '{dataset_id}' twice. It was not overwritten."
+            )
+        entries[dataset_id] = item
+    return entries
+
+
+def update_index(index_path: Path, summary: dict[str, Any]) -> dict[str, Any]:
+    """Merges *summary* (the output of :func:`summarise`) into the index at *index_path*.
+
+    ``datasets/metadata/index.json`` is committed and lists every prepared dataset. Writing
+    it from only the datasets one run prepared deleted all the others, so preparing a single
+    dataset appeared in ``git diff`` as the removal of the rest. This replaces the entries for
+    the datasets in *summary*, adds any that are new, and leaves every other entry as it was,
+    keeping the list sorted by id. Any other top-level key is kept too.
+
+    The index is parsed and written back with :func:`write_json`, so entries left alone stay
+    byte for byte identical when the file was itself written that way, which is how the
+    pipeline writes it.
+
+    An index that cannot be understood (invalid JSON, the wrong shape, an entry without an
+    id, a repeated id) raises :class:`PipelineError` and is **not** overwritten: replacing a
+    record the pipeline cannot read would destroy information to make a run look tidy.
+    When *summary* holds no datasets the file is not touched.
+
+    Returns the merged index.
+    """
+    existing: dict[str, Any] = {}
+    entries: dict[str, dict[str, Any]] = {}
+    if index_path.exists():
+        try:
+            document = read_json(index_path)
+        except ValueError as exc:  # JSONDecodeError and UnicodeDecodeError both derive from it
+            raise PipelineError(
+                f"{index_path} is not valid JSON ({exc}). It was not overwritten."
+            ) from exc
+        entries = _index_entries(index_path, document)
+        existing = {k: v for k, v in document.items() if k != "datasets"}
+
+    prepared = _index_entries(index_path, {"datasets": summary.get("datasets", [])})
+    combined = {**entries, **prepared}  # a prepared entry replaces the one with the same id
+    merged = {**existing, "datasets": [combined[i] for i in sorted(combined)]}
+    if prepared:
+        write_json(index_path, merged)
+    return merged
