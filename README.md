@@ -19,27 +19,148 @@ is produced by the C++ engine.
 
 ### Quick start
 
-On a fresh `git clone` (Windows or Linux), with no network access needed after the
-dependencies are installed. Full prerequisites, per-OS install commands and a
-troubleshooting table: **[docs/local-setup.md](docs/local-setup.md)**.
+**Short version** (Linux; Windows is below). Install the prerequisites once, then:
 
 ```bash
-# Linux / macOS / Git Bash                           # Windows PowerShell (see docs/local-setup.md)
-bash scripts/setup/doctor.sh                         # scripts\setup\doctor.ps1
-bash scripts/setup/run.sh --test                     # scripts\setup\run.ps1 -Test
-bash scripts/demo/reproduce_benchmark.sh             # scripts\demo\reproduce_benchmark.ps1
+git clone https://github.com/arkkadubharath2026-ops/lpq-atlas.git
+cd lpq-atlas
+bash scripts/setup/run.sh
 ```
 
-1. `doctor` checks for a C++20 compiler, CMake, Ninja, Python 3.11 to 3.13 and Node 20+,
-   and prints the install command for anything missing.
-2. `run --test` sets the clone up on first use (virtualenv, `npm ci`, release build,
-   the offline synthetic `demo_road` dataset), runs the C++, Python, API and web tests,
-   then starts the API on <http://127.0.0.1:8000> and the web UI on <http://127.0.0.1:3000>.
-   Stop it with Ctrl+C.
-3. `reproduce_benchmark` runs a baseline-versus-alternatives latency comparison
-   (`lpq_benchmark --interleave`) on this machine and writes the raw results to a new
-   file under `results/raw/local/`. Timings depend on the machine and are not
-   claimed here; see [docs/experiments/](docs/experiments/README.md) for recorded results.
+Then open **<http://127.0.0.1:3000>**. The first run sets everything up (about 7 minutes on a fast connection, see the
+table below), later runs start in about 6 seconds. Stop it with **Ctrl+C**, or from another terminal with
+`bash scripts/setup/stop.sh`.
+
+On Windows (PowerShell), from the cloned folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup\run.ps1
+# stop: Ctrl+C, or   powershell -ExecutionPolicy Bypass -File scripts\setup\stop.ps1
+```
+
+**What `run` does on the first call:** checks the prerequisites and prints the install command for anything missing; creates
+`.venv` and installs the Python packages; runs `npm ci`; configures and builds the C++ engine (CMake preset `release`, output
+in `build/release/`); converts the built-in synthetic `demo_road` graph (committed, offline, checksum-verified); builds the web
+UI; starts the API (port 8000) and the web UI (port 3000); and finally runs an **end-to-end check** that sends a real query
+through the web server to the API and the C++ engine and has the engine validate the answer against its reference search. It
+prints `smoke test passed` only if that worked. It never needs administrator rights and downloads only pip and npm packages
+and GoogleTest (see "Internet access"). The one thing it cannot do for you is install a compiler, CMake, Python or Node:
+those are system tools, so install them first (`bash scripts/setup/doctor.sh` lists what is missing and the command to fix it).
+
+#### Supported systems, and how well each is verified
+
+| System | Status |
+|---|---|
+| Linux, Ubuntu 24.04 (GCC 13.3, CMake 3.28, Ninja 1.11, Python 3.13, Node 22, git 2.43) | **Verified end to end from a fresh clone:** setup, start, a real engine query, stop, repeat setup, all test suites (see `docs/local-setup.md`, "Status of these instructions") |
+| Other Linux distributions meeting the prerequisites | expected to work; not tested |
+| Windows 10/11, Windows PowerShell 5.1 or PowerShell 7 | scripts provided; CI parses all of them and runs the read-only `doctor` on `windows-latest`. **The engine build, start-up, stop and end-to-end check have not been run on Windows.** If something misbehaves, the manual commands are in `docs/local-setup.md` |
+| macOS | **not tested**, not claimed |
+| Docker (`docker compose up --build`) | provided; **not run in this verification** |
+
+#### Prerequisites
+
+`git`; a C++20 compiler (GCC 11 or newer, Clang 14 or newer; on Windows MinGW-w64 GCC 12 or newer, or the Visual Studio 2022
+Build Tools); CMake 3.25 or newer; Ninja; Python 3.11 to 3.13 (**not 3.14**: the pinned numpy/scipy/pandas have no wheels);
+Node.js 20 or newer (22 LTS recommended) with npm. Ubuntu/Debian:
+
+```bash
+sudo apt update && sudo apt install -y build-essential cmake ninja-build git curl python3 python3-venv python3-pip
+# Node 22: https://nodejs.org (apt's nodejs is usually too old)
+bash scripts/setup/doctor.sh        # checks everything, changes nothing
+```
+
+Windows: install each with `winget install <id>` for `Git.Git`, `Python.Python.3.13`, `OpenJS.NodeJS.LTS`, `Kitware.CMake` and
+`Ninja-build.Ninja`, plus a compiler (`docs/local-setup.md` has the options), then run
+`powershell -ExecutionPolicy Bypass -File scripts\setup\doctor.ps1`.
+
+#### Check that it works
+
+* The terminal shows five `[ ok ]` lines and `smoke test passed: UI -> API -> engine -> validated result`.
+* In the browser: **Route Explorer**, choose the dataset `demo_road`, click two points on the map (or type two node numbers),
+  press **Run**. You get a route, the engine's metrics and a replayable search trace. Choosing a dataset that has not been
+  downloaded shows its state (`NOT DOWNLOADED`) and never silently falls back to the demo graph.
+* Any time while it runs: `.venv/bin/python scripts/setup/smoke.py` (Windows: `.venv\Scripts\python.exe scripts\setup\smoke.py`).
+
+#### Troubleshooting (the common failures; the full table is in `docs/local-setup.md`)
+
+| You see | Do |
+|---|---|
+| `doctor` says a tool is missing or too old | run the install command it prints, then re-run |
+| `port 8000 is already in use` | `ATLAS_API_PORT=8001 ATLAS_WEB_PORT=3001 bash scripts/setup/run.sh` (or put them in `.env`, see `.env.example`) |
+| setup fails fetching GoogleTest (no GitHub access) | `bash scripts/setup/setup.sh --no-tests` (skips the C++ tests) or install GoogleTest and set `LPQ_USE_SYSTEM_GTEST=1` |
+| `pip install` fails building numpy/scipy | you are on Python 3.14; install 3.13 and delete `.venv` |
+| a step failed half way | just re-run `bash scripts/setup/run.sh`; every step is idempotent and resumes |
+| the page loads but says the API is unreachable | read `results/atlas/launcher/api.log`; start with `run.sh`, which keeps the UI and API ports in step |
+| Windows: "running scripts is disabled" | use the `-ExecutionPolicy Bypass -File` form shown above |
+
+#### Reset generated state (safe)
+
+Nothing below touches `datasets/`, `models/`, `results/raw/`, `artifacts/` or your source files.
+
+```bash
+rm -rf results/atlas                # runs, comparisons and benchmark jobs started from the UI, caches, logs (regenerated on use)
+rm -rf .venv atlas/web/node_modules atlas/web/.next build/release    # dependencies and builds; the next run rebuilds them
+```
+
+(PowerShell: `Remove-Item -Recurse -Force results\atlas` and likewise.) Docker volumes are never created or removed by these scripts.
+
+#### Run the tests
+
+```bash
+bash scripts/setup/test.sh                 # everything: C++ (ctest), Python, API, web lint/typecheck/unit
+bash scripts/setup/test.sh api web         # or any of: cpp python api web
+```
+
+On the verified Linux machine this passes 964 C++ tests, 424 Python tests (12 skipped: they need datasets you have not
+downloaded), 117 API tests (1 skipped) and 55 web tests, in about 2 minutes. The browser end-to-end suite
+(`cd atlas/web && npx playwright install chromium && npx playwright test`) is separate and is run in CI.
+
+#### Real datasets, OSM and trained models (optional, need the internet)
+
+The demo needs none of them. Real datasets are acquired by a separate, checksum-verified command and are never downloaded
+during setup:
+
+```bash
+.venv/bin/python scripts/data/prepare_datasets.py --list          # everything declared
+.venv/bin/python scripts/data/prepare_datasets.py dimacs_ny       # ~6 MB download, 264,346 nodes (also snap_facebook, ...)
+```
+
+* **OpenStreetMap:** `osm_monaco` is pinned to one day's bytes of a file its publisher replaces daily, so a fresh download is
+  rejected by the checksum unless the upstream file is unchanged; reproducing it needs the retained file placed in `datasets/raw/`
+  and `--skip-download` (discrepancy D-01 in `docs/atlas/DISCREPANCIES.md`). `osm_liechtenstein` names a snapshot that no longer
+  exists. **So real OSM data cannot be acquired reliably from a fresh clone today**; this is documented, not hidden.
+* **Trained models** (`models/exported/`) are not in git. They are produced from `dimacs_ny` and `snap_facebook` by
+  `bash scripts/reproduce/run_main_experiments.sh` (about 11 minutes, offline once those datasets are prepared). Without them the
+  `lpq_model` queue says that no model is available for the dataset; everything else works.
+
+#### Research benchmarks run separately from the app
+
+```bash
+bash scripts/demo/reproduce_benchmark.sh        # latency comparison on this machine; raw results go to a new file under results/raw/local/
+bash scripts/reproduce/run_main_experiments.sh  # the registered experiments (needs the real datasets); see docs/reproducing.md
+```
+
+The app and the benchmarks do not share timing code: benchmark timings are taken by `lpq_benchmark` on one pinned core, never by
+the web server. Timings depend on the machine and none are claimed here; see [docs/experiments/](docs/experiments/README.md).
+
+#### Time, disk and internet
+
+| | Measured on the verified Linux machine |
+|---|---|
+| First `run.sh` from a fresh clone (cold pip and npm caches) | 7 min 5 s, to "running" |
+| Re-running `setup.sh` on a set-up clone | 32 s |
+| Later `run.sh` | about 6 s |
+| Disk after setup | 1.3 GB (`.venv` 568 MB, `node_modules` 617 MB, UI build 42 MB, engine build 47 MB, git history 8 MB) |
+| Optional real datasets | `dimacs_ny` about 6 MB to download; the others are larger and were not measured here |
+
+| Needs the internet | When |
+|---|---|
+| pip and npm packages, and GoogleTest (GitHub, only for the C++ tests) | setup, once |
+| Map background tiles (`tile.openstreetmap.org`) | while using the map; offline the tiles are blank and the graph still draws |
+| Real datasets | only when you run `prepare_datasets.py` |
+| Everything else, including the demo, queries, traces, comparison and the benchmark on `demo_road` | **runs offline** |
+
+An optional `.env` file (copy `.env.example`) changes ports and limits; nothing in it is required and it contains no secrets.
 
 Docker alternative: `docker compose up --build`, then open <http://localhost:3000>.
 

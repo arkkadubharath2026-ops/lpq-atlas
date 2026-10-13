@@ -32,6 +32,16 @@ executable bit (a repository committed from Windows often does not).
   `dimacs_ny` if you have prepared it), prints the comparison table and a summary, and
   writes each raw result to a **new** file under `results/raw/local/`.
 
+`run` ends with an end-to-end check (`scripts/setup/smoke.py`): a real query sent through the web server's own
+address to the API and the C++ engine, validated against the engine's reference search. It prints `smoke test passed`
+or stops the launch with the reason. You can re-run it while the servers run:
+`.venv/bin/python scripts/setup/smoke.py` (Windows: `.venv\Scripts\python.exe scripts\setup\smoke.py`).
+
+**Stopping.** Ctrl+C in the `run` window. From another terminal, or when `run` is in the background (a background job
+ignores Ctrl+C): `bash scripts/setup/stop.sh` (Windows: `powershell -ExecutionPolicy Bypass -File scripts\setup\stop.ps1`).
+`run` records its process id in `results/atlas/launcher/run.pid`; `stop` refuses a pid that is not `run.sh`/`run.ps1`, so a
+stale file cannot make it kill something else.
+
 `run` without `--test` / `-Test` skips the test suites. `setup` can be run on its own
 (`bash scripts/setup/setup.sh`, `scripts\setup\setup.ps1`) to prepare everything without
 launching, and `test` on its own (`bash scripts/setup/test.sh [cpp] [python] [api] [web]`).
@@ -223,6 +233,9 @@ research pipeline (trained models, tables, figures) is `docs/reproducing.md`.
 | `LPQ_USE_SYSTEM_GTEST=1` | use an installed GoogleTest instead of downloading it |
 | `ATLAS_MAX_JOBS`, `ATLAS_RUN_TIMEOUT_S`, `ATLAS_WORK_DIR`, ... | API limits, see `docs/atlas/README.md` |
 
+Any of these can instead go in an optional `.env` at the repository root (copy `.env.example`; git-ignored; only `ATLAS_*` and
+`LPQ_*` keys are read; a variable already set in your environment wins). `docker compose` reads the same file.
+
 Options: `setup --no-tests` (do not build the C++ tests; no googletest download),
 `setup --skip-web`, `setup --force`, `run --dev` (serve the UI with `next dev`: no production
 build, slower page loads).
@@ -264,6 +277,20 @@ blank, the graph still draws.
 
 Be aware of what has and has not been exercised:
 
+* **Fresh-clone acceptance, 2026-10-13 (Ubuntu 24.04 container, 1 CPU quota, GCC 13.3, CMake 3.28.3, Ninja 1.11.1,
+  Python 3.13, Node 22.22, git 2.43), from a new `git clone` with no `.venv`, `node_modules`, build directory, generated
+  graph or `.env`, and with pip's cache disabled and a new empty npm cache:** `bash scripts/setup/run.sh` took 7 min 5 s
+  to the running state and its end-to-end check printed `smoke test passed` (web UI, API and engine tools, `demo_road`
+  READY, a binary-heap query and a learned-queue query with trace on a random pair, both exact against the reference);
+  `scripts/setup/stop.sh` stopped both servers and freed both ports; `setup.sh` re-run on the finished clone took 32 s,
+  exit 0, no tracked file changed; deleting the demo graph, leaving a junk `staging/` directory and a half-removed
+  `node_modules` marker was repaired by one `setup.sh` run (54 s); `scripts/setup/test.sh` passed (ctest 964/964, python
+  424 passed and 12 skipped, API 117 passed and 1 skipped, web 55 passed, lint and typecheck clean) in 2 min 12 s; a port
+  already in use produced the documented message; an `.env` with other ports was honoured (servers and smoke test on 8011 and
+  3011). Disk after setup: 1.3 GB. **Not done:** an offline re-run of setup (needs a network-less sandbox), Docker, any
+  Windows or macOS run, and a PowerShell run of the files changed in this round (`stop.ps1`, and the `.env`, pid-file and
+  smoke-test additions to `run.ps1`/`_common.ps1`): there is no PowerShell in the sandbox that did this, so they are
+  written to mirror the shell scripts and will be parse-checked by the `windows-scripts` CI job once pushed.
 * **Linux (Ubuntu 24.04 container, GCC 13, CMake 3.28, Python 3.13, Node 22):** the Bash
   scripts were run end to end from a fresh `git worktree` of this repository: `setup` (venv,
   `npm ci`, engine build, demo dataset, `next build`), `test`, `run` (API and web answered,
