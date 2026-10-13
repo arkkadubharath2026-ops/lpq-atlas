@@ -93,6 +93,8 @@ this project where the learned machinery improves on its own baseline.
 > re-run). It is **not** evidence that learning helped, and v2 does not validate it. The
 > "online learner" in that document only records events; `maybe_update` and `flush` have no
 > call site outside tests. See `adaptive-controller.md` and `docs/atlas/DISCREPANCIES.md` D-11.
+> (Update, M5: that is still true of `lpq_adaptive`. The separate `lpq_online` queue applies updates
+> between queries; see [online-learning.md](online-learning.md). No benefit of learning is claimed.)
 
 **[profiling.md](profiling.md)** — why no hardware performance counters appear
 anywhere in this directory. WSL2 exposes no CPU PMU, so cycles, cache misses and

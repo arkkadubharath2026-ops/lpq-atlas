@@ -78,6 +78,8 @@ measures live.
 * The gain comes from queue engineering and a measured per-graph choice, **not** from a
   learned model. The trained queue-selection policy never beat radix on a held-out topology
   (see `docs/experiments/v2-results.md`).
-* Online learning is not active: `OnlineLearner::maybe_update` has no call site outside tests,
-  so no model weight changes in any run.
+* Online learning is not active in the demonstration: `OnlineLearner::maybe_update` has no call site
+  outside tests, so no model weight changes in any demonstration run. (Update, M5: a separate
+  `lpq_online` queue applies updates between queries through `lpq_run`; it is not part of this walkthrough,
+  and `lpq_adaptive` is unchanged. See `docs/experiments/online-learning.md`.)
 * It does not beat radix everywhere: A\* resolved to radix in the run above; Facebook and DIMACS COL are reported to as well in `docs/experiments/v2-results.md` (not re-measured here).

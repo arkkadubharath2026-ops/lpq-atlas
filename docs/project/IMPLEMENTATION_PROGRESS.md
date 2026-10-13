@@ -24,7 +24,8 @@ and `claude/sleepy-heisenberg-fhr3me` (docs) are unchanged.
 | M5-P1 D-19 training protocols (branch `completion/m5a-d19-protocols`) | PASS | **pending** |
 | M5-P2 D-20 order-check producer | not started | |
 | M5-D21 split guard and model provenance (branch `completion/m5c-d21-provenance`, on the D-19 branch) | PASS | **pending** |
-| M5 online learning (O1 to O9) | not started; design approved in principle | |
+| M5 online learning O1 to O4 (branch `completion/m5-online-o1-o4`, on the D-21 head) | PASS for the stated scope; **O4 checkpoint pending review** | **pending** |
+| M5 online learning O5 to O9 | not started | |
 
 ---
 
@@ -461,3 +462,50 @@ manifests is an owner decision.
 
 ### Owner decision needed
 1. Review `git diff 3865889..completion/m5c-d21-provenance`.
+
+---
+
+## Milestone M5, stages O1 to O4: measured learner status, event provenance, bounded learner, `lpq_online`
+Status: PASS for the stated scope; this is the mandatory O4 checkpoint. Stopped before O5.
+Date: 2026-10-13
+Base commit SHA: `5306e5b13baf2846ed06bc0265f516644268e38e` (head of the D-21 branch, which contains the D-19 commits and the approved M4 base)
+Working branch: `completion/m5-online-o1-o4` (local, no upstream; scratch worktree `m5`)
+Ancestry: `51a8b4c` (M4) is an ancestor; D-19 (`3865889`) and D-21 (`5306e5b`) are ancestors; D-20 (`f411ea2`) is **not** (it is independent of M5 and was not merged or cherry-picked). The old branch `completion/m5-online-learning` still points at `51a8b4c`, untouched.
+
+### What I found
+- The D-12 flag meant "a learner was attached". The learner's events carried empty features and named the accepted node as the "predicted" node, so even a wired learner could not have produced a correct example. [Verified in code]
+- A queue observer, however trivial, caps the candidate window at `ExtractionPolicy::window_size` (default 4). A pass-through learner therefore needs an observer whose policy leaves the window uncapped, or `lpq_online` could not equal `lpq_model`. [Verified in code]
+- `StaticNodeScorer` computes through `model.predict(x).score`; `LogisticPredictor::predict` takes `detail::dot(weights, x) + bias`, a double-accumulated sequential sum. The on-demand scorer uses the same function on the same vector, which is why bit-equality holds. [Verified by test]
+
+### What changed
+C++ (headers, all additive): `graph_features.hpp` (`fill_static_features`, the one definition of a node's static vector), `correction_engine.hpp` (`predicted_node/key`, `extracted_node/key`, `first_choice_was_minimum()`), `learned_priority_queue.hpp` (stamps them on every extraction path that predicts), `prediction_event.hpp` (`FeatureSource`; the accepted-node example; a fallback weighs more only when the first choice was worse), `controller_observer.hpp` (`make_versioned_event`, `LearningObserver`; `ControllerObserver` takes an optional feature source and otherwise behaves as before), `online_learner.hpp` (example counts, rollback to the exact previous parameters, halting, full accounting, `parameters_within`, `parameters_fnv1a64`), `online_node_scorer.hpp`, `online_session.hpp`, `models/model_report.hpp`, `adaptation/online_model_check.hpp`. Engine: `lpq_run.cpp` (the `learner` block for every `lpq` result, the derived `online_learning` flag, the `lpq_online` queue and its flags). Web: `types.ts`, `learner.ts`, `RunPanels.tsx`. Docs: `docs/experiments/online-learning.md` (new), `DISCREPANCIES.md` (D-12, D-02), `experiments/README.md`, `demo-walkthrough.md`, this log. Not changed: `lpq_benchmark.cpp`, the API, CI, dependencies, any manifest, any historical result, `lpq_adaptive` semantics.
+
+### Verification actually run (worktree `m5`; fresh `cmake --preset release`, then incremental)
+| command | exit | result |
+|---|---|---|
+| baseline, before any edit: `test_adaptation test_lpq test_verification test_models test_features test_differential test_trace` | 0 | 48 / 135 / 54 / 123 / 24 / 24 / 5 passed |
+| `cmake --build build/release` (everything), then `ctest -j 1` | 0, 0 | 0 warnings; **960 / 960 passed** (914 before; +46 new: 94 in `test_adaptation` against 48) |
+| mutation check: scorer returning `-score` | | the 3 `FrozenEquivalence` configurations fail; restored, they pass. A score scaled by 1.0001 fails the bit-equality test only (order is unchanged, so a search cannot see it, as expected) |
+| `python -m pytest -q` in `python/` | 0 | **407 passed, 2 skipped** (19 new in `test_online_engine.py`; skips: v2 result file, Monaco PBF) |
+| `npx tsc --noEmit`, `eslint` on the changed web files, `vitest run` (borrowed `node_modules`, symlink removed) | 0, 0, 0 | 47 passed (6 new) |
+| `o4_equivalence.py` (scratchpad `m5_evidence/`), Facebook, 1,000 queries, protocol C artifact `f5413deb…` with its report (graph and width checked: match) | 0 | `lpq_model`, `lpq_online` disabled and `lpq_online` periodic: **0 queries** where any search fact differs (result, counters, learned-queue metrics); all 3,000 runs exact against the reference; **804,305,590 comparisons in all three**; periodic applied 5,775 updates, changed the weights on 1,000 of 1,000 queries |
+| same, New York, 100 queries, artifact `eca2fb80…` | 0 | 0 differences; all exact; **177,732,303 comparisons in all three** |
+| `lpq_benchmark` after the rebuild, 1 rep: Facebook `lpq` / `lpq_model`; New York `lpq` / `lpq_model` | 0 ×4 | **798,334,612 / 804,305,590 / 177,580,603 / 177,732,303**, every record exact: the historical counts, unchanged |
+| `lpq_benchmark --pq lpq_adaptive --adaptive`, first 100 Facebook queries: old binary (M5 baseline build) vs new | 0, 0 | 78,105,685 comparisons, 361,997 pops, both |
+
+### Acceptance (stage by stage)
+- **O1.** Met: the `learner` block exists; `online_learning` is derived from it; `lpq_adaptive --adaptive-learning` now reads attached / events recorded / 0 updates / false; the badge has separate states; legacy results are not trusted. Playwright was not run.
+- **O2.** Met: first choice, extracted node and keys on every predicting path (modular and direct); keys decide the label; two examples on a wrong first choice; none when no prediction was made; features equal the scorer's. `lpq_adaptive` keeps its original events.
+- **O3.** Met: on-demand scorer, bit-equal when frozen; bounded ring buffer and batch; exact accounting; rollback restores the previous parameters exactly; halt after `max_rollbacks`; the search continues. Not done: a cap on total work per query beyond the existing `max_batch` and buffer capacity.
+- **O4.** Met: `lpq_online`, explicit artifact, report checks (graph, width, static columns, finiteness, container), recorded overrides, between-query updates, frozen equivalence at unit and engine level, historical counts preserved, differential correctness (50 random graphs per configuration, explicit seeds).
+
+### Not verified, not done
+- Tests were written alongside the code, not red-first; the mutation checks above are the evidence that they can fail.
+- No sanitizer, GCC/Clang matrix or Windows run; no cross-host determinism check (equality is asserted within one binary and host).
+- The API suite and Playwright were not re-run (no API source changed); the API and UI do not expose `lpq_online` (O7).
+- `lpq_benchmark` has no `lpq_online` or per-query snapshot/restore (O6); the CLI equivalence uses `lpq_run`, one process per query. No in-search updates (O5; `--online-apply in_search` is refused).
+- The engine records FNV-1a of the artifact, not SHA-256. Session persistence across `lpq_run` invocations does not exist: each invocation is one query. D-15 (model artifacts embed no provenance) stays deferred; the report supplies it.
+- No timing, no performance claim, and no measurement of whether any update improves the model or the search.
+
+### Owner decision needed
+1. Review `git diff 5306e5b..completion/m5-online-o1-o4` and approve proceeding to O5.
