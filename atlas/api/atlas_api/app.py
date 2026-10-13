@@ -35,6 +35,7 @@ from atlas_api.jobs import (
     Job,
     JobFailure,
     JobManager,
+    scrub_host_paths,
 )
 from atlas_api.logging_setup import configure_logging
 from atlas_api.registry import (
@@ -54,6 +55,9 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi import Path as ApiPath
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from lpq_tools.data.acquire import AcquisitionError
+from lpq_tools.data.derive import DeriveError
+from lpq_tools.data.osm import OsmExtractionError
 from lpq_tools.data.pipeline import PipelineError, prepare_dataset
 from lpq_tools.data.sources import load_dataset_config
 
@@ -193,7 +197,9 @@ def prepare(dataset_id: str = ApiPath(pattern=r"^[a-z0-9_]{1,64}$")) -> dict[str
 
         try:
             r = prepare_dataset(config, settings.paths, progress=progress)
-        except (PipelineError, OSError, ValueError) as e:
+        except (
+            PipelineError, AcquisitionError, DeriveError, OsmExtractionError, OSError, ValueError
+        ) as e:
             raise JobFailure("preparation", str(e).split("\n")[0][:300]) from e
         return {"dataset_id": dataset_id, "nodes": r.header.node_count, "converted": r.converted}
 
@@ -259,7 +265,9 @@ def model_node_scores(
         check=False,
     )
     if proc.returncode != 0:
-        raise _bad(proc.stderr.strip().removeprefix("error: ")[:200] or "scoring failed")
+        raise _bad(
+            scrub_host_paths(proc.stderr.strip().removeprefix("error: "))[:200] or "scoring failed"
+        )
     out: dict[str, dict[str, float]] = {}
     for line in proc.stdout.splitlines():
         if line.startswith("node."):

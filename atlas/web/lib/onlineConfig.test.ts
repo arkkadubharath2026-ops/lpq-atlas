@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CONFIG, normaliseConfig } from "../components/RunConfigForm";
+import { DEFAULT_CONFIG, modelUnavailableNotice, normaliseConfig } from "../components/RunConfigForm";
 
 const online = { ...DEFAULT_CONFIG, queue: "lpq_online", model_id: "m1" };
 
@@ -29,5 +29,24 @@ describe("lpq_online request normalisation", () => {
   it("defaults every override to off", () => {
     const c = normaliseConfig(online);
     expect([c.allow_graph_mismatch, c.allow_width_mismatch, c.accept_no_provenance]).toEqual([false, false, false]);
+  });
+});
+
+describe("model-unavailable notice (spec section 35)", () => {
+  it("explains why lpq_model cannot run when no model matches the dataset", () => {
+    const n = modelUnavailableNotice("lpq_model", undefined, 0, "osm_monaco");
+    expect(n).toContain("osm_monaco");
+    expect(n).toContain("lpq_model");
+  });
+  it("points a warm-started lpq_online at the cold start or the recorded override", () => {
+    const n = modelUnavailableNotice("lpq_online", "warm", 0, "osm_monaco");
+    expect(n).toMatch(/cold start/);
+    expect(n).toMatch(/override/);
+  });
+  it("says nothing when a model exists, for a cold start, or for queues that need no model", () => {
+    expect(modelUnavailableNotice("lpq_model", undefined, 1, "d")).toBeNull();
+    expect(modelUnavailableNotice("lpq_online", "cold", 0, "d")).toBeNull();
+    expect(modelUnavailableNotice("lpq", undefined, 0, "d")).toBeNull();
+    expect(modelUnavailableNotice("binary_heap", undefined, 0, "d")).toBeNull();
   });
 });

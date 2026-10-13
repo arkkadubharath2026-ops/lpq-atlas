@@ -48,6 +48,27 @@ export function normaliseConfig(c: EngineConfig): EngineConfig {
   };
 }
 
+/**
+ * Why a queue that needs a trained model cannot run here, or null when it can (spec section 35,
+ * "model unavailable"). An empty model list with no explanation looks like a loading glitch.
+ */
+export function modelUnavailableNotice(
+  queue: string,
+  onlineStart: string | undefined,
+  compatibleCount: number,
+  datasetId: string | null,
+): string | null {
+  if (compatibleCount > 0) return null;
+  const where = datasetId ?? "this dataset";
+  if (queue === "lpq_model") {
+    return `No trained model is registered for ${where}, so lpq_model has nothing to load. Train and export one for this dataset, or run the lpq queue (constant scorer, no model).`;
+  }
+  if (queue === "lpq_online" && onlineStart !== "cold") {
+    return `No trained model is registered for ${where}. Choose a cold start (zero weights), or tick the override that accepts a model trained on another graph.`;
+  }
+  return null;
+}
+
 interface Props {
   value: EngineConfig;
   onChange: (c: EngineConfig) => void;
@@ -66,8 +87,14 @@ export function RunConfigForm({ value, onChange, dataset, queues, models, idPref
     (m) => m.training_dataset === dataset?.id || (value.queue === "lpq_online" && value.allow_graph_mismatch),
   );
   const heuristics = dataset?.astar_heuristics ?? ["zero"];
+  const noModel = modelUnavailableNotice(value.queue, value.online_start, compatibleModels.length, dataset?.id ?? null);
   return (
     <div className="stack">
+      {noModel ? (
+        <div className="notice warn small" role="status" data-testid="no-model-note">
+          {noModel}
+        </div>
+      ) : null}
       <label className="field" htmlFor={`${idPrefix}-alg`}>
         Algorithm
         <select id={`${idPrefix}-alg`} value={value.algorithm} disabled={disabled}

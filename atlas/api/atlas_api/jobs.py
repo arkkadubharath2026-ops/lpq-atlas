@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -35,6 +37,37 @@ TERMINAL = {COMPLETED, FAILED, CANCELLED}
 
 class JobCancelled(Exception):
     pass
+
+
+# An absolute POSIX path with at least two directories: what an engine's own stderr or an argv echo
+# would put in a message. The lookbehind keeps URLs ("https://host/a/b") and relative paths intact.
+_ABS_PATH = re.compile(r"(?<![\w:/.>\-])/(?:[\w.@+\-]+/){2,}[\w.@+\-]*")
+
+
+def scrub_host_paths(text: str, roots: Iterable[tuple[Path, str]] | None = None) -> str:
+    """Hides where the server lives in a message that is shown to a client (spec section 36).
+
+    Known directories (the repository, the work directory, the temp directory, the home directory)
+    become short tokens, longest first, then any other absolute path becomes ``<path>``. This is
+    display hygiene for error text, not a security boundary: callers still must not put request
+    data or file contents into messages.
+    """
+    if roots is None:
+        # Imported here because tests build a JobManager without any settings.
+        from atlas_api.config import get_settings
+
+        s = get_settings()
+        roots = (
+            (s.work_dir, "<work>"),
+            (s.root, "<repo>"),
+            (Path(tempfile.gettempdir()), "<tmp>"),
+            (Path.home(), "<home>"),
+        )
+    for path, token in sorted(roots, key=lambda r: -len(str(r[0]))):
+        prefix = str(path)
+        if len(prefix) > 1:
+            text = text.replace(prefix, token)
+    return _ABS_PATH.sub("<path>", text)
 
 
 class JobFailure(Exception):
@@ -177,7 +210,7 @@ class JobManager:
         except JobCancelled:
             self.set_state(job, CANCELLED)
         except JobFailure as e:
-            job.error = {"category": e.category, "message": e.message}
+            job.error = {"category": e.category, "message": scrub_host_paths(e.message)}
             self.set_state(job, FAILED)
         except Exception:  # an unexpected failure must still end the job
             log.exception("job crashed", extra={"job_id": job.id})

@@ -750,7 +750,9 @@ def execute_benchmark(
     code = run_engine(job, manager, argv, settings.root, settings.benchmark_timeout_s)
     manager.set_state(job, FINALIZING)
     if code != 0 or not out.exists():
-        tail = (job.dir / "engine.log").read_text(encoding="utf-8", errors="replace")[-600:]
+        log_text = (job.dir / "engine.log").read_text(encoding="utf-8", errors="replace")
+        # The first line records the argv (host paths) for the job directory; it is not for clients.
+        tail = "\n".join(ln for ln in log_text.splitlines() if not ln.startswith("argv: "))
         reason = "a correctness check failed" if code == 2 else f"exit code {code}"
         raise JobFailure("engine", f"lpq_benchmark failed ({reason}): {tail.strip()[-300:]}")
     return {
