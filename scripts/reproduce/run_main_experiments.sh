@@ -129,6 +129,33 @@ fi
 require_complete_results "$ablation_out" binary_heap radix_heap lpq lpq_model
 
 # -----------------------------------------------------------------------------
+say "running the order check (the same ladder, lpq_model first)"
+# -----------------------------------------------------------------------------
+#
+# The ablation measures lpq_model LAST, so matrix position and treatment are
+# confounded. This runs the identical ladder in the opposite order
+# (configs/experiments/dimacs_ny_order_check_v1.yaml differs from the ablation
+# only in its name and queue order; a test enforces that) so the two can be set
+# side by side. generate_figures.sh draws the order-reversed paired scatter from
+# its output and refuses to run without it.
+#
+# This is a NEW MEASUREMENT on this host. The reversed-order run behind the
+# historical 45% figure in docs/experiments/ablation-waterfall.md was never
+# committed and cannot be recovered; nothing here reconstructs it.
+order_out="${RESULTS_DIR}/dimacs_ny_order_check_v1.json"
+if [ -f "$order_out" ]; then
+    mv "$order_out" "${order_out}.$(date +%Y%m%d%H%M%S).bak"
+    say "moved an existing results file aside; raw results are never overwritten"
+fi
+
+"$BENCHMARK" --experiment "${REPO_ROOT}/configs/experiments/dimacs_ny_order_check_v1.yaml" \
+    --model "${MODELS_DIR}/exported/dimacs_ny_static.lpqmodel" \
+    --output "$order_out" ||
+    die "the order-check run failed"
+
+require_complete_results "$order_out" binary_heap radix_heap lpq lpq_model
+
+# -----------------------------------------------------------------------------
 say "checking the comparison counts against the recorded ones"
 # -----------------------------------------------------------------------------
 #
@@ -136,8 +163,10 @@ say "checking the comparison counts against the recorded ones"
 # they are exact, deterministic, and reproduce to the unit on any host. If these
 # differ, the algorithm or the query set changed, and every conclusion in
 # docs/experiments/ built on them needs revisiting -- which is worth knowing
-# immediately rather than after a figure is drawn.
-"$PYTHON" - "$(native_path "$ablation_out")" <<'PYEOF' || die "comparison counts do not match the recorded findings"
+# immediately rather than after a figure is drawn. They also do not depend on
+# the matrix order, so the order-check run must match the same numbers.
+check_counts() {
+"$PYTHON" - "$(native_path "$1")" <<'PYEOF'
 import sys
 from lpq_tools.evaluation.results import read_results
 
@@ -171,6 +200,12 @@ if not ok:
     )
 sys.exit(0 if ok else 1)
 PYEOF
+}
+
+printf "  %s\n" "ablation (lpq_model last)"
+check_counts "$ablation_out" || die "comparison counts do not match the recorded findings"
+printf "  %s\n" "order check (lpq_model first)"
+check_counts "$order_out" || die "the order-check comparison counts do not match the recorded findings"
 
 say "run_main_experiments: complete"
 say "results in ${RESULTS_DIR}"
