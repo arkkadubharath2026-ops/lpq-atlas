@@ -1,8 +1,23 @@
 # Online learning: what is wired, what is verified, what is not claimed
 
-Status (M5, stages O1 to O4, local branch `completion/m5-online-o1-o4`): the mechanism exists for one
-queue, `lpq_online`, through `lpq_run`. **No result in this document says the learner makes anything
+Status (M5, core path complete; local branch `completion/m5-online-o1-o4`): `lpq_online` runs through
+`lpq_run`, `lpq_benchmark`, the API and the web UI. **No result in this document says the learner makes anything
 better.** Whether an update improves a model, or a search, has not been measured.
+
+| Feature | State |
+|---|---|
+| Measured learner status in every `lpq` result; five UI states; older results not trusted | implemented, tested |
+| Event contract v2 (first choice, extracted node, key-based label, two examples on a miss) | implemented, tested |
+| Bounded learner: ring buffer, exact accounting, rollback, halt | implemented, tested |
+| `lpq_online` in `lpq_run` with explicit, vetted model; between-query updates | implemented, tested (C++ differential tests; real engine on demo, Facebook, New York) |
+| `lpq_online` in `lpq_benchmark` with explicit `--evaluation online_session` | implemented, tested |
+| `lpq_online` in the API (single runs and comparisons) and the run form | implemented, tested (API and unit tests); not driven in a browser |
+| In-search updates (O5) | **deferred**: not required by any core feature, and refused with a clear message |
+| API benchmarks of `lpq_online` | **deferred**: refused, because they cannot state the evaluation mode |
+| Playwright coverage of the new UI | **not run** |
+| Approximate mode for `lpq_online` in `lpq_benchmark` | **not supported** (rows are reported unsupported, as for `lpq_model`) |
+| Sanitizer, GCC/Clang and Windows runs; cross-host determinism | **not run** |
+| Any measurement that updates help; any timing claim | **none made** |
 
 ## What `lpq_online` is
 
@@ -76,8 +91,38 @@ was attached"; the web page shows those as "learner attached (older result; lear
 * Poisoned (NaN, infinite, huge) parameters give exact answers; a halted learner leaves the search and the model
   untouched.
 
+## Using it
+
+```bash
+# one query, one round of updates after the search
+lpq_run --dataset datasets/processed/snap_facebook.lpqgraph --source 1622 --target 1639 \
+    --pq lpq_online --online-model models/exported/snap_facebook_static.lpqmodel \
+    --online-model-report models/exported/snap_facebook_static.report.json --repetitions 0
+
+# a stream of queries: the model is carried from one query to the next, in manifest order
+lpq_benchmark --dataset datasets/processed/snap_facebook.lpqgraph \
+    --queries-file experiments/manifests/snap_facebook_queries.yaml \
+    --pq lpq_online --evaluation online_session --model models/exported/snap_facebook_static.lpqmodel \
+    --online-model-report models/exported/snap_facebook_static.report.json
+```
+
+`--online-update-mode disabled` is the frozen control (records events, applies none): its search is the
+`lpq_model` search, query for query. In `lpq_benchmark` every repetition of a query runs on the state the query
+started from (updates are applied after the last repetition, and its cost is `ml.online_update_ns`, outside every
+timed region), so repetitions are comparable and the trajectory does not depend on the repetition count or on
+`--interleave`; each record's `learner` block carries the hashes of the weights before and after. Timings of an
+adaptive row are still not comparable with a frozen row's unless the query order and the session start are the
+same, which `--evaluation online_session` makes explicit but cannot enforce.
+
+Through the API a run takes `queue: "lpq_online"`, an explicit `model_id` (or `online_start: "cold"`),
+`online_update_mode`, and three override flags, all off by default (`allow_graph_mismatch`,
+`allow_width_mismatch`, `accept_no_provenance`). The model must have a report next to it unless
+`accept_no_provenance` is set; the result records the artifact's SHA-256 and every override used. In the run form,
+choose *LPQ + online learner*; the result panel shows the starting model, how it was vetted, and the learner badge.
+
 ## Not done, not claimed
 
-In-search updates (O5); the benchmark's per-query snapshot/restore (O6); the API and UI for `lpq_online` (O7);
+In-search updates (O5, deferred); a snapshot/restore for in-search updates (not needed for between-query updates);
+API benchmarks of `lpq_online` (deferred);
 any measurement of whether updates help; timing of any kind; D-15 (model artifacts embed no provenance of their
 own; the report carries it and the engine records what it read).

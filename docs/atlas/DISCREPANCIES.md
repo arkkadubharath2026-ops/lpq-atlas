@@ -141,6 +141,10 @@ entries true.
   * *O2 to O4, mechanism:* a new `lpq_online` queue scores pushes with the live model, records verifier-labelled
     events (event contract version 2) and applies them **between queries** (`OnlineSession::end_query`, the first
     non-test call site of `OnlineLearner::flush`). `lpq_adaptive` and its historical results are unchanged.
+  * *O6, O7 (core path, same branch):* `lpq_benchmark` runs `lpq_online` only with an explicit
+    `--evaluation online_session`, and the API and run form expose it with an explicit model and recorded overrides.
+    Still **not done**: in-search updates (O5, deferred as not required), API benchmarks of `lpq_online` (refused),
+    Playwright coverage of the new UI (not run).
   * *Not claimed:* that an update improves anything. Nothing measures that yet, and the result says so.
   * *Still open:* v1 documents that say the learner ran inside a search (D-11) are annotated, not rewritten.
 

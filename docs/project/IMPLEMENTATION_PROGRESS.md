@@ -24,8 +24,9 @@ and `claude/sleepy-heisenberg-fhr3me` (docs) are unchanged.
 | M5-P1 D-19 training protocols (branch `completion/m5a-d19-protocols`) | PASS | **pending** |
 | M5-P2 D-20 order-check producer | not started | |
 | M5-D21 split guard and model provenance (branch `completion/m5c-d21-provenance`, on the D-19 branch) | PASS | **pending** |
-| M5 online learning O1 to O4 (branch `completion/m5-online-o1-o4`, on the D-21 head) | PASS for the stated scope; **O4 checkpoint pending review** | **pending** |
-| M5 online learning O5 to O9 | not started | |
+| M5 online learning O1 to O4 (branch `completion/m5-online-o1-o4`, on the D-21 head) | PASS; O4 checkpoint approved | approved |
+| M5 online learning O5 (in-search updates) | **deferred** (not required by any core feature) | |
+| M5 online learning O6 to O9 (benchmark, API/UI, regression, docs) | core path done; **pending review** | **pending** |
 
 ---
 
@@ -509,3 +510,33 @@ C++ (headers, all additive): `graph_features.hpp` (`fill_static_features`, the o
 
 ### Owner decision needed
 1. Review `git diff 5306e5b..completion/m5-online-o1-o4` and approve proceeding to O5.
+
+---
+
+## Milestone M5, stages O5 to O9: core end-to-end path (cost-conscious completion)
+Status: core path complete; remaining gaps listed below
+Date: 2026-10-13
+Base: `6572f63` (the approved O4 head), same branch `completion/m5-online-o1-o4`, local only.
+
+### Scope decisions
+- **O5 (in-search updates): deferred.** No core feature depends on them; between-query updates are the agreed default. `--online-apply in_search` is still refused with a clear message.
+- **O6 (benchmark):** only what `lpq_benchmark` needs to run `lpq_online` correctly. No snapshot/restore was needed: the model is constant during a query, the learner is detached after the validation run, and the recorded events are applied after the last repetition, so every repetition runs on the state the query started from. `--evaluation online_session` is required for any run containing `lpq_online` and refused otherwise.
+- **O7 (API/UI):** single runs and side-by-side comparisons; **API benchmarks refuse `lpq_online`** (they cannot state the evaluation mode).
+- D-15 was not expanded: the report supplies provenance and the engine records what it read.
+
+### What changed
+`result_record.hpp` (`LearnerRecord`, written only for `lpq_online` rows; other records unchanged), `experiment_manifest.hpp` (queue name), `lpq_benchmark.cpp` (`lpq_online` row sessions, vetting, flags), `atlas/api` (`schemas.py`, `engine.py`, `registry.py`: explicit model, validated options, the artifact's SHA-256 recorded by the caller, three explicit overrides), web (`types.ts`, `format.ts`, `RunConfigForm.tsx`, `RunPanels.tsx`, `explore`, `benchmarks`), tests (`test_online_benchmark.py`, `atlas/api/tests/test_online_api.py`, `lib/onlineConfig.test.ts`), `docs/experiments/online-learning.md`, `DISCREPANCIES.md` D-12, this log.
+
+### Verification actually run (worktree `m5`)
+| command | exit | result |
+|---|---|---|
+| `cmake --build build/release` (all), `ctest -j 1` | 0, 0 | 0 warnings; **960 / 960** |
+| `python -m pytest -q` in `python/` | 0 | **412 passed, 2 skipped** (5 new benchmark tests) |
+| `python -m pytest -q` in `atlas/api/` | 0 | **113 passed, 1 skipped** (19 new) |
+| `tsc --noEmit`, `eslint` (0 errors), `vitest run` | 0, 0, 0 | 52 passed (5 new) |
+| `lpq_benchmark` after the rebuild: Facebook `lpq` / `lpq_model`, New York `lpq_model`, 1 rep | 0 ×3 | **798,334,612 / 804,305,590 / 177,732,303**, every record exact: the historical counts |
+| `lpq_benchmark --pq lpq_online --evaluation online_session --online-update-mode disabled`, Facebook, 1,000 queries, protocol C artifact with its report (graph and width match) | 0 | **804,305,590** comparisons, every record exact: equal to `lpq_model`; weights hash constant |
+| the same with `periodic` (updates between queries) | 0 | 1,000 records, every one exact; the hash chain is unbroken (each query starts from the previous one's end state); 5,773 updates; **802,421,646** comparisons. This is a raw observation of one pass over one query stream on one dataset and one model, in comparisons only, **not a claim**: it is not a timing, it is above the 798,334,612 of the constant-scorer control, and nothing here separates learning from the order of the queries |
+
+### Remaining gaps
+In-search updates (deferred). API benchmarks of `lpq_online` (refused). Approximate mode for `lpq_online` in `lpq_benchmark` (unsupported row). Playwright for the new UI (not run; the unit and type checks are). Sanitizer, GCC/Clang and Windows runs; cross-host determinism. A fixed per-query work cap beyond `max_batch` and the buffer capacity. No timing and no performance claim.
