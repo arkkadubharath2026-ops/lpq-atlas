@@ -161,6 +161,12 @@ struct ResultRecord {
     std::optional<double> approximation_ratio;
     /// Whether the returned result matched the reference exactly.
     std::optional<bool> exact_match;
+    /// The approximation slack this record was measured under (D-17): a path may cost up
+    /// to (1 + epsilon) times the optimum. Present only for `mode == "approximate"`;
+    /// absent otherwise, so exact and adaptive records serialise exactly as before and
+    /// older files, which lack the key, stay readable. Written inside `correctness`,
+    /// beside the ratio it bounds.
+    std::optional<double> epsilon;
 
     bool target_reachable = false;
     std::string termination;
@@ -385,6 +391,9 @@ inline void write_record(JsonWriter& w, const ResultRecord& r) {
         w.key_value("exact_match", *r.exact_match);
     } else {
         w.key_null("exact_match");
+    }
+    if (r.epsilon) {
+        w.key_value("epsilon", *r.epsilon);
     }
     w.key_value("target_reachable", r.target_reachable);
     w.key_value("termination", r.termination);

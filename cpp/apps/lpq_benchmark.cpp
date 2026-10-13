@@ -830,6 +830,9 @@ ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query&
     rec.algorithm     = o.algorithm == "astar" ? ("astar:" + o.heuristic) : o.algorithm;
     rec.pq            = pq_name;
     rec.mode          = o.mode;
+    if (o.mode == "approximate") {
+        rec.epsilon = o.epsilon;
+    }
     rec.graph_nodes   = meta.node_count;
     rec.graph_edges   = meta.edge_count;
     rec.source        = q.source;
@@ -1621,6 +1624,9 @@ int main(int argc, char** argv) {
                 rec.pq                 = name;
                 rec.algorithm          = run.algorithm;
                 rec.mode               = run.mode;
+                if (run.mode == "approximate") {
+                    rec.epsilon = o.epsilon;
+                }
                 rec.unsupported_reason =
                     name + " has no approximation mechanism; running it under --mode "
                            "approximate would produce exact results carrying an "

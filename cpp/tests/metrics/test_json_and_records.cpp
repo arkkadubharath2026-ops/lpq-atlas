@@ -226,6 +226,70 @@ TEST(ResultRecord, SerialisesWithAllRequiredSchemaFields) {
     EXPECT_EQ(depth, 0) << "unbalanced JSON";
 }
 
+namespace {
+lpq::ResultRecord minimal_record(const std::string& mode) {
+    lpq::ResultRecord r;
+    r.experiment_id = "test_v1";
+    r.timestamp     = lpq::iso8601_now();
+    r.dataset       = "fixture:diamond";
+    r.algorithm     = "dijkstra";
+    r.pq            = "lpq";
+    r.mode          = mode;
+    r.source        = 0;
+    r.target        = 3;
+    r.hardware      = lpq::collect_hardware_info();
+    r.timing.samples_ns = {100, 110, 105};
+    r.timing.summary    = lpq::summarise_ns(r.timing.samples_ns);
+    r.path_cost         = 3.0;
+    r.optimal_cost      = 3.0;
+    r.approximation_ratio = 1.0;
+    r.exact_match       = true;
+    r.termination       = "target_reached";
+    return r;
+}
+
+std::string serialise(const lpq::ResultRecord& r) {
+    std::ostringstream os;
+    JsonWriter         w(os, true);
+    lpq::write_record(w, r);
+    return os.str();
+}
+}  // namespace
+
+// D-17: an approximate-mode record states the slack it was run and checked against.
+TEST(ResultRecord, ApproximateRecordsCarryTheConfiguredEpsilonExactly) {
+    lpq::ResultRecord r = minimal_record("approximate");
+    r.epsilon           = 0.1;
+    const std::string s = serialise(r);
+
+    // The key sits inside the correctness block, beside the ratio it bounds, and the
+    // double round-trips (the writer emits the shortest representation that does).
+    const auto correctness = s.find("\"correctness\"");
+    const auto epsilon     = s.find("\"epsilon\": 0.1");
+    ASSERT_NE(correctness, std::string::npos);
+    ASSERT_NE(epsilon, std::string::npos) << s;
+    EXPECT_GT(epsilon, correctness);
+}
+
+// Backward compatibility: a record with no epsilon serialises exactly as it did before the
+// field existed -- no key at all, not a null and not a zero that a reader could mistake for
+// "exact mode ran with no slack configured".
+TEST(ResultRecord, RecordsWithoutAnEpsilonSerialiseExactlyAsBefore) {
+    const lpq::ResultRecord exact = minimal_record("exact");
+    EXPECT_EQ(serialise(exact).find("epsilon"), std::string::npos);
+
+    lpq::ResultRecord with = exact;
+    with.epsilon           = 0.25;
+    std::string without_key = serialise(with);
+    // Removing the one added line yields the old bytes.
+    const auto at = without_key.find("\"epsilon\"");
+    ASSERT_NE(at, std::string::npos);
+    const auto line_start = without_key.rfind('\n', at);
+    const auto line_end   = without_key.find('\n', at);
+    without_key.erase(line_start, line_end - line_start);
+    EXPECT_EQ(without_key, serialise(exact));
+}
+
 TEST(ResultRecord, UnmeasuredHardwareCountersAreNullNotZero) {
     // The distinction that makes the record honest: a reader must be able to
     // tell "no PMU on this host" from "measured zero cache misses".
