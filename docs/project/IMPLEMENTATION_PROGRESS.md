@@ -354,47 +354,52 @@ the retraction of the 34% claim is unchanged (D-11).
 
 ---
 
-## Milestone M5-P1: D-19, the two training protocols (documentation and re-measurement)
-Status: PASS
+## Milestone M5-P1: D-19, the training protocols (documentation, one tested generator, re-measurement)
+Status: PASS (revised after owner review; first submitted with two protocols, then extended to three)
 Date: 2026-10-13
 Base commit SHA: `51a8b4cdc7b1e4d486ba40497d6abcaa54ca4e0c` (the accepted M4 commit)
 Working branch: `completion/m5a-d19-protocols` (local, no upstream; scratch worktree `m5a`)
 
 ### What I found
-- Training on the benchmark queries (seed 42) reproduces every figure in `static-scorer-training.md` exactly,
-  for both datasets; the seed-917 pipeline gives the other numbers. D-19 is therefore **verified**: two protocols,
-  not a defect. [Verified now]
-- The Facebook counts reproduce too: control 798,334,612, pre-correction model 803,764,660 (pops 3,534,412 and
-  3,531,956). New, disjoint-protocol model: **804,286,113** comparisons (+0.745%), pops 3,532,317. New York:
-  177,580,603 / 177,732,559 (pre-correction) / 177,732,303 (disjoint, equals the ablation count). Every record in every
-  run was exact against the reference. [Verified now]
-- The seed-917 and seed-42 manifests share no (source, target) pair, but `snap_facebook` shares 45 source nodes
-  (`dimacs_ny`: 0). The effect was not measured; the pair-versus-source question is left to the owner. [Verified now]
-- `findings.md` mixes protocols in one table (Facebook pre-correction, New York disjoint). [Verified now]
+- Training on the benchmark queries (protocol A, seed 42) reproduces every figure in
+  `static-scorer-training.md` exactly, for both datasets, and the Facebook comparison counts too (798,334,612
+  control, 803,764,660 model). D-19 is therefore verified. [Verified now]
+- Protocol B (seed 917, no shared pair) gives Facebook 0.8037 / 23.08x and 804,286,113 comparisons. It shares
+  45 source nodes with the benchmark, and the collector labels from a full single-source search, so B is not
+  source-disjoint. [Verified now]
+- Owner decision: source-level disjointness. Protocol C, a source-disjoint Facebook training manifest, was
+  generated: Facebook held-out AUC 0.7985, lift 22.91x, **804,305,590** comparisons (+0.748% over the same
+  control). New York: B shares no source with the 100-query and `first30` manifests, so B is source-disjoint
+  there; it shares 2 sources with the 1,000-query manifest, which no number here uses. [Verified now]
+- `findings.md` mixes protocols in one table (Facebook A, New York B). [Verified now]
 
-### What changed (documentation only)
-`docs/experiments/static-scorer-training.md` (revision notice, both protocols side by side, a Protocols section with
-configuration, split, seeds, library versions and artifact hashes, end-to-end table with both models, reproduction
-note), `experiments/paper/findings.md`, `docs/experiments/README.md`, `docs/atlas/ABSTRACT.md`,
-`docs/project/PROJECT_STATUS.md`, `docs/project/PROJECT_OVERVIEW.md` (pointers; no original number changed),
-`docs/atlas/DISCREPANCIES.md` (D-19 rewritten as verified), this log. No code, config, script, CI or dependency change.
+### What changed
+Code (new, tested): `python/lpq_tools/data/queries.py` (`exclude_sources` option, `selection` field,
+`notes` argument; default stream and default output bytes unchanged, pinned by a test),
+`scripts/data/generate_training_queries.py`, 12 new tests (`test_queries.py`, `test_training_query_script.py`,
+all red before the change, 33 green after). Data: `experiments/manifests/snap_facebook_training_queries_source_disjoint.yaml`.
+Documentation: `static-scorer-training.md` (three protocols, tables, commands, hashes), `findings.md`,
+`docs/experiments/README.md`, `ABSTRACT.md`, `PROJECT_STATUS.md`, `PROJECT_OVERVIEW.md`, `DISCREPANCIES.md` (D-19),
+this log. The benchmark manifests, the protocol B manifest, `run_main_experiments.sh`, C++, CI and dependencies are
+unchanged.
 
-### Verification actually run (worktree `m5a`, binaries copied from `m4`, byte-identical; no C++ change since M3)
+### Verification actually run (worktree `m5a`; binaries copied from `m4`, byte-identical, no C++ change since M3)
 | command | exit | result |
 |---|---|---|
-| `lpq_benchmark --dataset datasets/processed/snap_facebook.lpqgraph --queries-file experiments/manifests/snap_facebook_queries.yaml --pq lpq --repetitions 1 --warmup 0` | 0 | 1000 records |
-| same, `--pq lpq_model --model models/exported/snap_facebook_static.lpqmodel` (disjoint) | 0 | 1000 records |
-| same, `--model models/training/snap_facebook_precorrection.lpqmodel` | 0 | 1000 records |
-| the three equivalents on `dimacs_ny` with `dimacs_ny_queries_100.yaml` | 0, 0, 0 | 100 records each |
-| `lpq_collect` + `train_from_file(seed=20260923)` on the benchmark manifests (both datasets) | 0 | figures above |
-Pair and source overlap between manifests computed with `lpq_tools.data.queries.read_manifest`. Evidence files are in
-the scratchpad `m5a_evidence/` (outside the repository); artifact hashes are in the document. Python 3.13.16,
-scikit-learn 1.6.1, numpy 2.2.4, scipy 1.15.2.
+| `lpq_benchmark ... snap_facebook ... --pq lpq` (control), twice | 0, 0 | 798,334,612 both times |
+| `... --pq lpq_model --model` A / B / C | 0, 0, 0 | 803,764,660 / 804,286,113 / 804,305,590 |
+| the three equivalents on `dimacs_ny` (100-query manifest) | 0, 0, 0 | 177,580,603 / 177,732,559 / 177,732,303 |
+| `generate_training_queries.py --benchmark ... --seed 917 --count 200` | 0 | 887 excluded, 3,152 allowed, 194 distinct sources |
+| `lpq_collect` on the C manifest, then `train_from_file(seed=20260923)` | 0, 0 | recollect and retrain byte-identical |
+| `python -m pytest -q` in `python/` | 0 | **353 passed, 2 skipped** (v2 result file absent; the Monaco extraction test skips because this worktree has no PBF) |
+Every benchmark record was exact against the reference. Overlap checks (pairs and sources, all Facebook and New York
+manifests) are in the scratchpad `m5a_evidence/`. Python 3.13.16, scikit-learn 1.6.1, numpy 2.2.4, scipy 1.15.2.
 
 ### Not done, by design
 No timing is reported or claimed. The `snap_facebook` wall-clock effect remains unmeasured. Model files are untracked.
+`run_main_experiments.sh` still uses the B manifest for Facebook.
 
 ### Owner decision needed
 1. Review `git diff 51a8b4c..completion/m5a-d19-protocols`.
-2. Decide whether ESD.md section 30 disjointness is at pair level (current) or source level (would change the Facebook
-   training set).
+2. Switch `run_main_experiments.sh` to the C manifest for `snap_facebook`? Regenerate a source-disjoint 1,000-query
+   New York separation?

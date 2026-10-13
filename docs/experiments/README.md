@@ -42,8 +42,8 @@ slack is provably inert.
 **[static-scorer-training.md](static-scorer-training.md)** — the first
 measurement with a model in it. The static features rank their target well on a
 social graph (held-out AUC 0.79, 22x the precision of a random ranker; these are the
-pre-correction-protocol figures, 0.80 and 23x under the disjoint protocol, see the revision
-notice in that document) and
+pre-correction-protocol figures; 0.80 and 23x under the pair-disjoint and source-disjoint
+protocols, see the revision notice in that document) and
 barely above chance on a road network (0.53, 1.12x). The model does slightly
 *more* comparison work on both — which, on this project's own evidence, says
 nothing about speed.

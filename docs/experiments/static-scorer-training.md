@@ -1,13 +1,21 @@
 # Training the static node scorer: it predicts well and still does not help
 
 > **REVISION NOTICE (2026-10-13, milestone M5-P1; the text below is retained, labelled where it
-> applies to one protocol).** This document's figures were produced by training on the *benchmark*
-> queries (seed 42), which is the pre-correction protocol: `ablation-waterfall.md` records that the
-> training labels were moved to a separate query set (seed 917) after that was found to violate
-> ESD.md section 30, but this document was not updated. Both protocols were re-run for this note
-> and are shown side by side below, with their configuration and artifact hashes
-> ([Protocols](#protocols-compared)). The original numbers reproduce exactly; nothing here is
-> overwritten. Classification quality (how well the model ranks nodes) and end-to-end queue
+> applies to one protocol).** This document's original figures were produced by training on the
+> *benchmark* queries (seed 42). That is **protocol A, pre-correction**: `ablation-waterfall.md`
+> records that the training labels were later moved to a separate query set (seed 917) after the
+> original was found to violate ESD.md section 30, but this document was not updated. Three
+> protocols are now shown side by side ([Protocols compared](#protocols-compared)):
+>
+> * **A, pre-correction:** trained on the benchmark queries. The original figures; they reproduce exactly.
+> * **B, pair-disjoint:** trained on a separate seed-917 set that shares no (source, target) pair with
+>   the benchmark. This is what `scripts/reproduce/run_main_experiments.sh` uses today. On
+>   `snap_facebook` it still shares 45 source nodes with the benchmark, so it is **not** source-disjoint.
+> * **C, source-disjoint (the corrected protocol, owner decision 2026-10-13):** trained on a set whose
+>   sources avoid every benchmark source. Generated for `snap_facebook` by
+>   `scripts/data/generate_training_queries.py`; see below for `dimacs_ny`.
+>
+> Nothing is overwritten. Classification quality (how well the model ranks nodes) and end-to-end queue
 > behaviour (comparison counts) are different measurements and are reported separately.
 > See `docs/atlas/DISCREPANCIES.md` D-19.
 
@@ -92,10 +100,10 @@ Trained on the benchmark queries (seed 42: 1,000 queries on `snap_facebook`, 100
 | accuracy | 0.9844 | 0.8948 |
 | accuracy of always answering "no" | 0.9839 | 0.8948 |
 
-### Classification, disjoint protocol (current pipeline)
+### Classification, protocol B: pair-disjoint
 
 Trained on the separate query sets `*_training_queries.yaml` (seed 917, 200 queries each), as
-`scripts/reproduce/run_main_experiments.sh` does. Re-run on 2026-10-13.
+`scripts/reproduce/run_main_experiments.sh` does today. Re-run on 2026-10-13.
 
 | | `snap_facebook` | `dimacs_ny` |
 |---|---:|---:|
@@ -109,10 +117,38 @@ Trained on the separate query sets `*_training_queries.yaml` (seed 917, 200 quer
 | held-out average precision | 0.3717 | 0.1192 |
 | **precision lift over chance** | **23.08×** | **1.12×** |
 
-The two protocols agree in kind: a clear signal on the social graph, almost none on the road
-network. The Facebook figures differ by about 0.013 AUC, so the document's earlier "0.79" is the
-pre-correction value and the current pipeline gives 0.80. Neither number is a statement about queue
-performance.
+### Classification, protocol C: source-disjoint (corrected protocol)
+
+`snap_facebook`: trained on `snap_facebook_training_queries_source_disjoint.yaml` (seed 917, 200
+queries), whose sources are drawn only from the 3,152 nodes that no Facebook benchmark manifest uses
+as a source (887 sources excluded). Model trained with `train_from_file(seed=20260923)`; the
+training set, model and report are byte-identical on a second run.
+
+`dimacs_ny`: the seed-917 manifest of protocol B shares **no source** with `dimacs_ny_queries_100.yaml`
+or `dimacs_ny_queries_first30.yaml` (checked), so for those benchmark manifests protocol B already is
+source-disjoint and the column is the same. The 1,000-query `dimacs_ny_queries.yaml` shares 2 sources
+with it; no number in this document uses that manifest.
+
+| | `snap_facebook` | `dimacs_ny` (100-query manifest) |
+|---|---:|---:|
+| queries | 200 (194 distinct sources) | 200 |
+| observations | 807,800 | 52,869,200 |
+| positives | 13,018 | 5,637,335 |
+| positive rate | 0.0161 | 0.1066 |
+| **held-out ROC AUC** | **0.7985** | **0.5337** |
+| in-sample ROC AUC | 0.7890 | 0.5349 |
+| held-out average precision | 0.3693 | 0.1192 |
+| **precision lift over chance** | **22.91×** | **1.12×** |
+| held-out accuracy | 0.9836 | (as B) |
+| accuracy of always answering "no" | 0.9839 | (as B) |
+
+On `snap_facebook` the held-out accuracy (0.9836) is slightly *below* the always-"no" baseline
+(0.9839), as the accuracy row in the original table already warned: accuracy says almost nothing on
+this task. All three protocols agree in kind: a clear signal on the social graph, almost none on the
+road network. The Facebook held-out AUC is 0.7909 (A), 0.8037 (B) and 0.7985 (C). The range is about
+0.013, and the C-versus-B difference (0.005) is smaller than the B-versus-A one; with a single node
+split and one seed per protocol this document does not say which differences are more than split
+noise. None of these numbers is a statement about queue performance.
 
 Read the accuracy row against the one below it. On both datasets the model's
 accuracy is within a fraction of a percent of what a model that always answers
@@ -125,39 +161,66 @@ generalisation failure; the model does not fit the training split either.
 
 ## Protocols compared
 
-| | pre-correction | disjoint (current) |
-|---|---|---|
-| training queries | benchmark manifests, seed 42 | `*_training_queries.yaml`, seed 917, 200 queries |
-| identical (source, target) pairs shared with the benchmark | all of them | **0** on both datasets (checked) |
-| source nodes shared with the benchmark | all | `snap_facebook`: **45** of the benchmark's sources appear among the 200 training sources; `dimacs_ny`: 0 |
-| labels | trusted reference search, full single-source per query | same |
-| split | 25% of nodes held out, `numpy.random.default_rng(20260923).permutation` | same split |
-| model | scikit-learn `LogisticRegression`, `C=1.0`, `random_state=20260923`, six static features | same |
-| scikit-learn / numpy / scipy / Python | 1.6.1 / 2.2.4 / 1.15.2 / 3.13.16 | same |
+| | A: pre-correction | B: pair-disjoint | C: source-disjoint (corrected) |
+|---|---|---|---|
+| training queries | benchmark manifests, seed 42 | `*_training_queries.yaml`, seed 917, 200 queries | `snap_facebook_training_queries_source_disjoint.yaml`, seed 917, 200 queries; `dimacs_ny`: as B |
+| identical (source, target) pairs shared with the benchmark | all | **0** (checked, both datasets) | **0** |
+| source nodes shared with the benchmark manifests | all | `snap_facebook`: **45** with the 1,000-query manifest (4 with `first100`, 1 with `first30`); `dimacs_ny`: 0 with the 100-query and `first30` manifests, 2 with the 1,000-query one | `snap_facebook`: **0** with all three; `dimacs_ny`: as B |
+| labels | trusted reference search, full single-source per query | same | same |
+| split | 25% of nodes held out, `numpy.random.default_rng(20260923).permutation` | same | same |
+| model | scikit-learn `LogisticRegression`, `C=1.0`, `random_state=20260923`, six static features | same | same |
+| scikit-learn / numpy / scipy / Python | 1.6.1 / 2.2.4 / 1.15.2 / 3.13.16 | same | same |
 
-**What "disjoint" means here, and what it does not.** The benchmark and training manifests share
-no (source, target) pair. The collector runs a full single-source search per query, so on
-`snap_facebook` the 45 shared source nodes contribute labels from the same single-source searches
-the benchmark's prefix searches come from. Whether that influences the result was not measured, and
-whether ESD.md section 30 ("test-query outcomes must never influence model parameters") should be
-read at pair level or source level is a decision for the owner. `dimacs_ny` has no shared source.
+**Why source level.** The collector (`lpq_collect`) runs a full single-source search per query and the
+target plays no part in the labels, so a training query whose source equals a benchmark query's source
+reuses the same search whatever the target is. Protocol C therefore excludes sources, not pairs. Targets
+are unconstrained. The training pool is not small: 3,152 of 4,039 nodes remain allowed (78%), and the
+200 queries use 194 distinct sources against 195 in protocol B, so the experiment is about the same
+size. The effect of the earlier overlap on the metrics was not isolated: C differs from B in the
+specific queries drawn as well as in the exclusion.
+
+**The protocol C manifest** is generated, not hand-edited:
+
+```bash
+python scripts/data/generate_training_queries.py \
+    --benchmark experiments/manifests/snap_facebook_queries.yaml \
+    --also-exclude experiments/manifests/snap_facebook_queries_first100.yaml \
+    --also-exclude experiments/manifests/snap_facebook_queries_first30.yaml \
+    --seed 917 --count 200 \
+    --output experiments/manifests/snap_facebook_training_queries_source_disjoint.yaml
+lpq_collect --dataset datasets/processed/snap_facebook.lpqgraph \
+            --queries-file experiments/manifests/snap_facebook_training_queries_source_disjoint.yaml \
+            --output models/training/snap_facebook_source_disjoint.lpqtrain
+python -c "from lpq_tools.training.train import train_from_file; \
+train_from_file('models/training/snap_facebook_source_disjoint.lpqtrain', \
+  'models/training/snap_facebook_source_disjoint.lpqmodel', \
+  'models/training/snap_facebook_source_disjoint.report.json', seed=20260923)"
+```
+
+The benchmark manifest is unchanged (sha256 `c495353a76f4e5abd4a1f0e1c0be18aa960022f8a5df839ba33c8716fb643b49`).
+`scripts/reproduce/run_main_experiments.sh` still trains `snap_facebook` on the protocol B manifest;
+switching it to protocol C is a separate decision.
 
 **Artifacts** (untracked; SHA-256, produced in the scratch worktree `m5a`):
 
 | artifact | sha256 |
 |---|---|
-| `snap_facebook` pre-correction `.lpqtrain` | `e81ac29b3fda4de4385b8145938cba8ab4e5774827a862a71fb643815469d151` |
-| `snap_facebook` pre-correction `.lpqmodel` | `eee5e7c595c2bca9c35b2afb21f0fc3f998df0c6719d22f4ea7d22346daa1726` |
-| `snap_facebook` pre-correction `.report.json` | `e4c3cb5c828c1eb3e255c554ba89b52d919988c84db4f0b28a10b1a192a48386` |
-| `snap_facebook` disjoint `.lpqtrain` | `01ec343dab1e39f16aa4868cbc1434f4834bb34a9e16fff887056fec4ec50e2d` |
-| `snap_facebook` disjoint `.lpqmodel` | `e098c693b82f173411b87bf7e6c795c1f5f424fb879e8b2b705824e71f07cefb` |
-| `snap_facebook` disjoint `.report.json` | `2e01723a2d6e2098efab6d707f5536811f6e6e9419badefa7abbaf87aff0fd90` |
-| `dimacs_ny` pre-correction `.lpqtrain` | `a26961e3a582d3e207ca1bd5223089409f3496278db985e758fc4b8b99d09438` |
-| `dimacs_ny` pre-correction `.lpqmodel` | `179416f6d3762f294c0ddcda32f866d2ae119b34a956333d1ac637d95cc711c0` |
-| `dimacs_ny` pre-correction `.report.json` | `a4a1781a916a42fbaf16b15d745971cea09598ee6aa11cc758dbce41ac0b284a` |
-| `dimacs_ny` disjoint `.lpqtrain` | `4c2ec37e4c3279399616e1e820d41a45b444c800cc2b99b91320fb7b303f4c1e` |
-| `dimacs_ny` disjoint `.lpqmodel` | `eca2fb80b30b95bf06aa173b21b4dfe5163bf4c8273658b57b5cdb3d69e1e3aa` |
-| `dimacs_ny` disjoint `.report.json` | `a61967a3514669005a6945b6574ed603dbdb5a454e02ae89dbce449c82e1924a` |
+| `snap_facebook_training_queries_source_disjoint.yaml` (tracked) | `e0105cbe771fdb313960aff3b6d99085335d9a2a615a9515d71d582d78843c1e` |
+| `snap_facebook` C `.lpqtrain` | `b3261e0b40cf4cbda48368d64a944a711586319b26032d5859f29c6a28b8cd7e` |
+| `snap_facebook` C `.lpqmodel` | `f5413deb366ae47cb76c6505df4fe68eef6d73a2bb34b74cabf8d4e731b62269` |
+| `snap_facebook` C `.report.json` | `b53c22ff2a15c508737d12b8d00660bb93e9e0587b6b0876289c04fa70fecf12` |
+| `snap_facebook` A `.lpqtrain` | `e81ac29b3fda4de4385b8145938cba8ab4e5774827a862a71fb643815469d151` |
+| `snap_facebook` A `.lpqmodel` | `eee5e7c595c2bca9c35b2afb21f0fc3f998df0c6719d22f4ea7d22346daa1726` |
+| `snap_facebook` A `.report.json` | `e4c3cb5c828c1eb3e255c554ba89b52d919988c84db4f0b28a10b1a192a48386` |
+| `snap_facebook` B `.lpqtrain` | `01ec343dab1e39f16aa4868cbc1434f4834bb34a9e16fff887056fec4ec50e2d` |
+| `snap_facebook` B `.lpqmodel` | `e098c693b82f173411b87bf7e6c795c1f5f424fb879e8b2b705824e71f07cefb` |
+| `snap_facebook` B `.report.json` | `2e01723a2d6e2098efab6d707f5536811f6e6e9419badefa7abbaf87aff0fd90` |
+| `dimacs_ny` A `.lpqtrain` | `a26961e3a582d3e207ca1bd5223089409f3496278db985e758fc4b8b99d09438` |
+| `dimacs_ny` A `.lpqmodel` | `179416f6d3762f294c0ddcda32f866d2ae119b34a956333d1ac637d95cc711c0` |
+| `dimacs_ny` A `.report.json` | `a4a1781a916a42fbaf16b15d745971cea09598ee6aa11cc758dbce41ac0b284a` |
+| `dimacs_ny` B/C `.lpqtrain` | `4c2ec37e4c3279399616e1e820d41a45b444c800cc2b99b91320fb7b303f4c1e` |
+| `dimacs_ny` B/C `.lpqmodel` | `eca2fb80b30b95bf06aa173b21b4dfe5163bf4c8273658b57b5cdb3d69e1e3aa` |
+| `dimacs_ny` B/C `.report.json` | `a61967a3514669005a6945b6574ed603dbdb5a454e02ae89dbce449c82e1924a` |
 | `snap_facebook.lpqgraph` (checksum 27545307309881865) | `b4d931a8e253841c9f771c62fca483f8664efa29b6829afd85129a81d7319589` |
 | `dimacs_ny.lpqgraph` (checksum 15161404696693572585) | `10cfb716d2be624b12530ecd49e173db98f19360d67a8d0ffa32e7ccbf687abd` |
 
@@ -195,21 +258,23 @@ Comparison counts, which are exact and machine-independent, over the benchmark q
 manifests (`dimacs_ny_queries_100.yaml`, 100 queries; `snap_facebook_queries.yaml`, 1,000 queries),
 one repetition, exact mode, every record checked against the reference and exact:
 
-| | control (constant scorer) | model, pre-correction protocol | change | model, disjoint protocol (current) | change |
-|---|---:|---:|---:|---:|---:|
-| `dimacs_ny` | 177,580,603 | 177,732,559 | +0.09% | **177,732,303** | **+0.085%** |
-| `snap_facebook` | 798,334,612 | 803,764,660 | +0.68% | **804,286,113** | **+0.745%** |
+| | control (constant scorer) | model, A: pre-correction | change | model, B: pair-disjoint | change | model, C: source-disjoint | change |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `dimacs_ny` | 177,580,603 | 177,732,559 | +0.086% | 177,732,303 | +0.085% | 177,732,303 (as B) | +0.085% |
+| `snap_facebook` | 798,334,612 | 803,764,660 | +0.680% | 804,286,113 | +0.745% | **804,305,590** | **+0.748%** |
 
-The pre-correction columns reproduce the original figures exactly (re-run on 2026-10-13). The
-disjoint-protocol columns are new measurements with the models listed under
-[Protocols compared](#protocols-compared). Pops, which also move, are 3,534,412 (control),
-3,531,956 (pre-correction) and 3,532,317 (disjoint) on `snap_facebook`. Timing is not reported for
+The protocol A column reproduces the original figures exactly (re-run on 2026-10-13); the B and C
+columns are new measurements with the models listed under
+[Protocols compared](#protocols-compared). The control is the same queue (`lpq`, bucket width 8, ring
+1,024, modular strategy), the same 1,000-query manifest and the same binary in every column; a second
+control run gave the identical count. Pops, which also move, are 3,534,412 (control), 3,531,956 (A),
+3,532,317 (B) and 3,531,802 (C) on `snap_facebook`. Timing is not reported for
 these runs and no timing claim is made. These counts say nothing about classification quality, and
 the classification tables above say nothing about queue behaviour.
 
 **The model does slightly more comparison work on both datasets**, including the
 one where it ranks its own target with AUC 0.79 and 22x the precision of a
-random ranker (pre-correction protocol; 0.80 and 23x under the disjoint protocol).
+random ranker (protocol A; 0.80 and 23x under protocols B and C).
 
 More comparisons is not the same as slower, and this project has measured that
 distinction three separate ways. The wall-clock consequence was measured
@@ -282,8 +347,8 @@ currently report, so it remains untested.
 ## Reproducing
 
 The commands below reproduce the **pre-correction protocol** (they train on the benchmark queries). The
-current pipeline trains on `experiments/manifests/<dataset>_training_queries.yaml` instead; use that
-manifest in the first command to reproduce the disjoint-protocol rows. For the end-to-end counts:
+`run_main_experiments.sh` trains on `experiments/manifests/<dataset>_training_queries.yaml` instead; use that
+manifest in the first command to reproduce protocol B, or the source-disjoint manifest above for protocol C. For the end-to-end counts:
 `lpq_benchmark --dataset <graph> --queries-file <benchmark manifest> --pq lpq_model --model <file> --repetitions 1 --warmup 0`.
 
 ```bash

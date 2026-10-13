@@ -169,9 +169,10 @@ reproducing its mistakes.
 | precision lift over chance | **22.25×** | **1.12×** |
 
 > *Note added 2026-10-13 (M5-P1).* The two columns come from different protocols. The
-> `snap_facebook` values are the pre-correction ones (trained on the benchmark queries, seed 42);
-> the `dimacs_ny` AUC is the disjoint-protocol value (seed 917). Under the disjoint protocol
-> `snap_facebook` gives 0.8037 and 23.08×. See `docs/experiments/static-scorer-training.md`
+> `snap_facebook` values are the pre-correction ones (protocol A: trained on the benchmark queries,
+> seed 42); the `dimacs_ny` AUC is the pair-disjoint value (protocol B, seed 917). Under the
+> pair-disjoint protocol `snap_facebook` gives 0.8037 and 23.08×, and under the source-disjoint
+> (corrected) protocol 0.7985 and 22.91×. See `docs/experiments/static-scorer-training.md`
 > ("Protocols compared") and `docs/atlas/DISCREPANCIES.md` D-19. The values above are unchanged.
 
 **Static node features carry real signal on a social graph and almost none on a

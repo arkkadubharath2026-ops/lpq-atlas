@@ -44,8 +44,8 @@ alone reduces priority-queue comparisons 2.8× relative to a binary heap, while 
 candidate window and verification give 2.5× of that back; the learned queue is slower
 than the radix heap on every measured query. The machinery's cost varies from 1.001× to
 11.1× across road networks, governed by the ratio of bucket width to mean edge weight.
-Static node features predict useful candidates on a social graph (held-out ROC AUC 0.79 under the pre-correction protocol; 0.80 under the disjoint
-protocol, see `docs/experiments/static-scorer-training.md`)
+Static node features predict useful candidates on a social graph (held-out ROC AUC 0.79 under the pre-correction protocol; 0.80 under the pair-disjoint and
+source-disjoint protocols, see `docs/experiments/static-scorer-training.md`)
 but carry almost no signal on road networks (0.53), and predictive quality did not
 translate into end-to-end speedup. The one configuration in which the learned machinery
 improves on its own baseline is the adaptive controller, which removes 34% of

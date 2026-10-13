@@ -187,3 +187,89 @@ def test_manifest_file_is_regenerable_byte_for_byte(tmp_path):
 def test_query_pair_is_hashable_and_comparable():
     assert QueryPair(1, 2) == QueryPair(1, 2)
     assert len({QueryPair(1, 2), QueryPair(1, 2), QueryPair(2, 1)}) == 2
+
+
+# -----------------------------------------------------------------------------
+# Source exclusion (M5-P1: source-disjoint training manifests)
+# -----------------------------------------------------------------------------
+#
+# lpq_collect labels from a FULL single-source search per query, so a training query that shares a
+# SOURCE with a benchmark query reuses the same search, even when the (source, target) pairs differ.
+# Excluding sources is the separation that matches how the labels are made.
+
+
+def test_the_default_stream_is_unchanged_by_the_exclusion_option():
+    # Pinned from the generator as it was before the option existed: every committed manifest was
+    # produced this way, and a regeneration that moved a single pair would break their pairing.
+    pairs = generate_query_pairs(1000, 200, seed=42)
+    assert [(p.source, p.target) for p in pairs[:3]] == [(399, 93), (905, 407), (95, 367)]
+    assert generate_query_pairs(1000, 200, seed=42, exclude_sources=()) == pairs
+    assert generate_query_pairs(1000, 200, seed=42, exclude_sources=None) == pairs
+
+
+def test_excluded_sources_never_appear_as_sources():
+    excluded = set(range(0, 1000, 3))  # a third of the graph
+    pairs = generate_query_pairs(1000, 5000, seed=9, exclude_sources=excluded)
+    assert len(pairs) == 5000
+    assert not {p.source for p in pairs} & excluded
+    for p in pairs:
+        assert p.source != p.target
+        assert 0 <= p.target < 1000
+
+
+def test_exclusion_is_deterministic_and_prefix_stable():
+    excluded = {1, 2, 3, 400}
+    a = generate_query_pairs(500, 100, seed=8, exclude_sources=excluded)
+    assert a == generate_query_pairs(500, 100, seed=8, exclude_sources=excluded)
+    assert generate_query_pairs(500, 300, seed=8, exclude_sources=excluded)[:100] == a
+    assert a != generate_query_pairs(500, 100, seed=8)
+
+
+def test_sources_remain_uniform_over_the_allowed_nodes():
+    node_count, excluded = 16, {0, 5, 11}
+    counts = {u: 0 for u in range(node_count) if u not in excluded}
+    for p in generate_query_pairs(node_count, 52_000, seed=17, exclude_sources=excluded):
+        counts[p.source] += 1
+    expected = 52_000 / len(counts)
+    for count in counts.values():
+        assert abs(count - expected) < 0.08 * expected
+
+
+def test_excluding_every_node_is_rejected():
+    with pytest.raises(ValueError, match="no source"):
+        generate_query_pairs(10, 5, seed=1, exclude_sources=set(range(10)))
+
+
+def test_an_excluded_id_outside_the_graph_is_rejected():
+    # An id from a manifest of a different graph is a mistake worth stopping on, not ignoring.
+    with pytest.raises(ValueError, match="outside"):
+        generate_query_pairs(10, 5, seed=1, exclude_sources={3, 10})
+
+
+def test_a_source_excluded_manifest_says_so_and_stays_readable_by_the_engine(tmp_path):
+    manifest = build_manifest(
+        "toy", node_count=300, count=40, seed=917, graph_checksum=5, exclude_sources={1, 2, 3}
+    )
+    assert manifest.to_dict()["selection"] == "uniform_pairs_distinct_endpoints_source_disjoint"
+    path = tmp_path / "m.yaml"
+    write_manifest(path, manifest, notes=["excludes the sources of toy_queries.yaml"])
+    text = path.read_text()
+    assert "# excludes the sources of toy_queries.yaml" in text
+    assert read_manifest(path).pairs == manifest.pairs
+    assert read_manifest(path).selection == manifest.selection
+    # The C++ reader rejects any top-level key it does not know; provenance therefore lives in
+    # comments and in the free-form `selection` value, never in a new key.
+    keys = {line.split(":")[0] for line in text.splitlines() if line and line[0] not in "#- "}
+    assert keys <= {
+        "dataset_id", "node_count", "seed", "graph_checksum_fnv1a64", "query_count",
+        "generator", "selection", "reachability_filtered", "queries",
+    }
+
+
+def test_a_default_manifest_gains_no_new_lines(tmp_path):
+    manifest = build_manifest("toy", node_count=900, count=50, seed=42, graph_checksum=7)
+    assert manifest.to_dict()["selection"] == "uniform_pairs_distinct_endpoints"
+    path = tmp_path / "a.yaml"
+    write_manifest(path, manifest)
+    comments = [line for line in path.read_text().splitlines() if line.startswith("#")]
+    assert len(comments) == 5, "the original header, unchanged, and no notes"

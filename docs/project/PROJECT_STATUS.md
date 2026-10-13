@@ -551,8 +551,8 @@ reported*, whatever the result. The project may finish with a negative answer on
    negative. Both are acceptable outcomes if reported.
 3. **Does the adaptive controller help?** Currently no measured benefit. The 34% claim is
    retracted (historical; see M10 and D-11).
-4. **Does the learned model generalise?** Held-out AUC is 0.79 on Facebook (pre-correction protocol; 0.80 under the disjoint protocol,
-   D-19) and 0.53 on NY. The
+4. **Does the learned model generalise?** Held-out AUC is 0.79 on Facebook (pre-correction protocol; 0.80 under the pair-disjoint and
+   source-disjoint protocols, D-19) and 0.53 on NY. The
    leave-one-topology-out policy never beat radix on any held-out graph.
 5. **Cache and branch behaviour.** Not measurable on the development host.
 

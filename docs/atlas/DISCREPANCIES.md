@@ -263,15 +263,33 @@ entries true.
   benchmark queries after ESD.md section 30 was reopened; `static-scorer-training.md` and the Facebook
   figures in `findings.md` were not updated, and that document's own reproduction command still names the
   benchmark manifest.
-* **A limit on "disjoint" (new):** the seed-917 and seed-42 manifests share **no (source, target) pair** on
-  either dataset, but `snap_facebook` shares **45 source nodes** (`dimacs_ny`: none). The collector labels
-  from a full single-source search per source. Whether that is a leak under ESD.md section 30, and
-  whether it moves the metrics, was not measured. Owner decision: pair-level or source-level disjointness.
-* **Status:** **resolved by documentation in M5-P1**, on the local branch `completion/m5a-d19-protocols`.
-  Both protocols are kept, labelled, side by side in `static-scorer-training.md` with configuration, split,
-  seeds, library versions and artifact hashes; the other documents carry pointers and their numbers are
-  unchanged. Classification metrics and queue comparison counts are reported separately, and no timing is
-  reported. Open: the pair-versus-source disjointness question above.
+* **Three protocols (revised after owner review, 2026-10-13).** A: pre-correction (benchmark queries, seed 42).
+  B: pair-disjoint (seed 917, no shared (source, target) pair), which is what `run_main_experiments.sh`
+  trains on today. C: **source-disjoint**, the corrected protocol. B is **not** source-disjoint: the
+  collector labels from a full single-source search per source and the target plays no part, and the
+  `snap_facebook` B set shares **45 source nodes** with the 1,000-query benchmark manifest (4 with
+  `first100`, 1 with `first30`). `dimacs_ny`'s B set shares none with the 100-query and `first30`
+  manifests, so B is source-disjoint for those, but it shares 2 sources with the 1,000-query
+  `dimacs_ny_queries.yaml`, which no number here uses.
+* **Protocol C for `snap_facebook`:** `scripts/data/generate_training_queries.py` (new, tested) wrote
+  `snap_facebook_training_queries_source_disjoint.yaml`, seed 917, 200 queries (194 distinct sources),
+  drawn from the 3,152 of 4,039 nodes that no benchmark manifest uses as a source (887 excluded). Same
+  split, seed and model as A and B. Held-out ROC AUC **0.7985**, in-sample 0.7890, lift **22.91x**;
+  end-to-end 804,305,590 comparisons against the 798,334,612 control (**+0.748%**, same manifest, same queue
+  configuration, all 1,000 records exact). Training set, model and report are byte-identical on a second
+  run. The pool is not small, so the experiment is about the size of B and no separation was weakened.
+  Held-out accuracy (0.9836) is slightly below the always-"no" baseline (0.9839).
+* **What is not claimed:** that C differs from B because of the overlap. They differ in the queries drawn
+  as well as in the exclusion, and one split and one seed per protocol cannot separate that from noise
+  (held-out AUC 0.7909 A, 0.8037 B, 0.7985 C). B must not be described as source-disjoint. The derived
+  Facebook manifests (`derived_fb_*`) and the 1,000-query New York manifest were not re-examined.
+* **Status:** **resolved by documentation and one new tested generator in M5-P1**, on the local branch
+  `completion/m5a-d19-protocols`. All three protocols are kept, labelled, side by side in
+  `static-scorer-training.md` with configuration, split, seeds, library versions and artifact hashes; the
+  other documents carry pointers and their original numbers are unchanged. Classification metrics and queue
+  comparison counts are reported separately and no timing is reported. Open, for the owner: whether
+  `run_main_experiments.sh` should switch `snap_facebook` to the protocol C manifest (it would change that
+  script's output), and whether to regenerate the 1,000-query New York separation.
 
 ### D-20. The order-check results file has no producer in the documented workflow
 
