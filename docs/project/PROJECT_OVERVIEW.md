@@ -427,7 +427,7 @@ Generalisation across six graphs: the learned queue's isolated cost ranges from 
 weight, which predicted a constructed test case to within 1.28×.
 
 Learned scorer: held-out ROC AUC **0.79** on `snap_facebook` (22× precision lift over
-chance) but **0.53** on `dimacs_ny` (1.12×). Road networks have near-uniform degree, so
+chance; pre-correction protocol, 0.80 and 23× under the disjoint protocol, see D-19) but **0.53** on `dimacs_ny` (1.12×). Road networks have near-uniform degree, so
 static degree features carry little signal there.
 
 Approximate mode [doc: `docs/experiments/approximate-mode.md`]: on `dimacs_ny`, ε = 0.1

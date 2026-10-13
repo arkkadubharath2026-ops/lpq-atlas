@@ -238,26 +238,40 @@ entries true.
 
 ## Findings added by M4 (2026-10-13)
 
-### D-19. The documented `snap_facebook` model metrics do not reproduce
+### D-19. The documented `snap_facebook` model metrics come from a different training protocol
 
-* **Claimed (documented):** `docs/experiments/static-scorer-training.md` lines 72 to 76 give, for
-  `snap_facebook`, held-out ROC AUC 0.7909, in-sample ROC AUC 0.7917 and precision lift 22.25x;
-  `docs/experiments/findings.md` (lines 168 to 169), the abstract (0.79) and `docs/experiments/README.md`
-  (line 44) repeat them.
-* **Actual (verified in M4):** `scripts/reproduce/run_main_experiments.sh` trained the model on a graph
-  whose checksum equals the documented one, with `TRAINING_SEED=20260923`. Held-out ROC AUC **0.8037**,
-  in-sample ROC AUC **0.7909**, precision lift **23.08x**. Training the same configuration a second time
-  gave identical results, so the pipeline is deterministic here and this is not run-to-run noise
-  (`fb_retrain_1` and `fb_retrain_2` in the M4 evidence directory). The installed library versions
-  equal the pinned ones. The New York model does reproduce (held-out AUC 0.5337, the value in
-  `findings.md` and `v2-results.md`).
-* **Likely cause (inferred, not checked):** the training document's New York figure (0.5331) is the
-  pre-leak-fix value; `ablation-waterfall.md` lines 126 to 127 say the disjoint-split value is 0.5337 and
-  the leaked one 0.5331. The `snap_facebook` figures were probably produced before the same fix. The
-  fix itself was not re-checked in M4.
-* **Status:** recorded. **No document was edited**: which figure is authoritative is an owner
-  decision. The reproduced values are a measurement of this repository, not a claim that the model is good.
-  Both models were used only to check comparison counts; no accuracy claim is made.
+*Revised in M5-P1 (2026-10-13). The M4 entry recorded the non-reproduction and called the cause
+"inferred"; it is now verified. The M4 entry also named `findings.md` at the wrong path; it is
+`experiments/paper/findings.md`.*
+
+* **Claimed (documented):** `docs/experiments/static-scorer-training.md` gave, for `snap_facebook`,
+  held-out ROC AUC 0.7909, in-sample 0.7917 and precision lift 22.25x, and for `dimacs_ny` 0.5331 /
+  0.5351 / 1.12x. `experiments/paper/findings.md` (lines 168 to 169, which mixes the Facebook
+  pre-correction value with the New York disjoint value 0.5337), `docs/atlas/ABSTRACT.md` (0.79) and
+  `docs/experiments/README.md` (line 44) repeat them.
+* **Verified:** training on the **benchmark** queries (seed 42: 1,000 queries on `snap_facebook`, 100 on
+  `dimacs_ny`), with the same split and seed (25% of nodes held out, `default_rng(20260923)`, logistic
+  regression `C=1.0`), reproduces every documented figure exactly: Facebook 0.7909 / 0.7917 / 22.25x with
+  4,039,000 observations and 65,079 positives, New York 0.5331 / 0.5351 / 1.12x with 26,434,600
+  observations and 2,781,317 positives. The end-to-end counts reproduce exactly too (798,334,612 control and
+  803,764,660 model on Facebook; 177,580,603 and 177,732,559 on New York).
+  `scripts/reproduce/run_main_experiments.sh` instead trains on the separate seed-917 sets (200 queries):
+  Facebook 0.8037 / 0.7909 / 23.08x (807,800 observations, 13,012 positives), New York 0.5337 / 0.5349 /
+  1.12x. So the two sets of numbers are two **protocols**, not a defect in either run. The disjoint-protocol
+  end-to-end counts are new: Facebook 804,286,113 (+0.745% over the control), New York 177,732,303 (+0.085%).
+* **Why the documents lag:** `ablation-waterfall.md` records that the training labels were moved off the
+  benchmark queries after ESD.md section 30 was reopened; `static-scorer-training.md` and the Facebook
+  figures in `findings.md` were not updated, and that document's own reproduction command still names the
+  benchmark manifest.
+* **A limit on "disjoint" (new):** the seed-917 and seed-42 manifests share **no (source, target) pair** on
+  either dataset, but `snap_facebook` shares **45 source nodes** (`dimacs_ny`: none). The collector labels
+  from a full single-source search per source. Whether that is a leak under ESD.md section 30, and
+  whether it moves the metrics, was not measured. Owner decision: pair-level or source-level disjointness.
+* **Status:** **resolved by documentation in M5-P1**, on the local branch `completion/m5a-d19-protocols`.
+  Both protocols are kept, labelled, side by side in `static-scorer-training.md` with configuration, split,
+  seeds, library versions and artifact hashes; the other documents carry pointers and their numbers are
+  unchanged. Classification metrics and queue comparison counts are reported separately, and no timing is
+  reported. Open: the pair-versus-source disjointness question above.
 
 ### D-20. The order-check results file has no producer in the documented workflow
 

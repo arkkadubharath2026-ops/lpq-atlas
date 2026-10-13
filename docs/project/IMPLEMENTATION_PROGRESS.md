@@ -21,7 +21,9 @@ and `claude/sleepy-heisenberg-fhr3me` (docs) are unchanged.
 | M2 documentation corrections | PASS | approved |
 | M3 Monaco real-OSM acquisition | PASS for Monaco, with stated limits | accepted (conditional PASS) |
 | M4 reproducibility and tooling | PASS for the five scoped items; limits below | **pending** |
-| M5 onward | not started | |
+| M5-P1 D-19 training protocols (branch `completion/m5a-d19-protocols`) | PASS | **pending** |
+| M5-P2 D-20 order-check producer | not started | |
+| M5 online learning (O1 to O9) | not started; design approved in principle | |
 
 ---
 
@@ -349,3 +351,50 @@ the retraction of the 34% claim is unchanged (D-11).
 1. Review `git diff ca9a894..completion/m4-reproducibility-tooling`.
 2. Decide which `snap_facebook` figures are authoritative (D-19), and whether D-20 gets a producer script.
 3. Approve M5 (wiring online learning into a real search, D-12) when ready.
+
+---
+
+## Milestone M5-P1: D-19, the two training protocols (documentation and re-measurement)
+Status: PASS
+Date: 2026-10-13
+Base commit SHA: `51a8b4cdc7b1e4d486ba40497d6abcaa54ca4e0c` (the accepted M4 commit)
+Working branch: `completion/m5a-d19-protocols` (local, no upstream; scratch worktree `m5a`)
+
+### What I found
+- Training on the benchmark queries (seed 42) reproduces every figure in `static-scorer-training.md` exactly,
+  for both datasets; the seed-917 pipeline gives the other numbers. D-19 is therefore **verified**: two protocols,
+  not a defect. [Verified now]
+- The Facebook counts reproduce too: control 798,334,612, pre-correction model 803,764,660 (pops 3,534,412 and
+  3,531,956). New, disjoint-protocol model: **804,286,113** comparisons (+0.745%), pops 3,532,317. New York:
+  177,580,603 / 177,732,559 (pre-correction) / 177,732,303 (disjoint, equals the ablation count). Every record in every
+  run was exact against the reference. [Verified now]
+- The seed-917 and seed-42 manifests share no (source, target) pair, but `snap_facebook` shares 45 source nodes
+  (`dimacs_ny`: 0). The effect was not measured; the pair-versus-source question is left to the owner. [Verified now]
+- `findings.md` mixes protocols in one table (Facebook pre-correction, New York disjoint). [Verified now]
+
+### What changed (documentation only)
+`docs/experiments/static-scorer-training.md` (revision notice, both protocols side by side, a Protocols section with
+configuration, split, seeds, library versions and artifact hashes, end-to-end table with both models, reproduction
+note), `experiments/paper/findings.md`, `docs/experiments/README.md`, `docs/atlas/ABSTRACT.md`,
+`docs/project/PROJECT_STATUS.md`, `docs/project/PROJECT_OVERVIEW.md` (pointers; no original number changed),
+`docs/atlas/DISCREPANCIES.md` (D-19 rewritten as verified), this log. No code, config, script, CI or dependency change.
+
+### Verification actually run (worktree `m5a`, binaries copied from `m4`, byte-identical; no C++ change since M3)
+| command | exit | result |
+|---|---|---|
+| `lpq_benchmark --dataset datasets/processed/snap_facebook.lpqgraph --queries-file experiments/manifests/snap_facebook_queries.yaml --pq lpq --repetitions 1 --warmup 0` | 0 | 1000 records |
+| same, `--pq lpq_model --model models/exported/snap_facebook_static.lpqmodel` (disjoint) | 0 | 1000 records |
+| same, `--model models/training/snap_facebook_precorrection.lpqmodel` | 0 | 1000 records |
+| the three equivalents on `dimacs_ny` with `dimacs_ny_queries_100.yaml` | 0, 0, 0 | 100 records each |
+| `lpq_collect` + `train_from_file(seed=20260923)` on the benchmark manifests (both datasets) | 0 | figures above |
+Pair and source overlap between manifests computed with `lpq_tools.data.queries.read_manifest`. Evidence files are in
+the scratchpad `m5a_evidence/` (outside the repository); artifact hashes are in the document. Python 3.13.16,
+scikit-learn 1.6.1, numpy 2.2.4, scipy 1.15.2.
+
+### Not done, by design
+No timing is reported or claimed. The `snap_facebook` wall-clock effect remains unmeasured. Model files are untracked.
+
+### Owner decision needed
+1. Review `git diff 51a8b4c..completion/m5a-d19-protocols`.
+2. Decide whether ESD.md section 30 disjointness is at pair level (current) or source level (would change the Facebook
+   training set).
