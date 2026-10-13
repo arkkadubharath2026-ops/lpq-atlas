@@ -596,5 +596,75 @@ TEST(CandidateManager, DoesNotAllocateDuringASearch) {
     }
 }
 
+// -----------------------------------------------------------------------------
+// D-14: `confidence` does not gate the window.
+//
+// PRD section 2 lists "confidence-aware candidate extraction" among the intended
+// contributions. Candidate::confidence exists, but nothing in the window policy
+// reads it. This pins the CURRENT behaviour so the claim cannot drift: the
+// window's membership, its order and its accounting are functions of
+// (node, key, score) alone. It is a statement about what the code does, not a
+// verdict on what it should do -- if confidence is ever made to gate
+// extraction, this test must be changed deliberately, together with D-14 in
+// docs/atlas/DISCREPANCIES.md.
+// -----------------------------------------------------------------------------
+
+TEST(CandidateManager, ConfidenceDoesNotChangeTheWindowItsOrderOrItsAccounting) {
+    // The same (node, key, score) stream offered with four different
+    // confidence assignments: none, certain, inverted against the score, and
+    // arbitrary (seeded).
+    constexpr std::size_t kOffers = 40;
+    const auto confidence_for = [](int variant, float score, Rng& rng) -> float {
+        switch (variant) {
+            case 0: return 0.0F;
+            case 1: return 1.0F;
+            case 2: return 1.0F - score;
+            default: return static_cast<float>(rng.next_double(0.0, 1.0));
+        }
+    };
+
+    std::vector<NodeId> reference_order;
+    std::uint64_t       reference_rejected = 0;
+    for (int variant = 0; variant < 4; ++variant) {
+        Rng stream(2026U);  // identical (node, score) stream for every variant
+        Rng noise(7U);
+        CandidateManager m{fixed_window(8)};
+        m.begin_extraction(64);
+        for (std::size_t i = 0; i < kOffers; ++i) {
+            const float score = static_cast<float>(stream.next_double(0.0, 1.0));
+            m.offer(make(static_cast<NodeId>(i), score, static_cast<double>(i),
+                         confidence_for(variant, score, noise)));
+        }
+        std::vector<NodeId> order;
+        for (const auto& c : m.candidates()) {
+            order.push_back(c.node);
+        }
+        ASSERT_EQ(order.size(), 8U);
+        if (variant == 0) {
+            reference_order    = order;
+            reference_rejected = m.metrics().candidates_rejected;
+        } else {
+            EXPECT_EQ(order, reference_order) << "confidence variant " << variant;
+            EXPECT_EQ(m.metrics().candidates_rejected, reference_rejected)
+                << "confidence variant " << variant;
+        }
+    }
+}
+
+TEST(CandidateManager, ALowConfidenceCandidateStillBeatsAConfidentOneWithALowerScore) {
+    CandidateManager m{fixed_window(2)};
+    m.begin_extraction(16);
+    m.offer(make(/*node=*/1, /*score=*/0.9F, /*key=*/1.0, /*confidence=*/0.0F));
+    m.offer(make(/*node=*/2, /*score=*/0.1F, /*key=*/2.0, /*confidence=*/1.0F));
+    EXPECT_EQ(m.best().node, 1U);
+
+    // And a certain, low-scoring candidate does not displace a better-scored
+    // one when the window is full.
+    m.offer(make(/*node=*/3, /*score=*/0.05F, /*key=*/3.0, /*confidence=*/1.0F));
+    ASSERT_EQ(m.size(), 2U);
+    EXPECT_EQ(m.candidates()[0].node, 1U);
+    EXPECT_EQ(m.candidates()[1].node, 2U);
+}
+
 }  // namespace
 }  // namespace lpq
