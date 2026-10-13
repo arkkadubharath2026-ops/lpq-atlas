@@ -1,0 +1,12 @@
+Anomaly rule for the fourth-invocation clause, fixed BEFORE any M6 timing run (written 2026-10-13, after the builds and smoke tests, before Block A):
+
+An invocation of Block A or B is ANOMALOUS if either
+  (a) the median, over queries, of its radix_heap per-query median time differs by more than 25% from the median of
+      that quantity over the three invocations of the same block, or
+  (b) more than 50% of its records are flagged `noisy` by the harness.
+If any invocation of a block is anomalous, ONE fourth invocation of that block is run with the next seed, and all four are
+reported. Nothing is replaced or dropped; the reportability rule (same sign in every invocation run, pooled CI excludes 1)
+then applies to all four.
+Pre-registered reportability: a difference is reported as established only if the sign of the paired median ratio agrees
+in every invocation of its block and the pooled bootstrap CI excludes 1; otherwise it is reported as "not distinguishable".
+Block C (counter overhead) and Block E (online) are 4 and 2 invocations by design and are not subject to the fourth-invocation clause.

@@ -493,3 +493,20 @@ claim, per the project's measurement rules.
 | The e2e "unreachable destination" test skips (needs `snap_roadnet_pa`, which cannot be downloaded here). 60 random targets from one Monaco node were all reachable, so no genuine unreachable pair was found on real OSM. | Needs a dataset with a disconnected pair. | Run it where `snap_roadnet_pa` is prepared; the API contract test `test_unreachable_pair_has_no_ratio` covers the engine path. |
 | No timeout state was exercised (180 s run limit). The UI shows a failed job's category and message (checked with an intercepted response). | Would need a real 180 s run. | Optional. |
 
+## Findings added by M6 (2026-10-13)
+
+### D-26. The benchmark records no per-component ML time, and a frozen `lpq_online` is slower than `lpq_model`
+
+* **Expected:** PRD §20 and the M6 handoff ask for feature extraction, model inference, candidate-window maintenance,
+  verification, correction and fallback to be accounted separately, with ML overhead measured end to end.
+* **Actual (verified on commit `450804238c…`, all 7,200 M6 records):** `ml.feature_extraction_ns`, `ml.inference_ns` and
+  `ml.verification_ns` are 0 in every `lpq_benchmark` record; only `ml.online_update_ns` is populated (for `lpq_online`).
+  Component-level attribution exists only in the separate `lpq_profile` binary (phase shares for the constant-scorer LPQ).
+  The static scorer's build is outside the timed region by design and is recorded nowhere (M6 estimated it at about 35 ms
+  for `dimacs_ny`, coarsely).
+* **Related measured fact:** the M5 text said a frozen `lpq_online` search "is the `lpq_model` search". True of its results
+  and counters; not of its time: 1.288 [1.258, 1.307] of the `lpq_model` search time on `snap_facebook` (one invocation per
+  mode). The on-demand scoring is inside the timed search. `docs/experiments/online-learning.md` now says so.
+* **Status:** **open; no engine or schema change made** (instructed). `python/tests/test_cost_accounting.py` pins the zero
+  fields as a characterisation test, so populating them requires changing that test on purpose.
+

@@ -1,0 +1,63 @@
+# M6 provenance record (written 2026-10-13)
+
+source commit : 450804238ca8786fb45bdce9f70991fc1765d55f (branch completion/m5-candidate at the time), clean worktree, detached
+toolchain     : c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0; cmake 3.28.3; Ninja 1.11.1
+configure     : cmake --preset release / release-noinstr with -DLPQ_BUILD_TESTS=OFF -DLPQ_BUILD_FUZZERS=OFF (tests and fuzzers are not needed for timing; every compiler flag is the preset's)
+configure logs: both print 'git commit : 450804238ca8786fb45bdce9f70991fc1765d55f' and 'git state : clean'
+builds        : 2026-10-13T13:40:32Z to 2026-10-13T13:41:34Z, 0 warnings in either log
+host          : Intel(R) Xeon(R) Processor @ 2.80GHz, nproc 1, 4 vCPUs visible, pinned to cpu core 2 (cpu_pinned true in every record), no cpufreq, no PMU
+
+## binaries (sha256)
+9b91a4f159b7ce181ffe59756b2c1792caf1ea05deb4f7bea329ef0a9b3a0d38  build/release/bin/lpq_benchmark
+64e1088928180dda9453341113211f14d9056cbead7a5dc14814db075065cc0d  build/release/bin/lpq_profile
+1dfb1b72d78a628734790066fcc8930b34189a7aead1004650aae7f106aaa7d2  build/release/bin/lpq_profile_noinstr
+e4f54563eb32b40debc60c338818580405d9ad74441053f29c4f6879189896b4  build/release-noinstr/bin/lpq_benchmark
+
+## inputs (sha256)
+datasets/processed/dimacs_ny.lpqgraph  10cfb716d2be624b12530ecd49e173db98f19360d67a8d0ffa32e7ccbf687abd  header_checksum=15161404696693572585 metadata_checksum=15161404696693572585 match=True nodes=264346
+datasets/processed/snap_facebook.lpqgraph  b4d931a8e253841c9f771c62fca483f8664efa29b6829afd85129a81d7319589  header_checksum=27545307309881865 metadata_checksum=27545307309881865 match=True nodes=4039
+experiments/manifests/dimacs_ny_queries_100.yaml  b2bd5890d000fe15e7875c142a5459ab0d72870b878e327b0ecaafb100bbc89d
+experiments/manifests/snap_facebook_queries_first100.yaml  a08a2696e6484875192ab8ebcbe54aa09746b5acb3a8a1c5f8b154abb52a98b3
+models/exported/dimacs_ny_static.lpqmodel  eca2fb80b30b95bf06aa173b21b4dfe5163bf4c8273658b57b5cdb3d69e1e3aa
+models/exported/dimacs_ny_static.report.json  d88c125fa78481339b9e08b0e299b69f0b6bc61c203657ba34c00ff3e449f374
+models/exported/snap_facebook_static.lpqmodel  f5413deb366ae47cb76c6505df4fe68eef6d73a2bb34b74cabf8d4e731b62269
+models/exported/snap_facebook_static.report.json  d7ae0ec729be0fa52dc727cf6eea3d8215c271e1b7887bbc89ae155009189bbc
+dimacs_ny model report: dataset dimacs_ny graph_checksum 15161404696693572585 bucket_width 37 training_manifest ('dimacs_ny_training_queries.yaml', 'uniform_pairs_distinct_endpoints', 917)
+snap_facebook model report: dataset snap_facebook graph_checksum 27545307309881865 bucket_width 8 training_manifest ('snap_facebook_training_queries_source_disjoint.yaml', 'uniform_pairs_distinct_endpoints_source_disjoint', 917)
+
+## raw result files (sha256; kept outside git in results/raw/m6/ of the scratch worktree)
+910fc0608f17ac1008c3cf6f1c9875ff2aacfdb12864abd938b2a7c7b5ef5324  A_ny_inv1.json
+cd4918bf20dc1643092cb85d0b2edfe8124ad0e37d01c15fcd99309f80164961  A_ny_inv2.json
+e7bdf936b55be392587d1d3a97aa5181a23a06c0b78608be3a327f225591c756  A_ny_inv3.json
+e08c91c112026615803829f116f037a0b1c8d1c302cf407c8863b50c77b838a6  B_fb_inv1.json
+1dcf349515aa169dcc17b061ce7027bc3de76d938898690c5abb5e4c7c7b4670  B_fb_inv2.json
+c4d31a48a157072db96747f6640c601829e5098c0db92f8748c65a2a88c48db3  B_fb_inv3.json
+fb97a440bf305f8b613a7cb1885f4572d3a9441b86ba3e88d7a4d4b71cb05f11  C_ni_1.json
+3339c67ada8e0beb4a359d57378d1c11451f7b31016df4093fc1f9c5f8a0a437  C_ni_2.json
+91e140b03abae473258c209b85fce2cc89c789b78a09a6ffb7d998ee6fb45326  C_rel_1.json
+f0769ddeb22c9441a3e42e2fccc7177c871bf3c07559b6fcc61dc6fcd6a8d95c  C_rel_2.json
+4896d71fcebdc37bcb6da67d8343055ed73409ed3ab9ca83a4a9ea29276331e4  E_fb_disabled.json
+c85f2c5ee23cd159c97fd3133f6769af3eff2e3c7ad98f6e97fd76efd3d11e0f  E_fb_periodic.json
+
+## profile logs and timing files (sha256)
+60bcf1ea067689a6eca83b3e4db9f149ffcce0cf30563d19382bec8a33ccf329  D_lpq_profile_binary_heap_r1.log
+7d556a7b582cde1de18964d34c0038b3777e395bec44595fcd6ff5e9e779d6b9  D_lpq_profile_binary_heap_r2.log
+a6203ced594ba3f2c66ce41868c8b299778333e2f8a71e158d1eb9fc5031d34a  D_lpq_profile_lpq_r1.log
+6229dcbe4fae83a3bdc8d22931579480d101a5fdaf6bbda554c3e66818a422e6  D_lpq_profile_lpq_r2.log
+a0ffd4a2c31e8ba98fc86d0a2fdd4dc80cbfc317d7758855f7c7926e777372e4  D_lpq_profile_noinstr_binary_heap_r1.log
+485ce0c81dd270abb24b7b8d17a1330beb7c36b426766ed401f5bdc69b3f9515  D_lpq_profile_noinstr_binary_heap_r2.log
+dc552972a670599990bdcfc4d2f46f44dd33ca8030fee34a272827ad6acdce3d  D_lpq_profile_noinstr_lpq_r1.log
+89d0b7695cc9743977d457e03c8a6a292cc4aef83a1850a9719a95b4b102593d  D_lpq_profile_noinstr_lpq_r2.log
+c59a80ae469629798545913d053f79ee68a0a493c10ac40879aef5e4380feb3f  D_lpq_profile_binary_heap_r1.time
+b82d50a0676b3c41f889e4eb7fe09e872560331fe91beca4452c435a7f13a587  D_lpq_profile_binary_heap_r2.time
+49ac25627937b65e5da8cceb2b4d1bbc3664f698827e27e02420e3f1b982415d  D_lpq_profile_lpq_r1.time
+8cf2612119ce387b3d29fc7623db1a243b7299360df937209a3d9f139ccfd401  D_lpq_profile_lpq_r2.time
+9006939f01f3ac43be7733deefaed4aca19049e699fe6e957d9bb337ed47c795  D_lpq_profile_noinstr_binary_heap_r1.time
+b0d8585839960e02c3edd92ae33a5516e85d0c40af6d317890c52493b70683d4  D_lpq_profile_noinstr_binary_heap_r2.time
+5503a7e379b8e18df7cce6458b89ec82bf8c977abc9ebf552a8081354f6f8bed  D_lpq_profile_noinstr_lpq_r1.time
+82f80f147b8f21d7b4636243af0f957c0f8b89357174e9c0172074275260a2a0  D_lpq_profile_noinstr_lpq_r2.time
+0554b77f541c0d95a0fa5e1763a3b29bd81fc697f09356e927633b950bf83aae  S_scorer_probe.json
+eedbdd45bf1311e77554eb14b145854b5418098533c9d2c8f89f60792de60a95  S_scorer_probe.txt
+
+## end-of-run gate
+git rev-parse HEAD = 450804238ca8786fb45bdce9f70991fc1765d55f; git status --porcelain lines = 0

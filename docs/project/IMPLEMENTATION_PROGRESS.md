@@ -725,3 +725,30 @@ Unreachable-destination UI state on real data; timeout state; a UI test for appr
 Research page and API benchmark jobs; the snap-distance policy; a clean-configure rebuild for trustworthy provenance; Windows,
 sanitizer and Clang builds of this stack (M12).
 
+---
+
+## Milestone M6: cost accounting and the LPQ bottleneck, on this host
+Status: PASS for the scoped protocol, with the gaps below; hypotheses H7 not established and H8 failed; local only
+Date: 2026-10-13
+Source commit measured: `450804238ca8786fb45bdce9f70991fc1765d55f` (clean worktree, fresh `release` and `release-noinstr` builds)
+Results and methods: `docs/experiments/m6-cost-accounting.md`; provenance, hashes, scripts and the full tables in `docs/experiments/m6/`.
+
+### What was done
+The pre-registered protocol, unchanged: pinned core 2, `--require-pinning`, interleaved single-process blocks, 7 repetitions and
+3 warm-ups, reference validation, three independent invocations per graph (`dimacs_ny`, `snap_facebook`) of nine rows including
+`radix_heap` and the calibrated `lpq_optimized`, a counter-overhead block, a phase-profile block read after it, an online block,
+and a coarse scorer-build probe. 7,200 records, all exact, all `cpu_pinned`, all commit `450804238c…` and not dirty; 32.3% flagged
+noisy and kept. The fourth-invocation rule was written first and never triggered. Wall-clock: builds 1 minute, timed runs
+32 minutes 54 seconds (13:42:25Z to 14:15:19Z), whole milestone about 40 minutes (13:40:15Z to 14:21:40Z) including analysis and writing.
+
+### Outcomes (details and numbers in the M6 document)
+H1, H2, H4, H5, H6 held; H3 held on NY and failed on Facebook; H7 not established (upper bounds above 10% for two rows); H8 failed
+(frozen `lpq_online` about 29% slower in search time than `lpq_model`). The learned queue was slower than the radix heap on both
+graphs (3.2x and 8.1x) and the trained scorer did not help it. `lpq_optimized` resolved to the radix heap on both. No performance
+benefit of learning or of online learning is claimed or established.
+
+### Gaps
+No per-component ML time in the records (D-26); the profile covers only the constant-scorer LPQ on `dimacs_ny`; the scorer-build
+estimate is process-level, one graph, wide uncertainty; one online invocation per mode; one shared host; A* excluded by instruction.
+Added `python/tests/test_cost_accounting.py` (4 characterisation tests; they pass against the M6 binary).
+

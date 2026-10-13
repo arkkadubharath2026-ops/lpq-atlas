@@ -1,0 +1,41 @@
+2026-10-13T13:42:25Z A inv1 start (dimacs_ny, seed 20260923)
+2026-10-13T13:48:38Z A inv1 end exit 0
+2026-10-13T13:48:38Z A inv2 start (dimacs_ny, seed 20260924)
+2026-10-13T13:54:56Z A inv2 end exit 0
+2026-10-13T13:54:56Z A inv3 start (dimacs_ny, seed 20260925)
+2026-10-13T14:01:24Z A inv3 end exit 0
+2026-10-13T14:01:24Z B inv1 start (snap_facebook, seed 20260923)
+2026-10-13T14:01:42Z B inv1 end exit 0
+2026-10-13T14:01:42Z B inv2 start (snap_facebook, seed 20260924)
+2026-10-13T14:02:00Z B inv2 end exit 0
+2026-10-13T14:02:00Z B inv3 start (snap_facebook, seed 20260925)
+2026-10-13T14:02:17Z B inv3 end exit 0
+2026-10-13T14:02:17Z C pair1 rel start
+2026-10-13T14:04:48Z C pair1 rel end exit 0
+2026-10-13T14:04:48Z C pair1 ni start
+2026-10-13T14:07:10Z C pair1 ni end exit 0
+2026-10-13T14:07:10Z C pair2 rel start
+2026-10-13T14:09:37Z C pair2 rel end exit 0
+2026-10-13T14:09:37Z C pair2 ni start
+2026-10-13T14:12:00Z C pair2 ni end exit 0
+2026-10-13T14:12:00Z D round1 lpq_profile_noinstr lpq start
+2026-10-13T14:12:31Z D round1 lpq_profile_noinstr lpq end exit 0
+2026-10-13T14:12:31Z D round1 lpq_profile lpq start
+2026-10-13T14:13:07Z D round1 lpq_profile lpq end exit 0
+2026-10-13T14:13:07Z D round1 lpq_profile_noinstr binary_heap start
+2026-10-13T14:13:18Z D round1 lpq_profile_noinstr binary_heap end exit 0
+2026-10-13T14:13:18Z D round1 lpq_profile binary_heap start
+2026-10-13T14:13:31Z D round1 lpq_profile binary_heap end exit 0
+2026-10-13T14:13:31Z D round2 lpq_profile_noinstr lpq start
+2026-10-13T14:13:58Z D round2 lpq_profile_noinstr lpq end exit 0
+2026-10-13T14:13:58Z D round2 lpq_profile lpq start
+2026-10-13T14:14:33Z D round2 lpq_profile lpq end exit 0
+2026-10-13T14:14:33Z D round2 lpq_profile_noinstr binary_heap start
+2026-10-13T14:14:43Z D round2 lpq_profile_noinstr binary_heap end exit 0
+2026-10-13T14:14:43Z D round2 lpq_profile binary_heap start
+2026-10-13T14:14:56Z D round2 lpq_profile binary_heap end exit 0
+2026-10-13T14:14:56Z E disabled start
+2026-10-13T14:15:08Z E disabled end exit 0
+2026-10-13T14:15:08Z E periodic start
+2026-10-13T14:15:19Z E periodic end exit 0
+2026-10-13T14:15:19Z ALL DONE

@@ -114,6 +114,13 @@ timed region), so repetitions are comparable and the trajectory does not depend 
 adaptive row are still not comparable with a frozen row's unless the query order and the session start are the
 same, which `--evaluation online_session` makes explicit but cannot enforce.
 
+> **Note added in M6 (2026-10-13): "the `lpq_model` search" means the same results and counters, not the same time.** Measured
+> on `snap_facebook` (100 queries, one invocation per mode), a frozen `lpq_online` row took 1.288 [1.258, 1.307] times the
+> search time of the `lpq_model` row in the same process (periodic: 1.309 [1.288, 1.335]). The consistent explanation is that
+> the online scorer computes each score on demand inside the search where the static scorer reads a precomputed float; this
+> was not profiled. The update itself costs a median 0.80 ms per query in `periodic` mode and sits outside the timed samples.
+> No benefit of updating is established. See `docs/experiments/m6-cost-accounting.md` section 6.
+
 Through the API a run takes `queue: "lpq_online"`, an explicit `model_id` (or `online_start: "cold"`),
 `online_update_mode`, and three override flags, all off by default (`allow_graph_mismatch`,
 `allow_width_mismatch`, `accept_no_provenance`). The model must have a report next to it unless
