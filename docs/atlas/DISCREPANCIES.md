@@ -442,3 +442,54 @@ claim, per the project's measurement rules.
 * **Status:** open; **no code changed**. Not related to D-17 (the epsilon is present on these rows) and it does
   not affect any recorded comparison count. A follow-up would decide whether unsupported rows should carry the
   run's identity fields or whether the summary should skip them when choosing a file-level value.
+
+## Findings added by M11 (2026-10-13)
+
+### D-23. A failed benchmark's API error message exposed host filesystem paths
+
+* **Expected:** specdoc §36: "do not expose host paths in API errors".
+* **Actual (reproduced on `completion/m5-candidate`):** the benchmark job put the last 300 characters of
+  `engine.log` into its error message. The first line of that log is the engine's argv, which holds the absolute
+  paths of the dataset, the experiment file and the output file; a short log (an engine that fails immediately)
+  puts that line inside the 300 characters. Reproduced with a stand-in `lpq_benchmark` that exits 3: the message
+  returned by `GET /api/benchmarks/{id}` contained `/tmp/.../benchmarks/ben_.../results.json`. The failure was
+  simulated; the exposure is a property of the code, not of the stand-in.
+* **Not established:** whether the real engine's own stderr can contain a path (no real failure was produced),
+  and whether `status.json` on disk matters (it is not served).
+* **Status:** **fixed in M11.** The argv line is not echoed; every `JobFailure` message and the model-scoring
+  stderr go through `scrub_host_paths` (`atlas/api/atlas_api/jobs.py`), which replaces the repository, work,
+  temp and home directories with tokens and any other absolute path with `<path>`. This is display hygiene for
+  error text, not a security boundary. The argv line is still written to `engine.log` in the job directory.
+  Tests: `atlas/api/tests/test_error_hygiene.py` (the benchmark test fails on the previous code).
+
+### D-24. A failed download was reported as an "unexpected server error"
+
+* **Actual (reproduced against the live API):** `POST /api/datasets/osm_liechtenstein/prepare` (its Geofabrik URL
+  is dead, D-01) ended `FAILED` with category `internal`, message "unexpected server error". The preparation job
+  caught `PipelineError`, `OSError` and `ValueError`, but `AcquisitionError`, `DeriveError` and
+  `OsmExtractionError` derive from `RuntimeError` and escaped; the real reason was only in the server log.
+* **Status:** **fixed in M11.** Those three are caught and reported as category `preparation` with the first
+  line of the message (here the URL and "Connection reset by peer"). Re-run live after the fix. Test:
+  `test_a_failed_download_is_a_preparation_failure_not_an_internal_error`.
+
+### D-25. Choosing a model queue on a dataset with no matching model gave no explanation
+
+* **Actual (Playwright probe on `osm_monaco`, which has no trained model):** selecting `lpq_model` showed a model
+  list containing only "— choose —" and a disabled Run button, with no text saying why (specdoc §35 lists "model
+  unavailable"). The API side was already correct: it refuses a model trained on another dataset with a clear 400.
+* **Status:** **fixed in M11.** `RunConfigForm` shows a notice (`modelUnavailableNotice`) for `lpq_model`, and for a
+  warm-started `lpq_online`, when no model matches the dataset; it shows nothing when a model exists. Verified in
+  the browser on `osm_monaco` (note shown) and `dimacs_ny` (no note); three vitest cases.
+
+### M11 observations that were not changed
+
+| Observation | Why left | Follow-up |
+|---|---|---|
+| A snap request far from the graph succeeds: a click at (-100, 40) returned a Monaco node at 8,207,543 m. The UI prints "click snapped N m to graph node", so it is honest, but it does not warn or refuse. | Policy choice (what distance is "too far"). | Decide a threshold; then refuse in the API and show the reason. |
+| Request bodies accept unknown fields (`{"argv": "--evil"}` returned 202; the field is ignored and never reaches the engine). | Not an injection path as written; `extra="forbid"` is stricter. | Optional hardening. |
+| Job concurrency is capped (`ATLAS_MAX_JOBS`, default 2 workers) but the queue behind it is unbounded. | No cap was specified. | Optional: bound queue depth. |
+| API benchmark jobs are stored under `results/atlas/benchmarks`; the Research page lists only `results/raw`. | By design as far as I can tell. | Decide whether jobs should appear on Research (specdoc §59, last step). |
+| The reused engine binaries report `Commit 5306e5b13b (dirty)` in run provenance: the commit at their CMake configure time, not the candidate's. | Property of the reused build directory. | Rebuild from a clean configure before any provenance-sensitive run (M14). |
+| The e2e "unreachable destination" test skips (needs `snap_roadnet_pa`, which cannot be downloaded here). 60 random targets from one Monaco node were all reachable, so no genuine unreachable pair was found on real OSM. | Needs a dataset with a disconnected pair. | Run it where `snap_roadnet_pa` is prepared; the API contract test `test_unreachable_pair_has_no_ratio` covers the engine path. |
+| No timeout state was exercised (180 s run limit). The UI shows a failed job's category and message (checked with an intercepted response). | Would need a real 180 s run. | Optional. |
+

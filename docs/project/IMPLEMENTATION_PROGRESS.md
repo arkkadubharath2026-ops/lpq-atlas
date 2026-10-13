@@ -668,3 +668,60 @@ Applied after the acceptance review of `50d4902`; no C++ source, historical resu
 - **D-22** (new, open, observation only): unsupported rows carry an empty `experiment_id` and `graph_nodes` 0, and a file
   whose first record is unsupported summarises as `graph_nodes: 0`. Cause not diagnosed; no code changed.
 
+---
+
+## Milestone M11: Atlas API and frontend acceptance, and a source review of the security claims
+Status: PASS with open gaps (listed); three defects found and fixed; local only, nothing pushed
+Date: 2026-10-13
+Base commit SHA: `87be8da2fcf574cc35ef5bbce1c6b5002e756952`
+Working branch: `completion/m5-candidate`
+Environment: Ubuntu 24.04, 1 CPU, Node 22, Chromium from `/opt/pw-browsers`; engine binaries reused from the M5 build with
+`lpq_benchmark` taken from the D-17 rebuild (the only binary the candidate changed); `osm_monaco` processed files copied from
+the M3 worktree (its retained extract; not redistributed); `node_modules` copied for the build and removed afterwards.
+
+### What was run
+| check | result |
+|---|---|
+| Playwright, existing suite, `ATLAS_E2E_DATASET=demo_road` (real API, real engine, production Next build) | exit 0: 9 passed, 1 skipped |
+| Playwright, existing suite, `ATLAS_E2E_DATASET=osm_monaco` (real OSM) | exit 0: 9 passed, 1 skipped |
+| The same two runs again after the fixes below | the same: 9 passed, 1 skipped each, exit 0 |
+| specdoc §59 walked through the live API on `osm_monaco` (script kept outside the repo) | see below |
+| about 40 negative-path requests against the live API (validation, traversal ids, enums, NaN, out-of-range, unknown ids, model of another graph) | none leaked a host path; all were refused (4xx) except a far-away snap and an unknown extra field, both accepted and recorded below |
+| about 30 browser probes of UI states (API down on 10 pages, loading, unknown ids, dataset not prepared, invalid node, trace and counters, cancelled, failed job, malformed artifact, no stored results), in a temporary spec that was deleted | every one showed a stated state except one gap (D-25); one early probe of the incompatible-model case timed out because the Run button is disabled, which is how the gap was found |
+| `atlas/api` pytest after the fixes | 117 passed, 1 skipped (was 113 + 1; +4 new) |
+| web: vitest 55 passed (+3), `tsc --noEmit` clean, eslint 0 errors and the same 7 warnings as before | |
+The skipped test is the unreachable-destination case (needs `snap_roadnet_pa`).
+
+### specdoc §59 on real OSM (osm_monaco, 7,592 nodes, 11,680 arcs, OpenStreetMap.fr extract of 2026-10-13)
+Two lon/lat clicks snapped to graph nodes 2043 (6.5 m) and 138 (98.1 m), with their OSM node ids. Dijkstra with binary heap and radix
+heap, A* with haversine, Dijkstra with LPQ exact and with LPQ approximate (epsilon 0.1) all returned distance 26,826 over 224 hops,
+each `exact_match` against the engine's reference and each trace identical to the untraced run; for the LPQ exact run I also checked
+that the returned path starts and ends at the snapped nodes. The approximate request reached the engine (`--mode approximate --epsilon 0.1` in the logged argv; the result records
+the policy, the bound 1.1 and `bound_holds`). On this query the slack changed nothing (identical event count), which is a property
+of the query, not evidence either way. The LPQ trace holds engine events (bucket selected, candidate window, candidate selected,
+verification accepted, correction applied, node settled, edge relaxed). The comparison API reported `same_query` and
+`reference_agrees`. A 10-query benchmark job over three queues ran with all exact. The LPQ here is the constant-scorer queue (no
+model for this dataset), labelled as such in the result. **Not covered:** the stage "watch the trace" is only exercised by the
+existing replay test (one step); no UI test selects approximate mode; the Research page lists only `results/raw`.
+
+### Security source review (read, then probed; not a proof)
+* Engine launches: five API call sites (`jobs.py` Popen, `graphcache.py`, `registry.py` twice, `app.py` model scoring) plus three in
+  `lpq_tools` (git revision, derive, convert). Every one passes an argv list; `grep` finds no `shell=True`, `os.system` or `eval`.
+* Request data reaching argv is an enum (`Literal`), a bounded number, an id matching `^[a-z0-9_]{1,64}$` that is then looked up in
+  the registry (never joined onto a path), or a regex-validated node list. Model and graph paths come from the registry listing.
+  Result files are found by matching a listing, not by joining the caller's string (`find_result_file`).
+* Probed: traversal ids, `..%2f` forms, absolute paths, a shell string in `queue`, NaN and Infinity, out-of-range numbers and ids.
+  All were refused with 404 or 422.
+* Caps present: trace events and bytes, repetitions (50), `lpq_window`, per-process timeouts, 2 concurrent jobs.
+* Not established: that no other path exists; the registry's own files are trusted; there is no authentication (local single-user
+  by design); no body-size limit; the real engine's stderr was not examined for paths (D-23 "Not established").
+
+### Defects found and fixed (three), observations not changed
+D-23 host paths in a failed benchmark's message, D-24 failed downloads reported as an internal error, D-25 no explanation when no
+model matches. Details, tests and the table of observations that were deliberately not changed are in `docs/atlas/DISCREPANCIES.md`.
+
+### Remaining gaps
+Unreachable-destination UI state on real data; timeout state; a UI test for approximate mode and for the online badge; the
+Research page and API benchmark jobs; the snap-distance policy; a clean-configure rebuild for trustworthy provenance; Windows,
+sanitizer and Clang builds of this stack (M12).
+
