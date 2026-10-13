@@ -182,23 +182,37 @@ entries true.
   gate extraction, and whether that helps, is untested.
 * **Tested (2026-10-13, candidate branch `completion/m5-candidate`): confidence does not gate
   extraction, and on the LPQ path it is not even populated.** `git grep` over `cpp/include` and
-  `cpp/apps`: the only reads of a `.confidence` member are inside the predictors' own
-  calibration code; no code in `lpq/`, `verification/`, `adaptation/` or the apps branches on it.
-  `CandidateBetter` orders by `score` then node id. The two sites that build a `Candidate` from a
-  queue entry (`learned_priority_queue.hpp`, the bucket scan and `refill`) copy `node`, `key` and
-  `score` and leave `confidence` at its default `0.0F`, because the bucket substrate stores no
-  confidence. `PredictionEvent::from_verification` takes a confidence argument but has no caller
-  outside tests. So the "calibrated probability" in the field's comment is never produced on this
-  path. Regression test (pins current behaviour, does not endorse it):
+  `cpp/apps`: the only code that reads a predictor's `confidence` is the predictors' own
+  `uncertainty_from_confidence(p.confidence)` and the calibration bookkeeping; no code in `lpq/`,
+  `verification/`, `adaptation/` or the apps branches on it. `CandidateBetter` orders by `score`
+  then node id. The two sites that build a `Candidate` from a queue entry
+  (`learned_priority_queue.hpp`, the bucket scan and `refill`) copy `node`, `key` and `score` and
+  leave `confidence` at its default `0.0F`, because the bucket substrate stores no confidence.
+  `PredictionEvent::from_verification` takes a confidence argument but has no production caller. So
+  the "calibrated probability" in the field's comment is never produced on this path.
+* **What the adaptive controller does use instead.** `AdaptiveController` (`adaptive_controller.hpp`)
+  decides from what verification observed after the fact: it records each outcome's
+  `verification.rank_displacement` (line 203) and exposes the mean and 95th-percentile rank error.
+  That is feedback from ground truth, not a predicted confidence, so PRD §12 ("The controller
+  **must** use confidence to decide how aggressively to trust predictions") is **not met** by it.
+  Whether rank-displacement control is an adequate substitute is a design question for the owner,
+  not something this register decides.
+* **The two tests are characterisation tests, not evidence of compliance.**
   `CandidateManager.ConfidenceDoesNotChangeTheWindowItsOrderOrItsAccounting` and
-  `CandidateManager.ALowConfidenceCandidateStillBeatsAConfidentOneWithALowerScore` in
-  `cpp/tests/lpq/test_candidate_manager.cpp`. Offering the same stream with confidence set to
-  none, certain, inverted against the score and seeded-arbitrary gives the identical window
-  order and rejection count.
-* **Status:** the claim "confidence-aware candidate extraction" (PRD §2) is **not implemented**.
-  Whether it should be, and whether it would help, is still untested; building a gated variant is
-  a prerequisite for PRD §21 item 3 (`docs/experiments/prd-section-21-status.md`). If it is ever
-  wired in, the two tests above must be changed on purpose.
+  `CandidateManager.ALowConfidenceCandidateStillBeatsAConfidentOneWithALowerScore`
+  (`cpp/tests/lpq/test_candidate_manager.cpp`) pin what the window does today: offering one
+  `(node, key, score)` stream with confidence set to none, certain, inverted against the score and
+  seeded-arbitrary gives the same window order and rejection count. They establish that the feature
+  is absent; they do not and cannot show that confidence-aware extraction works. They fail if
+  `CandidateBetter` is made to order by confidence (mutation checked), and the controller and
+  verification code are covered by the `git grep` above, not by a test. No test establishes the
+  intended feature, because the feature does not exist.
+* **Status:** the claim "confidence-aware candidate extraction" (PRD §2) and the PRD §12 controller
+  requirement are **not implemented**. PRD §21 item 3 ("Learned prediction + confidence") and, through
+  PRD §25 criterion 11, the ablation of every major component therefore cannot be met until a
+  confidence-using variant exists or the owner descopes it
+  (`docs/experiments/prd-section-21-status.md`). Not built in this milestone, by decision. If it is
+  ever wired in, the two tests above must be changed on purpose.
 
 ### D-15. Model artifacts do not embed the provenance specdoc §30 asks for
 
@@ -407,3 +421,24 @@ reported `binary_heap -> radix_heap` as faster for radix, `radix_heap -> lpq` as
 `lpq -> lpq_model` as not distinguishable from zero (CI includes 0, adjusted p 0.37). The comparison counts
 matched the recorded ones exactly for all four queues. Timings from this environment are not used for any
 claim, per the project's measurement rules.
+
+### D-22. Unsupported rows carry empty identity fields, and a file's summary can read `graph_nodes: 0`
+
+**Observation requiring follow-up; the cause is not diagnosed.** Found on 2026-10-13 while auditing D-17.
+
+* **Observed (candidate branch `completion/m5-candidate`, `lpq_benchmark --experiment` with `pq: [binary_heap,
+  lpq]`, `mode: [approximate]`, 5 queries):** the five records for `binary_heap` (`supported: false`,
+  "has no approximation mechanism") have `experiment_id: ""` and `graph_nodes: 0`, while the five `lpq` records
+  have `experiment_id: "review_eps_cfg"` and `graph_nodes: 19600`. The first record in the file was an
+  unsupported one. `atlas_api.analysis.summarise_file` on that file returned `graph_nodes: 0`.
+* **Where the values come from (read, not tested):** the unsupported record is built in `lpq_benchmark.cpp` from
+  `ResultRecord rec;` with `pq`, `algorithm`, `mode` and the reason set, and no identity fields; measured records
+  go through `measure_one`, which sets `experiment_id`, `dataset`, `graph_nodes` and `graph_edges`.
+  `analysis.py:148` takes `graph_nodes` from `records[0]`. That is consistent with the observation, but I have
+  not confirmed it is the whole story, whether other fields are affected, or whether any consumer relies on
+  the empty values.
+* **Not checked:** other summary fields that read from `records[0]`, the Atlas pages that show these values, and
+  whether older result files behave the same.
+* **Status:** open; **no code changed**. Not related to D-17 (the epsilon is present on these rows) and it does
+  not affect any recorded comparison count. A follow-up would decide whether unsupported rows should carry the
+  run's identity fields or whether the summary should skip them when choosing a file-level value.

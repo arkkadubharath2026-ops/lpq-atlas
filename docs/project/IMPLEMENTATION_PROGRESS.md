@@ -653,3 +653,18 @@ candidate will be the full check once it is pushed, which has not been asked for
 Everything in M6 to M14 except the pieces above. In particular: no end-to-end timing account (M6), MLP and tree
 decision (M7), approximate-mode distributions and matrix (M8), the M9 experiments, D-15 beyond the training manifest,
 the sanitizer/Clang ctest and Windows engine jobs (M12), and the literature and release gates (M13, M14).
+
+### Review corrections C1 to C3 and D-22 (follow-up commit on the candidate branch)
+Applied after the acceptance review of `50d4902`; no C++ source, historical result or online-learning code changed.
+- **C1** `python/tests/test_approximate_epsilon.py`: three more tests that go through `lpq_benchmark --experiment` with a real
+  experiment configuration (demo graph, explicit query file, 3 repetitions): epsilon 0.1 and 0.35 reach every approximate
+  record (measured and unsupported rows, and `experiment_id` is the configuration's name), and a configuration listing
+  `exact` and `approximate` marks only the approximate rows. Against the M5 binary these three fail with `KeyError`.
+- **C2** D-14 now cites PRD §12 ("the controller must use confidence"), describes that `AdaptiveController` decides from
+  observed `rank_displacement` (`adaptive_controller.hpp:203`), and labels the two `CandidateManager` tests as
+  characterisation tests, not evidence of compliance.
+- **C3** the PRD §21 status table has an "Implemented?" column with evidence paths. Item 5 stays "partly met" and now
+  states that online-learning performance benefit is not established.
+- **D-22** (new, open, observation only): unsupported rows carry an empty `experiment_id` and `graph_nodes` 0, and a file
+  whose first record is unsupported summarises as `graph_nodes: 0`. Cause not diagnosed; no code changed.
+
