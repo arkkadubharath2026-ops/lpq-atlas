@@ -148,7 +148,11 @@ entries true.
   and 5 `.py`; the `.ps1` and `.py` files are run through an interpreter. Eleven others are 100755.
   Direct execution of `scripts/build/refresh_graph.sh` failed with *Permission denied* on `main`;
   the other six were not individually executed.
-* **Status:** recorded; fix deferred to M4 because it is a source (file mode) change.
+* **Status:** **fixed in M4** (commit `ee8d78f`, branch `completion/m4-reproducibility-tooling`).
+  The seven scripts are now mode 100755 with no content change; `python/tests/test_script_modes.py`
+  reads the mode from the git index and failed on all seven before the change. The fix exists only on
+  that local branch; `main`, v2 and the docs branch still carry mode 100644. Recorded earlier as
+  "fix deferred to M4 because it is a source (file mode) change."
 
 ### D-14. `confidence` is produced and recorded but does not gate extraction
 
@@ -207,12 +211,27 @@ entries true.
   (`docs/local-setup.md` calls the resulting git diff "expected"). Preparing one dataset therefore
   drops the other entries from a tracked file. M3 avoided it by calling `prepare_dataset()` through
   an uncommitted driver, as `scripts/demo/prepare_demo.py` does, and updating only the Monaco entry;
-  the four other entries were verified byte-identical. Fix due with M4.
+  the four other entries were verified byte-identical. **Fixed in M4** (commit `41906d9`):
+  `pipeline.update_index()` merges prepared entries into the existing index, refuses to overwrite one
+  it cannot parse, and `prepare_datasets.py` uses it. 13 new tests in
+  `python/tests/test_index_preservation.py` failed before the change (the command-line ones with
+  `{'b'}` where `{'a','b','c'}` was expected). Run for real with
+  `prepare_datasets.py dimacs_ny snap_facebook`, no entry was dropped, all five existing entries
+  were identical, and `snap_facebook` (prepared but never indexed) was added; that generated change
+  was inspected and then restored, not committed.
 * **A stale lock file.** `datasets/metadata/osm_monaco.checksums.json` records the old Geofabrik
   PBF digest. The pipeline writes that lock file only when a config has no pin, so it is not rewritten
   now that the config is pinned. It is left unchanged as a historical record and now describes a file
-  the config no longer names.
+  the config no longer names. **Investigated in M4 and deliberately not changed.** The lock is a
+  first-observation record for files without a pin: it is read only for unpinned files, keyed by
+  raw filename, and not rewritten when a file is pinned (`docs/experiments/datasets.md` says
+  "Pinning it afterwards is a one-line edit to the config"). `osm_liechtenstein.checksums.json` is
+  in the same state. Two tests in `python/tests/test_acquire.py` show a leftover entry for another
+  filename is inert for a pinned file and is kept, not replaced, when a new unpinned file is
+  recorded; `datasets.md` now states the semantics.
 * **A hard-coded raw filename in a test.** `python/tests/test_osm.py` names the raw PBF literally, so a
-  re-pin that changes the local filename needs a test edit (done once in M3). Deriving it from the
-  dataset config would remove the coupling; not done.
-* **Status:** recorded; M4 owns the pipeline items.
+  re-pin that changes the local filename needs a test edit (done once in M3). **Fixed in M4** (commit
+  `099d628`): the path is derived from `configs/datasets/osm_monaco.yaml`. The Monaco test still skips
+  when the PBF is absent, and runs when it is present.
+* **Status:** fixed in M4 on the local branch `completion/m4-reproducibility-tooling`; the other
+  branches are unchanged. Not changed: the lock files.
