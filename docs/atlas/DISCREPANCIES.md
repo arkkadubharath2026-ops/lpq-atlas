@@ -357,8 +357,19 @@ entries true.
   `generate_figures.sh` exits 0 and prints a warning that the order-reversed scatter is missing and
   that the remaining figure "carries the matrix order that was measured to inflate this effect by 45%".
   The workflow documentation names no command that produces the file.
-* **Status:** recorded; no script changed. A reader who follows the documented workflow gets one of the
-  two figures and an exit code of 0.
+* **Origin (verified in M5-P2):** the file is read only by `generate_figures.sh`. No script, configuration or
+  command in any ref ever produced it (`git log --all -S"order_check"` finds only the commit that added the
+  figure script). The ablation configuration differs from the other experiments only by its `pq:` list order,
+  so the reversed run was almost certainly an unversioned edit of that list; its output was never committed
+  and **cannot be recovered or reconstructed**.
+* **Status:** **resolved in M5-P2** on the local branch `completion/m5b-d20-order-check`.
+  `configs/experiments/dimacs_ny_order_check_v1.yaml` is the ablation ladder in the opposite order and nothing
+  else (a test enforces that); `run_main_experiments.sh` runs it after the ablation and checks its comparison
+  counts against the same recorded values; `generate_figures.sh` now requires both results files (present and
+  complete) before drawing anything and exits non-zero naming the missing file, with the old warning-and-exit-0
+  path removed; `docs/reproducing.md` and a note in `ablation-waterfall.md` document the command and say the
+  output is a **new measurement**, not the historical one. The historical 45% figure is unchanged and
+  unverified here. Tested: 6 new tests (3 red before the change; the other 3 failed only incidentally), and a full run of the documented sequence.
 
 ### Observation, not a discrepancy: timing direction (no performance claim)
 

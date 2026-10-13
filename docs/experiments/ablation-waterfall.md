@@ -82,6 +82,11 @@ formality. The ladder was rerun with the order reversed:
 | `lpq_model` last | +2,956,350 ns | [+1,931,500, +4,188,300] | 86% |
 | **`lpq_model` first** | **+1,606,650 ns** | **[+593,900, +2,625,200]** | **74%** |
 
+> *Note added 2026-10-13 (M5-P2).* The reversed-order run reported in this table was not committed with a
+> configuration or an output file, and neither can be recovered. The pipeline now has a versioned producer,
+> `configs/experiments/dimacs_ny_order_check_v1.yaml` (see `docs/reproducing.md`). Its output is a **new
+> measurement** on whatever host runs it; it does not reconstruct or confirm the table above.
+
 **The effect survives reversal** — both confidence intervals exclude zero, on a
 majority of queries either way — **and the magnitude halves.** Matrix position
 inflated the first estimate by roughly 45%.

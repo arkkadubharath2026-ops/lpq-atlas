@@ -1,0 +1,59 @@
+# The ablation ladder of dimacs_ny_ablation_v1.yaml, measured in the OPPOSITE matrix order.
+#
+#   lpq_benchmark --experiment configs/experiments/dimacs_ny_order_check_v1.yaml \
+#                 --model models/exported/dimacs_ny_static.lpqmodel \
+#                 --output results/raw/dimacs_ny_order_check_v1.json
+#
+# scripts/reproduce/run_main_experiments.sh runs this after the ablation, and
+# scripts/reproduce/generate_figures.sh reads its output for the order-reversed paired scatter.
+#
+# WHY IT EXISTS. In the ablation, lpq_model runs LAST in a fixed matrix order, so matrix position
+# and treatment are confounded; on a thermally variable host that is a real risk. The same
+# comparison with lpq_model FIRST separates the two. docs/experiments/ablation-waterfall.md reports
+# that the effect size differed by about 45% between the two orders.
+#
+# THIS IS A NEW MEASUREMENT. The reversed-order run behind that historical figure was never
+# committed, and its output file cannot be recovered or reconstructed. Results from this
+# configuration are a fresh measurement on whatever host runs it, not a reproduction of the old
+# file, and are compared with the ablation run from the same host and session.
+#
+# Everything except the experiment name and the queue ORDER is identical to the ablation
+# (python/tests/test_order_check.py enforces that), so a difference between the two result files
+# can only come from the order. Comparison counts do not depend on order and must equal the
+# ablation's; run_main_experiments.sh checks that. Timings are noisy and carry no claim here.
+#
+experiment: dimacs_ny_order_check_v1
+dataset: dimacs_ny
+
+algorithm:
+  - dijkstra
+
+pq:
+  - lpq_model
+  - lpq
+  - radix_heap
+  - binary_heap
+
+mode:
+  - exact
+
+query_count: 100
+repetitions: 11
+warmup: 3
+seed: 42
+
+collect:
+  runtime: true
+  pq_operations: true
+
+  # A model IS involved in one of the four rows, but StaticNodeScorer evaluates
+  # it once per node before the search rather than inside it, so there is no
+  # per-extraction inference latency to attribute. Asking for it would produce a
+  # field that is structurally zero and reads like a measurement of a fast model.
+  ml_latency: false
+
+  # Requested, and expected to come back unmeasured on the development host:
+  # WSL2 exposes no CPU PMU. The runner reports these as not measured rather
+  # than estimating them, and the flag stays true so the same manifest collects
+  # them on a host that has counters.
+  hardware_counters: true

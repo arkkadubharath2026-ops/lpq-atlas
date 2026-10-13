@@ -29,9 +29,18 @@ mkdir -p "$FIGURES_DIR"
        pip install -r python/requirements.txt"
 
 ablation="${RESULTS_DIR}/dimacs_ny_ablation_v1.json"
+order_check="${RESULTS_DIR}/dimacs_ny_order_check_v1.json"
+
+# Both results files are required before anything is drawn. The paired scatter
+# exists in two matrix orders precisely so that neither can be quoted without the
+# other; a script that drew one and exited 0 would hand out the position-inflated
+# figure on its own.
 require_file "$ablation" "the ablation results" \
     "scripts/reproduce/run_main_experiments.sh"
+require_file "$order_check" "the order-check results (the same ladder with lpq_model first)" \
+    "scripts/reproduce/run_main_experiments.sh   (configs/experiments/dimacs_ny_order_check_v1.yaml)"
 require_complete_results "$ablation" binary_heap radix_heap lpq lpq_model
+require_complete_results "$order_check" binary_heap radix_heap lpq lpq_model
 
 say "ablation waterfall"
 "$PYTHON" - "$(native_path "$ablation")" "$(native_path "${FIGURES_DIR}/ablation_waterfall.png")" <<'PYEOF' ||
@@ -49,19 +58,10 @@ PYEOF
     die "rendering the ablation figure failed"
 
 say "paired scatter, both matrix orders"
-rendered_any=0
 for pair in "dimacs_ny_ablation_v1.json:order_lpq_model_last" \
             "dimacs_ny_order_check_v1.json:order_lpq_model_first"; do
     source_file="${RESULTS_DIR}/${pair%%:*}"
     tag="${pair##*:}"
-
-    if [ ! -f "$source_file" ]; then
-        # Not fatal on its own, but the pair exists for a reason, so the absence
-        # is stated rather than passed over.
-        printf "    %s is absent; the order control for this figure is missing\n" \
-            "$source_file"
-        continue
-    fi
 
     "$PYTHON" - "$(native_path "$source_file")" "$(native_path "${FIGURES_DIR}/lpq_vs_lpq_model__${tag}.png")" "$tag" <<'PYEOF' ||
 import sys
@@ -79,29 +79,20 @@ print("    " + str(plot_paired_scatter(
 )))
 PYEOF
         die "rendering the paired scatter for ${tag} failed"
-    rendered_any=1
 done
-
-[ "$rendered_any" -eq 1 ] ||
-    die "no paired scatter could be rendered: neither results file was present"
 
 # ESD.md section 36 asks the scripts to fail when an expected artifact is
 # absent. A figure directory that silently ends up short is the figure-shaped
 # version of an incomplete result.
 say "checking every expected figure exists"
 missing=()
-for expected in ablation_waterfall.png lpq_vs_lpq_model__order_lpq_model_last.png; do
+for expected in ablation_waterfall.png \
+                lpq_vs_lpq_model__order_lpq_model_last.png \
+                lpq_vs_lpq_model__order_lpq_model_first.png; do
     [ -f "${FIGURES_DIR}/${expected}" ] || missing+=("$expected")
 done
 if [ ${#missing[@]} -gt 0 ]; then
     die "figures were not written: ${missing[*]}"
-fi
-
-if [ ! -f "${FIGURES_DIR}/lpq_vs_lpq_model__order_lpq_model_first.png" ]; then
-    printf "\n\033[1;33mWARNING:\033[0m the order-reversed scatter is missing.\n"
-    printf "  The remaining figure shows the matrix order that was measured to\n"
-    printf "  inflate this effect by 45%%. Do not quote it alone.\n"
-    printf "  Produce it with the order-check experiment before publishing.\n"
 fi
 
 say "generate_figures: complete"

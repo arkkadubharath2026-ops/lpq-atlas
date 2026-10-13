@@ -17,6 +17,15 @@ checks them against the values recorded in `docs/experiments/ablation-waterfall.
 and **fails if they differ**, because a mismatch means the algorithm or the query
 set changed and the recorded findings no longer describe the code.
 
+**The order check is part of the pipeline.** `run_main_experiments.sh` runs the ablation ladder twice
+on this host: `configs/experiments/dimacs_ny_ablation_v1.yaml` (`lpq_model` last) and
+`configs/experiments/dimacs_ny_order_check_v1.yaml` (the same ladder, `lpq_model` first), writing
+`results/raw/dimacs_ny_ablation_v1.json` and `results/raw/dimacs_ny_order_check_v1.json`. The second is a
+**new measurement**, not a recovery of the historical reversed-order run, whose output file was never
+committed and cannot be reconstructed. Comparison counts do not depend on matrix order, so both files are
+checked against the same recorded counts. `generate_figures.sh` draws the two paired scatters from them and
+**fails** if either results file is missing or incomplete; it no longer exits 0 with a warning.
+
 **Timings will not match and are not expected to.** The machine differs. What
 should reproduce is the *direction* and rough scale of each effect, not the
 nanoseconds. Two figures in particular travel badly:
@@ -51,6 +60,7 @@ looks correct — so each is checked explicitly:
 | Tool not built | `build_all.sh`, by name | surface three scripts later as "command not found" |
 | Tests failing | `build_all.sh` | reproduce numbers from code that does not pass its own tests |
 | Incomplete results | `generate_tables.sh`, `generate_figures.sh` | build a table from a partial matrix, indistinguishable from a whole one |
+| Order-check results missing | `generate_figures.sh` | draw only the matrix order known to inflate the effect and exit 0 |
 | Comparison counts changed | `run_main_experiments.sh` | silently invalidate every recorded finding |
 | A figure not written | `generate_figures.sh` | leave the figure directory quietly short |
 

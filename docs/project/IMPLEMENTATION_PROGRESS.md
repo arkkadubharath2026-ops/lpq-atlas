@@ -22,7 +22,7 @@ and `claude/sleepy-heisenberg-fhr3me` (docs) are unchanged.
 | M3 Monaco real-OSM acquisition | PASS for Monaco, with stated limits | accepted (conditional PASS) |
 | M4 reproducibility and tooling | PASS for the five scoped items; limits below | **pending** |
 | M5-P1 D-19 training protocols (branch `completion/m5a-d19-protocols`) | PASS | **pending** |
-| M5-P2 D-20 order-check producer | not started | |
+| M5-P2 D-20 order-check producer (independent branch `completion/m5b-d20-order-check`, f411ea2; integrated into the candidate branch `completion/m5-candidate`) | PASS on its own branch; integration checked on the candidate (see the integration entry) | **pending** |
 | M5-D21 split guard and model provenance (branch `completion/m5c-d21-provenance`, on the D-19 branch) | PASS | **pending** |
 | M5 online learning O1 to O4 (branch `completion/m5-online-o1-o4`, on the D-21 head) | PASS; O4 checkpoint approved | approved |
 | M5 online learning O5 (in-search updates) | **deferred** (not required by any core feature) | |
@@ -540,3 +540,47 @@ Base: `6572f63` (the approved O4 head), same branch `completion/m5-online-o1-o4`
 
 ### Remaining gaps
 In-search updates (deferred). API benchmarks of `lpq_online` (refused). Approximate mode for `lpq_online` in `lpq_benchmark` (unsupported row). Playwright for the new UI (not run; the unit and type checks are). Sanitizer, GCC/Clang and Windows runs; cross-host determinism. A fixed per-query work cap beyond `max_batch` and the buffer capacity. No timing and no performance claim.
+
+## Milestone M5-P2: D-20, the order-check producer and strict figure generation
+Status: PASS
+Date: 2026-10-13
+Base commit SHA: `51a8b4cdc7b1e4d486ba40497d6abcaa54ca4e0c` (the accepted M4 commit)
+Working branch: `completion/m5b-d20-order-check` (local, no upstream; scratch worktree `m5b`; independent of the D-19 branch)
+
+### What I found
+- `dimacs_ny_order_check_v1.json` was read by `generate_figures.sh` and written by nothing, in any ref. The reversed-order
+  run behind the historical 45% figure was never committed; its output cannot be recovered. [Verified now]
+- `generate_figures.sh` drew one figure, printed a warning and exited 0 when the order-check file was missing. [Verified in M4]
+- The `order_position` field in result records is the per-query measurement index, not the queue order; the matrix order is
+  visible in the sequence of records, which is what I checked. [Verified now]
+
+### What changed
+New: `configs/experiments/dimacs_ny_order_check_v1.yaml`, `python/tests/test_order_check.py` (6 tests, 3 red before the change and
+3 passing only because the old script failed for another reason; all green after). Changed: `scripts/reproduce/run_main_experiments.sh` (runs the order
+check, moves an existing file aside rather than overwriting, checks both files' comparison counts through one function),
+`scripts/reproduce/generate_figures.sh` (requires both results files, present and complete, before drawing; both scatter
+figures are now expected; the warning path is gone), `docs/reproducing.md`, `docs/experiments/ablation-waterfall.md` (a dated
+note), `docs/atlas/DISCREPANCIES.md` (D-20), this log. No C++, CI or dependency change.
+
+### Verification actually run (worktree `m5b`, binaries copied from `m4`, byte-identical)
+| command | exit | result |
+|---|---|---|
+| `python -m pytest -q tests/test_order_check.py tests/test_script_modes.py` | 0 | 20 passed |
+| `scripts/reproduce/run_main_experiments.sh` | 0 | 10 min 08 s; ablation and order check each 400 records; all four comparison counts equal the recorded values in both files (203,801,439 / 71,839,857 / 177,580,603 / 177,732,303) |
+| `scripts/reproduce/generate_tables.sh` | 0 | |
+| `scripts/reproduce/generate_figures.sh` | 0 | all three figures written, no warning |
+| `python -m pytest -q` in `python/` | 0 | **346 passed, 2 skipped** (v2 result file absent; Monaco extraction skips, no PBF in this worktree) |
+Matrix order read from the output records: ablation `binary_heap, radix_heap, lpq, lpq_model`; order check `lpq_model, lpq,
+radix_heap, binary_heap` (100 consecutive records each). The Facebook training in this run used the protocol B manifest because this
+branch does not contain the D-19 branch.
+
+### Descriptive observation, not a claim
+In this one run (1 CPU container, `cpu_pinned` true in the records, 11 repetitions, host noise not controlled) the median per-query
+difference `lpq - lpq_model` was +1,169,327 ns with `lpq_model` last (faster on 66 of 100 queries) and -37,202 ns with `lpq_model`
+first (faster on 48 of 100). That is a single measurement on one host, with no confidence interval computed here; it shows that
+matrix position matters on this host and is the reason the order control exists. It does not confirm, refute or reconstruct the
+historical 45% figure, and no performance claim is made.
+
+### Owner decision needed
+1. Review `git diff 51a8b4c..completion/m5b-d20-order-check`.
+2. Should `generate_tables.sh` also tabulate the order-check file (it reads only the ablation file today)?
