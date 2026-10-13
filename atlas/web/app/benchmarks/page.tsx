@@ -131,7 +131,7 @@ export default function BenchmarksPage() {
           </div>
           <div className="panel stack">
             <h3>Queues</h3>
-            {queues.map((q) => (
+            {queues.filter((q) => q.id !== "lpq_online").map((q) => (
               <label key={q.id} className="check">
                 <input type="checkbox" checked={selected.includes(q.id)} onChange={() => toggle(q.id)}
                   disabled={(q.requires_model && dsModels.length === 0) || q.engine_available === false} />

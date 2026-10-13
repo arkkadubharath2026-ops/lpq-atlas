@@ -69,8 +69,22 @@ def _engine_flags(cfg: EngineConfig, registry: Registry) -> list[str]:
         argv += ["--heuristic", cfg.heuristic]
     if cfg.correctness_policy == "approximate":
         argv += ["--epsilon", repr(float(cfg.epsilon))]
-    if cfg.model_id:
+    if cfg.model_id and cfg.queue == "lpq_model":
         argv += ["--model", str(registry.model_path(cfg.model_id))]
+    if cfg.queue == "lpq_online":
+        argv += ["--online-update-mode", cfg.online_update_mode, "--online-start", cfg.online_start]
+        if cfg.model_id:
+            model = registry.model_path(cfg.model_id)
+            argv += ["--online-model", str(model)]
+            report = model.with_name(f"{cfg.model_id}.report.json")
+            if report.exists():
+                argv += ["--online-model-report", str(report)]
+            if cfg.accept_no_provenance:
+                argv.append("--online-model-no-provenance")
+            if cfg.allow_graph_mismatch:
+                argv.append("--allow-graph-mismatch")
+            if cfg.allow_width_mismatch:
+                argv.append("--allow-width-mismatch")
     if cfg.adaptive_learning:
         argv.append("--adaptive-learning")
     if cfg.lpq_window is not None:
@@ -100,11 +114,43 @@ def validate_against_dataset(
             model = registry.model(cfg.model_id)
         except KeyError as e:
             raise ValueError(f"unknown model: {cfg.model_id}") from e
-        if model.get("training_dataset") != dataset["id"]:
+        if cfg.queue == "lpq_online":
+            report = registry.model_path(cfg.model_id).with_name(f"{cfg.model_id}.report.json")
+            if not report.exists() and not cfg.accept_no_provenance:
+                raise ValueError(
+                    f"model {cfg.model_id} has no report, so the graph and bucket width it was "
+                    "trained for cannot be checked; set accept_no_provenance to use it anyway "
+                    "(the result records that you did)"
+                )
+        unknown_and_waived = (
+            cfg.queue == "lpq_online"
+            and cfg.accept_no_provenance
+            and model.get("training_dataset") is None
+        )
+        if model.get("training_dataset") != dataset["id"] and not (
+            (cfg.queue == "lpq_online" and cfg.allow_graph_mismatch) or unknown_and_waived
+        ):
             raise ValueError(
                 f"model {cfg.model_id} was trained on {model.get('training_dataset')}; its "
                 f"static feature scaling is not validated for {dataset['id']}"
             )
+
+
+def annotate_online_result(result: dict[str, Any], cfg: EngineConfig, registry: Registry) -> bool:
+    """Adds what only the caller knows to an lpq_online result: the artifact's SHA-256.
+
+    The engine records an FNV-1a identity of the bytes it loaded and says the SHA-256 is the
+    caller's to record. Returns True if the result changed.
+    """
+    if cfg.queue != "lpq_online" or not cfg.model_id:
+        return False
+    learner = (result.get("lpq") or {}).get("learner")
+    model = learner.get("model") if isinstance(learner, dict) else None
+    if not isinstance(model, dict) or model.get("source") != "artifact":
+        return False
+    model["model_id"] = cfg.model_id
+    model["sha256"] = registry.model(cfg.model_id)["sha256"]
+    return True
 
 
 def run_argv(
@@ -187,6 +233,8 @@ def execute_run(
     problems = validate_result(result, job.id, checksum)
     if problems:
         raise JobFailure("validation", "; ".join(problems))
+    if annotate_online_result(result, req, registry):
+        result_path.write_text(json.dumps(result, indent=1))
     trace = job.dir / "trace.jsonl"
     if trace.exists() and trace.stat().st_size > settings.max_trace_bytes:
         trace.unlink()

@@ -35,6 +35,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <chrono>
+#include <cstdio>
 #include <map>
 #include <memory>
 #include <string>
@@ -56,6 +58,8 @@
 #include "lpq/metrics/json_writer.hpp"
 #include "lpq/metrics/result_record.hpp"
 #include "lpq/adaptation/controller_observer.hpp"
+#include "lpq/adaptation/online_model_check.hpp"
+#include "lpq/adaptation/online_session.hpp"
 #include "lpq/features/graph_features.hpp"
 #include "lpq/lpq/classical_bucket_queue.hpp"
 #include "lpq/lpq/learned_priority_queue.hpp"
@@ -64,6 +68,7 @@
 #include "lpq/lpq/queue_policy.hpp"
 #include "lpq/lpq/queue_config.hpp"
 #include "lpq/models/logistic_predictor.hpp"
+#include "lpq/models/model_report.hpp"
 #include "lpq/pq/binary_heap.hpp"
 #include "lpq/pq/fibonacci_heap.hpp"
 #include "lpq/pq/pairing_heap.hpp"
@@ -111,6 +116,16 @@ struct Options {
     /// outcomes rather than only adapting the policy. Separating the two is the
     /// ablation that says which of them does anything.
     bool        adaptive_learning = false;
+
+    // --- lpq_online (M5-O6) ---------------------------------------------------------------
+    /// "static" (the default) or "online_session". lpq_online learns ACROSS queries, so a run that
+    /// contains it must say so; any other run must not.
+    std::string evaluation = "static";
+    std::string online_update_mode = "periodic";
+    std::string online_report;
+    bool        allow_graph_mismatch = false;
+    bool        allow_width_mismatch = false;
+    bool        online_no_provenance = false;
 
     std::string mode        = "exact";
 
@@ -193,7 +208,7 @@ struct RunSpec {
 
 /// Queues that score nodes with a trained model and so need --model.
 [[nodiscard]] bool is_model_queue(const std::string& name) {
-    return name == "lpq_model" || name == "lpq_direct_model";
+    return name == "lpq_model" || name == "lpq_direct_model" || name == "lpq_online";
 }
 
 /// Parses --compare: `name[:w=N,ring=N,front=N][@label]` separated by ';'.
@@ -267,13 +282,21 @@ void print_usage() {
                          (astar only; euclidean/manhattan/haversine need coordinates)
   --pq <name>            binary_heap | four_ary_heap | pairing_heap |
                          fibonacci_heap | radix_heap | bucket_queue | lpq |
-                         lpq_model | lpq_adaptive | lpq_direct |
+                         lpq_model | lpq_online | lpq_adaptive | lpq_direct |
                          lpq_direct_model | all (default)
                          bucket_queue is the classical bucket queue (the LPQ
                          substrate with every learned component off).
                          lpq_direct* extract in place, exact mode only.
   --adaptive             with --pq lpq_adaptive: also update the model online
                          from verified outcomes, not just the policy
+  --evaluation <e>       static (default) | online_session. --pq lpq_online learns across
+                         queries (updates are applied between queries, in manifest order) and
+                         requires online_session; every other run requires static
+  --online-update-mode <m>  disabled | every_event | periodic (default) | adaptive
+  --online-model-report <path>   the .report.json written with the --model artifact; its graph
+                         checksum and bucket width are checked against this run
+  --allow-graph-mismatch / --allow-width-mismatch / --online-model-no-provenance
+                         accept a model that fails the corresponding check (recorded per record)
   --model <path>         trained model for --pq lpq_model. Without it the
                          learned queue scores every node identically, which is
                          the control condition rather than a degraded mode.
@@ -340,6 +363,18 @@ void print_usage() {
             o.experiment_file = next_arg(argc, argv, i, "--experiment");
         } else if (a == "--adaptive") {
             o.adaptive_learning = true;
+        } else if (a == "--evaluation") {
+            o.evaluation = next_arg(argc, argv, i, "--evaluation");
+        } else if (a == "--online-update-mode") {
+            o.online_update_mode = next_arg(argc, argv, i, "--online-update-mode");
+        } else if (a == "--online-model-report") {
+            o.online_report = next_arg(argc, argv, i, "--online-model-report");
+        } else if (a == "--allow-graph-mismatch") {
+            o.allow_graph_mismatch = true;
+        } else if (a == "--allow-width-mismatch") {
+            o.allow_width_mismatch = true;
+        } else if (a == "--online-model-no-provenance") {
+            o.online_no_provenance = true;
         } else if (a == "--model") {
             o.model = next_arg(argc, argv, i, "--model");
         } else if (a == "--epsilon") {
@@ -642,6 +677,16 @@ using BenchLpq = LearnedPriorityQueue<W, ConstantNodeScorer>;
 using BenchScorer    = StaticNodeScorer<LogisticPredictor>;
 using BenchLpqStatic = LearnedPriorityQueue<W, BenchScorer>;
 
+/// lpq_online (M5-O6): the live-model scorer. Its OnlineSession lives with the ROW, not the query:
+/// the model is carried from one query to the next, and only between them.
+using BenchLpqOnline = LearnedPriorityQueue<W, OnlineSession::Scorer>;
+
+struct OnlineRow {
+    std::unique_ptr<OnlineSession> session;
+    std::uint64_t                  queries = 0;
+    LearnerRecord                  model_facts;  ///< how the model was checked; copied into every record
+};
+
 /// The adaptive configuration.
 ///
 /// The same queue type as the control -- what differs is that an observer is
@@ -736,7 +781,8 @@ template <typename Queue>
                          meta, BenchLpq::Substrate::kBucketCount, o.lpq_bucket_width)),
                      o.lpq_ring != 0 ? o.lpq_ring : BenchLpq::Substrate::kBucketCount};
     } else if constexpr (std::is_same_v<Queue, BenchLpq> ||
-                  std::is_same_v<Queue, BenchLpqStatic>) {
+                  std::is_same_v<Queue, BenchLpqStatic> ||
+                  std::is_same_v<Queue, BenchLpqOnline>) {
         CandidateWindowConfig window;
         window.k_min = static_cast<std::uint32_t>(o.lpq_window_min);
         window.k_max = static_cast<std::uint32_t>(o.lpq_window_max);
@@ -774,7 +820,7 @@ template <typename Queue>
 ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query& q,
                          const Options& o, const std::string& pq_name,
                          const HardwareInfo& hw, double heuristic_scale,
-                         const BenchScorer* scorer = nullptr) {
+                         const BenchScorer* scorer = nullptr, OnlineRow* online = nullptr) {
     ResultRecord rec;
     rec.experiment_id = o.experiment_id;
     rec.timestamp     = iso8601_now();
@@ -834,6 +880,22 @@ ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query&
         queue.set_scorer(scorer);
     }
 
+    // lpq_online: the row's model scores every push, and the learner records ONLY the validation run
+    // below. It is detached before the timed repetitions, so every repetition runs on the state this
+    // query started from and none of them adds events; the recorded events are applied after the
+    // last repetition. That is what makes repetitions comparable without a snapshot.
+    std::string                 hash_before;
+    OnlineLearningMetrics       metrics_before;
+    if constexpr (std::is_same_v<Queue, BenchLpqOnline>) {
+        char buf[17];
+        std::snprintf(buf, sizeof buf, "%016llx",
+                      static_cast<unsigned long long>(online->session->current_hash()));
+        hash_before    = buf;
+        metrics_before = online->session->learner().metrics();
+        queue.set_scorer(&online->session->scorer());
+        queue.set_observer(&online->session->observer());
+    }
+
     const bool is_astar = (o.algorithm == "astar");
 
     // The exact call that will be timed, so validation and measurement cannot
@@ -852,6 +914,9 @@ ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query&
 
     // --- Correctness first: a fast wrong answer is not a result -------------
     const auto candidate = run_once();
+    if constexpr (std::is_same_v<Queue, BenchLpqOnline>) {
+        queue.set_observer(nullptr);
+    }
     if (o.validate) {
         ReferenceDijkstraOptions ropts;
         ropts.target = q.target;
@@ -921,6 +986,34 @@ ResultRecord measure_one(const Graph& g, const GraphMetadata& meta, const Query&
             do_not_optimize(r.dist[probe_node]);
         },
         bcfg);
+
+    if constexpr (std::is_same_v<Queue, BenchLpqOnline>) {
+        // Between-query update. Timed separately and never inside a timed region.
+        OnlineSession& session = *online->session;
+        const auto     t0      = std::chrono::steady_clock::now();
+        (void)session.end_query();
+        rec.ml.online_update_ns = static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - t0).count());
+
+        const OnlineLearningMetrics& m = session.learner().metrics();
+        LearnerRecord lr               = online->model_facts;
+        lr.update_mode                 = o.online_update_mode;
+        lr.query_index                 = online->queries++;
+        lr.events_recorded             = m.events_recorded - metrics_before.events_recorded;
+        lr.events_applied              = m.events_applied - metrics_before.events_applied;
+        lr.updates_applied             = m.updates_performed;
+        lr.rollbacks                   = m.rollbacks;
+        lr.halted                      = session.learner().halted();
+        lr.accounting_balanced         = session.learner().accounting_balanced();
+        lr.weights_changed_since_start = session.weights_changed();
+        lr.weights_hash_before         = hash_before;
+        char buf[17];
+        std::snprintf(buf, sizeof buf, "%016llx",
+                      static_cast<unsigned long long>(session.current_hash()));
+        lr.weights_hash_after = buf;
+        rec.learner           = lr;
+    }
 
     return rec;
 }
@@ -1394,6 +1487,97 @@ int main(int argc, char** argv) {
                       << scorer->memory_bytes() / 1024 << " KiB of scores)\n";
         }
 
+        // --- lpq_online rows: one session per row, validated before any query ------------------
+        //
+        // The evaluation mode is explicit because lpq_online is the one queue whose answer to
+        // query k depends on queries 1..k-1: a run that contains it learns across queries, and a run
+        // that does not must not claim to. The model is checked exactly as in lpq_run.
+        std::unique_ptr<GraphFeatures>  online_features;
+        std::map<std::string, OnlineRow> online_rows;
+        {
+            const bool has_online = std::any_of(specs.begin(), specs.end(), [](const RunSpec& sp) {
+                return sp.run.pq == "lpq_online";
+            });
+            if (has_online) {
+                if (o.evaluation != "online_session") {
+                    throw InvalidConfigError(
+                        "lpq_online learns across queries; pass --evaluation online_session to say "
+                        "so. (Its updates are applied between queries, in manifest order.)");
+                }
+                if (o.online_update_mode != "disabled" && o.online_update_mode != "every_event" &&
+                    o.online_update_mode != "periodic" && o.online_update_mode != "adaptive") {
+                    throw InvalidConfigError("--online-update-mode expects disabled, every_event, "
+                                             "periodic or adaptive");
+                }
+                std::ifstream min(o.model, std::ios::binary);
+                if (!min) {
+                    throw InvalidConfigError("cannot open model: " + o.model);
+                }
+                LogisticPredictor start_model;
+                try {
+                    start_model = LogisticPredictor::load(min);
+                } catch (const std::exception& e) {
+                    throw InvalidConfigError(std::string("model rejected: ") + e.what());
+                }
+                std::optional<ModelReport> report;
+                if (!o.online_report.empty()) {
+                    std::ifstream rin(o.online_report, std::ios::binary);
+                    if (!rin) {
+                        throw InvalidConfigError("cannot open the model report: " + o.online_report);
+                    }
+                    std::ostringstream rbuf;
+                    rbuf << rin.rdbuf();
+                    try {
+                        report = parse_model_report(rbuf.str());
+                    } catch (const ModelReportError& e) {
+                        throw InvalidConfigError(e.what());
+                    }
+                }
+                OnlineModelPolicy model_policy;
+                model_policy.allow_graph_mismatch = o.allow_graph_mismatch;
+                model_policy.allow_width_mismatch = o.allow_width_mismatch;
+                model_policy.allow_no_provenance  = o.online_no_provenance;
+                OnlineModelCompat compat;
+                try {
+                    compat = check_online_model(
+                        start_model, report, graph_checksum,
+                        derive_bucket_width(meta, BenchLpq::Substrate::kBucketCount,
+                                            o.lpq_bucket_width),
+                        model_policy);
+                } catch (const OnlineModelError& e) {
+                    throw InvalidConfigError(e.what());
+                }
+                OnlineLearningConfig lc;
+                lc.mode = o.online_update_mode == "disabled"      ? UpdateMode::kDisabled
+                          : o.online_update_mode == "every_event" ? UpdateMode::kEveryEvent
+                          : o.online_update_mode == "adaptive"    ? UpdateMode::kAdaptive
+                                                                  : UpdateMode::kPeriodic;
+                online_features = std::make_unique<GraphFeatures>(g, meta);
+                for (const RunSpec& sp : specs) {
+                    if (sp.run.pq != "lpq_online") continue;
+                    OnlineRow row;
+                    row.session = std::make_unique<OnlineSession>(*online_features, start_model, lc);
+                    row.model_facts.provenance = compat.provenance;
+                    row.model_facts.graph_match = compat.graph_match;
+                    row.model_facts.width_match = compat.width_match;
+                    for (const auto& ov : compat.overrides) {
+                        row.model_facts.overrides += (row.model_facts.overrides.empty() ? "" : ",") + ov;
+                    }
+                    row.model_facts.suitability = compat.suitability;
+                    online_rows.emplace(sp.label, std::move(row));
+                }
+                std::cout << "online model : evaluation online_session, " << o.online_update_mode
+                          << " updates between queries, graph " << compat.graph_match << ", width "
+                          << compat.width_match << ", overrides ["
+                          << (compat.overrides.empty() ? "none" : "recorded") << "]\n";
+            } else if (o.evaluation != "static" || !o.online_report.empty() ||
+                       o.allow_graph_mismatch || o.allow_width_mismatch ||
+                       o.online_no_provenance) {
+                throw InvalidConfigError("--evaluation online_session and the online-model flags "
+                                         "only apply to a run that contains lpq_online");
+            }
+        }
+
         std::vector<ResultRecord>           records;
         std::map<std::string, QueueSummary> summaries;
 
@@ -1512,6 +1696,14 @@ int main(int argc, char** argv) {
                 if constexpr (bucket_substrate_supports<W>()) {
                     rec = measure_one<BenchLpqStatic>(g, meta, q, o, name, hw,
                                                       heuristic_scale, scorer.get());
+                } else {
+                    rec.pq                 = name;
+                    rec.unsupported_reason = bucket_substrate_unsupported_reason<W>();
+                }
+            } else if (name == "lpq_online") {
+                if constexpr (bucket_substrate_supports<W>()) {
+                    rec = measure_one<BenchLpqOnline>(g, meta, q, o, name, hw, heuristic_scale,
+                                                      nullptr, &online_rows.at(spec.label));
                 } else {
                     rec.pq                 = name;
                     rec.unsupported_reason = bucket_substrate_unsupported_reason<W>();

@@ -89,6 +89,7 @@ function ExploreInner() {
   const canRun =
     datasetId && geo.dataset?.status === "READY" && source && target &&
     (config.queue !== "lpq_model" || config.model_id) &&
+    (config.queue !== "lpq_online" || config.online_start === "cold" || config.model_id) &&
     run.phase !== "submitting" && run.phase !== "running" && run.phase !== "streaming";
 
   const submit = async () => {

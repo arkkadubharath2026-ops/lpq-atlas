@@ -154,6 +154,13 @@ export interface EngineConfig {
   epsilon: number;
   model_id: string | null;
   adaptive_learning: boolean;
+  /** lpq_online only. Updates are applied after the search, never during it. */
+  online_update_mode?: "disabled" | "every_event" | "periodic" | "adaptive";
+  online_start?: "warm" | "cold";
+  /** Explicit overrides: off by default, recorded in the result when used. */
+  allow_graph_mismatch?: boolean;
+  allow_width_mismatch?: boolean;
+  accept_no_provenance?: boolean;
 }
 
 export interface Counters {
@@ -173,6 +180,24 @@ export interface Counters {
  * a measured change of the weights are separate facts; none of them says the learner helped.
  * Absent in results produced before this block existed.
  */
+/** How an lpq_online model was checked before the first query (D-21 / M5-O4). */
+export interface LearnerModelInfo {
+  kind?: string;
+  source?: "artifact" | "zero_initialised";
+  model_id?: string;
+  artifact_name?: string;
+  artifact_fnv1a64?: string;
+  sha256?: string;
+  compatibility?: {
+    provenance: string;
+    graph_match: string;
+    width_match: string;
+    overrides: string[];
+    suitability: string;
+  };
+  report?: { dataset_id?: string; training_manifest?: { name: string; sha256: string } | null } | null;
+}
+
 export interface LearnerStatus {
   schema: number;
   attached: boolean;
@@ -181,6 +206,13 @@ export interface LearnerStatus {
   events_dropped: number;
   updates_applied: number;
   weights_changed: boolean;
+  update_mode?: string;
+  apply_policy?: string;
+  start?: string;
+  halted?: boolean;
+  rollbacks?: number;
+  note?: string;
+  model?: LearnerModelInfo;
   [key: string]: unknown;
 }
 

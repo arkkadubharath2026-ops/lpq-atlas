@@ -84,6 +84,41 @@ struct MlTimings {
     }
 };
 
+/// What the online learner did around one benchmarked query (M5-O6). Present only for `lpq_online`
+/// rows; records of every other queue are unchanged.
+///
+/// The row's model is constant during a query, so every timed repetition runs on the state the query
+/// started from; the events recorded by the validation run are applied afterwards (the cost is
+/// `ml.online_update_ns`, outside every timed region). The state therefore advances once per query,
+/// in manifest order, whatever the repetition count or the interleaving.
+struct LearnerRecord {
+    std::string   evaluation = "online_session";
+    std::string   apply_policy = "between_queries";
+    std::string   update_mode;
+    std::uint64_t query_index = 0;  ///< position in this row's session, from 0
+
+    // This query.
+    std::uint64_t events_recorded = 0;
+    std::uint64_t events_applied  = 0;
+
+    // The session so far (cumulative).
+    std::uint64_t updates_applied = 0;
+    std::uint64_t rollbacks       = 0;
+    bool          halted          = false;
+    bool          accounting_balanced = true;
+    bool          weights_changed_since_start = false;
+    std::string   weights_hash_before;  ///< the state this query was searched with
+    std::string   weights_hash_after;
+
+    // The model, as checked before the first query.
+    std::string provenance;
+    std::string graph_match;
+    std::string width_match;
+    std::string overrides;  ///< comma-separated; empty when none
+    std::string suitability = "not assessed";
+    std::string label_definition = "online_first_choice_extractable_v1";
+};
+
 /// One benchmarked query.
 struct ResultRecord {
     // --- Identity (ESD.md section 23) ---------------------------------------
@@ -109,6 +144,7 @@ struct ResultRecord {
 
     // --- ML ------------------------------------------------------------------
     MlTimings ml;
+    std::optional<LearnerRecord> learner;
 
     // --- Hardware ------------------------------------------------------------
     HardwareCounters hw_counters;
@@ -276,6 +312,30 @@ inline void write_record(JsonWriter& w, const ResultRecord& r) {
     w.key_value("corrections", r.ml.corrections);
     w.key_value("fallbacks", r.ml.fallbacks);
     w.end_object();
+    if (r.learner) {
+        const LearnerRecord& l = *r.learner;
+        w.begin_object("learner");
+        w.key_value("evaluation", l.evaluation);
+        w.key_value("apply_policy", l.apply_policy);
+        w.key_value("update_mode", l.update_mode);
+        w.key_value("query_index", l.query_index);
+        w.key_value("events_recorded", l.events_recorded);
+        w.key_value("events_applied", l.events_applied);
+        w.key_value("updates_applied_cumulative", l.updates_applied);
+        w.key_value("rollbacks", l.rollbacks);
+        w.key_value("halted", l.halted);
+        w.key_value("accounting_balanced", l.accounting_balanced);
+        w.key_value("weights_changed_since_start", l.weights_changed_since_start);
+        w.key_value("weights_hash_before", l.weights_hash_before);
+        w.key_value("weights_hash_after", l.weights_hash_after);
+        w.key_value("provenance", l.provenance);
+        w.key_value("graph_match", l.graph_match);
+        w.key_value("width_match", l.width_match);
+        w.key_value("overrides", l.overrides);
+        w.key_value("suitability", l.suitability);
+        w.key_value("label_definition", l.label_definition);
+        w.end_object();
+    }
 
     // --- Hardware counters ---------------------------------------------------
     w.begin_object("hardware_counters");

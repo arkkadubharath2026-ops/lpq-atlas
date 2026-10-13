@@ -11,6 +11,11 @@ export const DEFAULT_CONFIG: EngineConfig = {
   epsilon: 0,
   model_id: null,
   adaptive_learning: false,
+  online_update_mode: "periodic",
+  online_start: "warm",
+  allow_graph_mismatch: false,
+  allow_width_mismatch: false,
+  accept_no_provenance: false,
 };
 
 /** The research LPQ variants take approximate mode; the Optimized queue is exact-only. */
@@ -23,8 +28,23 @@ export function normaliseConfig(c: EngineConfig): EngineConfig {
     heuristic: c.algorithm === "dijkstra" ? "auto" : c.heuristic,
     correctness_policy: learned ? c.correctness_policy : "exact",
     epsilon: learned && c.correctness_policy === "approximate" ? c.epsilon || 0.1 : 0,
-    model_id: c.queue === "lpq_model" ? c.model_id : null,
+    model_id: c.queue === "lpq_model" || (c.queue === "lpq_online" && c.online_start !== "cold") ? c.model_id : null,
     adaptive_learning: c.queue === "lpq_adaptive" ? c.adaptive_learning : false,
+    ...(c.queue === "lpq_online"
+      ? {
+          online_update_mode: c.online_update_mode ?? "periodic",
+          online_start: c.online_start ?? "warm",
+          allow_graph_mismatch: c.online_start === "cold" ? false : !!c.allow_graph_mismatch,
+          allow_width_mismatch: c.online_start === "cold" ? false : !!c.allow_width_mismatch,
+          accept_no_provenance: c.online_start === "cold" ? false : !!c.accept_no_provenance,
+        }
+      : {
+          online_update_mode: "periodic" as const,
+          online_start: "warm" as const,
+          allow_graph_mismatch: false,
+          allow_width_mismatch: false,
+          accept_no_provenance: false,
+        }),
   };
 }
 
@@ -41,7 +61,10 @@ interface Props {
 export function RunConfigForm({ value, onChange, dataset, queues, models, idPrefix, disabled }: Props) {
   const set = (patch: Partial<EngineConfig>) => onChange(normaliseConfig({ ...value, ...patch }));
   const learned = hasApproximation(value.queue);
-  const compatibleModels = models.filter((m) => m.training_dataset === dataset?.id);
+  // lpq_online accepts a model trained elsewhere only if the override is ticked (and it is recorded).
+  const compatibleModels = models.filter(
+    (m) => m.training_dataset === dataset?.id || (value.queue === "lpq_online" && value.allow_graph_mismatch),
+  );
   const heuristics = dataset?.astar_heuristics ?? ["zero"];
   return (
     <div className="stack">
@@ -91,6 +114,53 @@ export function RunConfigForm({ value, onChange, dataset, queues, models, idPref
           </optgroup>
         </select>
       </label>
+      {value.queue === "lpq_online" ? (
+        <fieldset className="stack" style={{ border: 0, padding: 0, margin: 0 }} disabled={disabled}>
+          <div className="seg" role="group" aria-label="Starting model">
+            {(["warm", "cold"] as const).map((s) => (
+              <button key={s} type="button" aria-pressed={value.online_start === s} onClick={() => set({ online_start: s })}>
+                {s === "warm" ? "warm start (choose a model)" : "cold start (zero weights)"}
+              </button>
+            ))}
+          </div>
+          {value.online_start !== "cold" ? (
+            <label className="field" htmlFor={`${idPrefix}-m`}>
+              Starting model (explicit; there is no default)
+              <select id={`${idPrefix}-m`} value={value.model_id ?? ""} onChange={(e) => set({ model_id: e.target.value || null })}>
+                <option value="">— choose —</option>
+                {compatibleModels.map((m) => (
+                  <option key={m.id} value={m.id}>{m.id} ({m.kind}, trained on {m.training_dataset ?? "unknown"})</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <label className="field" htmlFor={`${idPrefix}-um`}>
+            Update mode
+            <select id={`${idPrefix}-um`} value={value.online_update_mode ?? "periodic"}
+              onChange={(e) => set({ online_update_mode: e.target.value as EngineConfig["online_update_mode"] })}>
+              <option value="periodic">periodic (applied after the search)</option>
+              <option value="every_event">every event (applied after the search)</option>
+              <option value="adaptive">adaptive (only if recent error is high)</option>
+              <option value="disabled">disabled (record only: the frozen control)</option>
+            </select>
+          </label>
+          <p className="small muted">
+            Updates are applied after the search, so this search runs on the starting model. An update is not an
+            improvement, and nothing on this page measures whether the model got better.
+          </p>
+          {value.online_start !== "cold" ? (
+            <details>
+              <summary className="small">Model checks you can override (each is recorded in the result)</summary>
+              <label className="check"><input type="checkbox" checked={!!value.allow_graph_mismatch}
+                onChange={(e) => set({ allow_graph_mismatch: e.target.checked })} />Accept a model trained on another graph</label>
+              <label className="check"><input type="checkbox" checked={!!value.allow_width_mismatch}
+                onChange={(e) => set({ allow_width_mismatch: e.target.checked })} />Accept a model trained for another bucket width</label>
+              <label className="check"><input type="checkbox" checked={!!value.accept_no_provenance}
+                onChange={(e) => set({ accept_no_provenance: e.target.checked })} />Accept a model with no report</label>
+            </details>
+          ) : null}
+        </fieldset>
+      ) : null}
       {value.queue === "lpq_model" ? (
         <label className="field" htmlFor={`${idPrefix}-m`}>
           Model (trained on this dataset)

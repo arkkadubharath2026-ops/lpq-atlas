@@ -10,6 +10,29 @@ function LearnerStatusBadge({ l }: { l: LpqResult }) {
   return <span className={b.tone === "plain" ? "badge" : `badge ${b.tone}`} title="Attachment, recorded events and applied updates are separate facts; none of them says the learner helped.">{b.label}</span>;
 }
 
+/** How the learner's model was vetted, as the engine recorded it. Never a statement of suitability or benefit. */
+function LearnerDetails({ l }: { l: LpqResult }) {
+  const s = l.learner;
+  if (!s?.model) return null;
+  const m = s.model;
+  const c = m.compatibility;
+  return (
+    <div className="notice small" data-testid="learner-details">
+      <strong>Starting model:</strong>{" "}
+      {m.source === "zero_initialised" ? "zero-initialised (cold start)" : `${m.model_id ?? m.artifact_name ?? "artifact"} (SHA-256 ${m.sha256 ? m.sha256.slice(0, 12) + "…" : "not recorded"})`}
+      {c ? (
+        <>
+          {" · "}graph {c.graph_match}, bucket width {c.width_match}, provenance {c.provenance}
+          {c.overrides.length > 0 ? <span className="badge warn" style={{ marginLeft: 6 }}>overridden: {c.overrides.join(", ")}</span> : null}
+          {" · "}suitability: {c.suitability}
+        </>
+      ) : null}
+      {s.update_mode ? <> {" · "}updates {s.update_mode}, applied {s.apply_policy === "between_queries" ? "after the search" : s.apply_policy}</> : null}
+      {s.halted ? <span className="badge bad" style={{ marginLeft: 6 }}>learner halted after repeated numerical failure</span> : null}
+    </div>
+  );
+}
+
 /** Authoritative metrics: every number here is read from the engine's result file. */
 export function Telemetry({ r, unit }: { r: RunResult; unit?: string }) {
   const b = r.timing.benchmark;
@@ -144,6 +167,7 @@ function LpqResultPanel({ r }: { r: RunResult }) {
         {l.adaptive_controller ? <span className="badge learned">adaptive controller</span> : null}
         <LearnerStatusBadge l={l} />
       </div>
+      <LearnerDetails l={l} />
       <dl className="kv">
         <dt>Extractions</dt><dd>{fmtInt(m.extractions)}</dd>
         <dt>Verified (no scan)</dt><dd>{fmtInt(m.verified_extractions)} ({fmtPct(m.verified_rate)})</dd>

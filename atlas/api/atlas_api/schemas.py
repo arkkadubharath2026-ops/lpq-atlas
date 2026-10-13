@@ -22,13 +22,16 @@ Queue = Literal[
     "lpq",
     "lpq_model",
     "lpq_adaptive",
+    "lpq_online",
     "lpq_optimized",
 ]
+OnlineUpdateMode = Literal["disabled", "every_event", "periodic", "adaptive"]
+OnlineStart = Literal["warm", "cold"]
 Policy = Literal["exact", "approximate"]
 TraceLevel = Literal["none", "summary", "visual", "full"]
 _ID = r"^[a-z0-9_]{1,64}$"
 
-LEARNED = {"lpq", "lpq_model", "lpq_adaptive"}
+LEARNED = {"lpq", "lpq_model", "lpq_adaptive", "lpq_online"}
 # The engine-configured, exact, ML-assisted queue. It is deliberately not in
 # LEARNED: LEARNED gates the research knobs (approximate mode, window, bucket
 # width), and this queue accepts none of them -- the engine chooses its own
@@ -46,6 +49,13 @@ class EngineConfig(BaseModel):
     epsilon: float = Field(0.0, ge=0.0, le=1.0)
     model_id: str | None = Field(None, pattern=_ID)
     adaptive_learning: bool = False
+    # --- lpq_online (M5-O7). Updates are applied after the search, never during it. -----------
+    online_update_mode: OnlineUpdateMode = "periodic"
+    online_start: OnlineStart = "warm"
+    # Each override is explicit, off by default, and recorded in the result.
+    allow_graph_mismatch: bool = False
+    allow_width_mismatch: bool = False
+    accept_no_provenance: bool = False
     lpq_window: tuple[int, int] | None = None
     lpq_bucket_width: int | None = Field(None, ge=1, le=10_000_000)
 
@@ -72,8 +82,32 @@ class EngineConfig(BaseModel):
             raise ValueError("a heuristic only applies to A*")
         if self.queue == "lpq_model" and not self.model_id:
             raise ValueError("lpq_model requires model_id")
-        if self.model_id and self.queue != "lpq_model":
-            raise ValueError("model_id only applies to the lpq_model queue")
+        if self.queue == "lpq_online":
+            if self.online_start == "warm" and not self.model_id:
+                raise ValueError(
+                    "lpq_online requires an explicit model_id (there is no default model), or "
+                    "online_start 'cold' for a zero-initialised model"
+                )
+            if self.online_start == "cold" and (
+                self.model_id
+                or self.allow_graph_mismatch
+                or self.allow_width_mismatch
+                or self.accept_no_provenance
+            ):
+                raise ValueError("a cold start has no model: model_id and the overrides do not apply")
+            if self.adaptive_learning:
+                raise ValueError("adaptive_learning only applies to the lpq_adaptive queue")
+        else:
+            if self.model_id and self.queue != "lpq_model":
+                raise ValueError("model_id only applies to the lpq_model and lpq_online queues")
+            if (
+                self.online_update_mode != "periodic"
+                or self.online_start != "warm"
+                or self.allow_graph_mismatch
+                or self.allow_width_mismatch
+                or self.accept_no_provenance
+            ):
+                raise ValueError("online_* options and model overrides only apply to lpq_online")
         if self.adaptive_learning and self.queue != "lpq_adaptive":
             raise ValueError("adaptive_learning only applies to the lpq_adaptive queue")
         if not learned and (self.lpq_window is not None or self.lpq_bucket_width is not None):
@@ -193,6 +227,12 @@ class BenchmarkRequest(BaseModel):
     def _combinations(self) -> BenchmarkRequest:
         if len(set(self.queues)) != len(self.queues):
             raise ValueError("queues must not repeat")
+        if "lpq_online" in self.queues:
+            raise ValueError(
+                "lpq_online learns across queries and needs an explicit evaluation mode, which "
+                "API benchmarks do not offer: use single runs or comparisons, or run lpq_benchmark "
+                "with --evaluation online_session"
+            )
         if ("lpq_model" in self.queues) != bool(self.model_id):
             raise ValueError("model_id is required with, and only with, the lpq_model queue")
         if self.correctness_policy == "approximate":

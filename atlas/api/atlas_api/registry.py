@@ -77,6 +77,19 @@ QUEUES: list[dict[str, Any]] = [
         "online learning of the policy model from verified outcomes.",
     },
     {
+        "id": "lpq_online",
+        "name": "LPQ + online learner (between queries)",
+        "family": "learned",
+        "requires_model": True,
+        "scorer": "online_logistic_static_features_on_demand",
+        "description": (
+            "Scores pushes with a model you choose explicitly, records what the verifier "
+            "established, and applies updates after the search, so the search itself runs on the "
+            "starting model. A single run applies at most one round of updates; nothing here says "
+            "an update helps."
+        ),
+    },
+    {
         "id": "lpq_optimized",
         "name": "Optimized (ML-assisted)",
         "family": "learned",

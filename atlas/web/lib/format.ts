@@ -35,6 +35,7 @@ export const queueLabel = (q: string): string =>
     lpq: "LPQ (control scorer)",
     lpq_model: "LPQ + static model",
     lpq_adaptive: "LPQ + adaptive",
+    lpq_online: "LPQ + online learner",
     lpq_optimized: "Optimized (ML-assisted)",
   })[q] ?? q;
 
