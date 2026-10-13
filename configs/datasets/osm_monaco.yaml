@@ -1,29 +1,45 @@
 # OpenStreetMap road network of Monaco (LPQ Atlas spec D-01, section 10).
 #
-# A fixed, dated Geofabrik regional extract rather than a live Overpass query,
-# so the benchmark graph is reproducible: the URL names the snapshot date and
-# the digest pins the bytes. The road graph is extracted by
-# python/lpq_tools/data/osm.py under its documented road-access policy
-# (drivable highways, access=no/private excluded, one-way semantics, largest
-# strongly connected component, NO turn restrictions) and then converted by
-# lpq_convert like every other dataset.
+# SOURCE CHANGED (M3, 2026-10-13). This config used to name a dated Geofabrik
+# extract (monaco-260925.osm.pbf, sha256 e26aa50a...). That URL returned HTTP 404 in
+# CI on 2026-10-11 and again on 2026-10-13, so it can no longer be fetched. The
+# dataset now reads the openstreetmap.fr "monaco" regional extract. It is NOT the
+# same graph: the two extracts cover slightly different areas (see
+# `previous_source` below and docs/atlas/DISCREPANCIES.md D-01), and results from
+# the old graph must not be compared with results from this one.
 #
-# Weights are great-circle length in decimetres: routes are SHORTEST, not
-# fastest. The Haversine A* heuristic is admissible against them.
+# REPRODUCIBILITY LIMIT, stated plainly. The publisher REPLACES this file every
+# day and keeps no dated copies, so the sha256 below pins these exact bytes and
+# nothing else. A fresh download made after the next upstream refresh will be
+# rejected by the digest check (that is the check working). To reproduce, use the
+# retained file: place it at datasets/raw/<filename> and run the pipeline with
+# --skip-download, or re-pin a new snapshot and regenerate the metadata and query
+# manifest. The extraction is deterministic for given bytes
+# (python/tests/test_osm.py), so the same bytes always give the same graph.
+#
+# The road graph is extracted by python/lpq_tools/data/osm.py under its
+# documented road-access policy (drivable highways, access=no/private excluded,
+# one-way semantics, largest strongly connected component, NO turn restrictions)
+# and then converted by lpq_convert like every other dataset. Weights are
+# great-circle length in decimetres: routes are SHORTEST, not fastest. The
+# Haversine A* heuristic is admissible against them.
 dataset_id: osm_monaco
 description: >
-  OpenStreetMap drivable road network of Monaco (Geofabrik snapshot 2026-09-25).
+  OpenStreetMap drivable road network from the openstreetmap.fr "monaco" regional
+  extract, replication state 2026-10-13T01:14:05Z (sequence 7326506). Not the same
+  graph as the earlier Geofabrik 2026-09-25 snapshot.
 
-# NOTE (verified in CI on 2026-10-11): the dated Geofabrik snapshot named below returned
-# HTTP 404 -- Geofabrik prunes old dated extracts. The sha256 pin therefore only protects
-# a download that still exists; if it 404s, either pick a current dated snapshot and
-# re-pin its digest, or use the bundled offline `demo_road` (CI's e2e job does).
 source_format: osm_pbf
 files:
-  - url: https://download.geofabrik.de/europe/monaco-260925.osm.pbf
-    # Digest observed on first acquisition (Geofabrik publishes an .md5, not a
-    # sha256). Pinned so any later change to the snapshot is detected.
-    sha256: e26aa50a1bf8191a64b19c037a6a4d4922f927e1477e2fbda8ab8f01be59dcbf
+  - url: https://download.openstreetmap.fr/extracts/europe/monaco.osm.pbf
+    # Local raw filename: dated from the replication state that was verified against
+    # the PBF header. The publisher's own filename is monaco.osm.pbf (kept in the URL
+    # above and in provenance.publisher_filename).
+    filename: monaco-osmfr-20261013T011405Z.osm.pbf
+    # Computed locally, on first acquisition, from the downloaded bytes (three
+    # independent implementations agreed). It is trust-on-first-use: the publisher
+    # offers only an MD5, which is a corruption check and not proof of authenticity.
+    sha256: 26ac807383921434f6fc7ef07ddb367e03c8357e65ac360c72d5de120c239d1d
     role: graph
 
 directedness: directed
@@ -34,8 +50,32 @@ query_seed: 42
 query_count: 1000
 
 provenance:
-  collection: OpenStreetMap via Geofabrik regional extracts
-  homepage: https://download.geofabrik.de/europe/monaco.html
+  collection: OpenStreetMap via the openstreetmap.fr regional extracts
+  homepage: https://download.openstreetmap.fr/extracts/europe/
   region: Monaco
-  snapshot_date: "2026-09-25"
+  publisher_filename: monaco.osm.pbf
+  # Publisher metadata observed 2026-10-13, identical before and after the download.
+  publisher_md5: df804c9f8e6da26ddb350af60132554c
+  publisher_md5_url: https://download.openstreetmap.fr/extracts/europe/monaco.osm.pbf.md5
+  publisher_state_url: https://download.openstreetmap.fr/extracts/europe/monaco.state.txt
+  replication_timestamp: "2026-10-13T01:14:05Z"
+  replication_sequence_number: 7326506
+  http_last_modified: "Tue, 13 Oct 2026 01:16:03 GMT"
+  http_etag: '"10dd65-65dae8ee0fec2"'
+  content_length_bytes: 1105253
+  retrieved_at_utc: "2026-10-13T09:30:41Z"
+  coverage_polygon_url: https://download.openstreetmap.fr/polygons/europe/monaco.poly
+  # Bounding box of the publisher's polygon (it includes sea): lon/lat min then max.
+  coverage_polygon_bbox: [7.405, 43.512, 7.537, 43.756]
+  snapshot_date: "2026-10-13T01:14:05Z"
+  previous_source:
+    description: Geofabrik monaco-260925.osm.pbf, no longer downloadable (HTTP 404)
+    pbf_sha256: e26aa50a1bf8191a64b19c037a6a4d4922f927e1477e2fbda8ab8f01be59dcbf
+    graph_checksum_fnv1a64: 16866336453424606105
+    nodes: 5692
+    arcs: 8495
   licence: ODbL 1.0 -- (c) OpenStreetMap contributors
+  attribution_url: https://www.openstreetmap.org/copyright
+  redistribution: >
+    Not redistributed by this repository. The PBF and the processed graph are git-ignored.
+    Any redistribution carries ODbL obligations and needs a separate decision.

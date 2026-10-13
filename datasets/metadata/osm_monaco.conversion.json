@@ -1,6 +1,6 @@
 {
   "command": [
-    "build/release/bin/lpq_convert.exe",
+    "build/release/bin/lpq_convert",
     "--input",
     "datasets/processed/staging/osm_monaco.gr",
     "--format",
@@ -24,7 +24,7 @@
     "--coordinates",
     "datasets/processed/staging/osm_monaco.co"
   ],
-  "converter": "build/release/bin/lpq_convert.exe",
+  "converter": "build/release/bin/lpq_convert",
   "dataset_id": "osm_monaco",
-  "stdout": "osm_monaco: 5692 nodes, 8495 arcs, checksum 0xea1143a488986b99"
+  "stdout": "osm_monaco: 7592 nodes, 11680 arcs, checksum 0x6d57da90b3a8f693"
 }

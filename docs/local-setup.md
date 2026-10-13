@@ -134,11 +134,13 @@ python scripts/data/prepare_datasets.py --list           # everything declared
 ```
 
 `dimacs_ny` is downloaded from the 9th DIMACS challenge site and verified against the digests
-pinned in its config. The OpenStreetMap datasets (`osm_monaco`, `osm_liechtenstein`) come from
-`download.geofabrik.de`; they pin a dated snapshot that Geofabrik has since removed (HTTP 404
-observed in CI on 2026-10-11), and the download also fails with *connection reset* in some
-sandboxes. Treat them as **unavailable until re-pinned** and fall back to
-`dimacs_ny` or `demo_road` if it fails for you. Note that `prepare_datasets.py` rewrites
+pinned in its config. `osm_monaco` comes from the openstreetmap.fr "monaco" extract and is pinned
+by SHA-256; the publisher replaces that file daily, so the download only succeeds while the
+upstream bytes are unchanged (otherwise the digest check rejects it). Keep the PBF and use
+`--skip-download` to reproduce. `osm_liechtenstein` still names a Geofabrik snapshot that returned
+HTTP 404 (observed in CI on 2026-10-11 and 2026-10-13) and is **unavailable until re-sourced**.
+Geofabrik also fails with *connection reset* in some sandboxes. Fall back to `dimacs_ny` or
+`demo_road` if a download fails for you. Note that `prepare_datasets.py` rewrites
 `datasets/metadata/index.json` from only the datasets it was asked to prepare, so a git diff of
 that file after preparing one dataset is expected.
 

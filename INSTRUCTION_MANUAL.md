@@ -82,7 +82,8 @@ cmake --build build/release
 # 2. Install the Python packages
 pip install -r python/requirements-dev.txt -r atlas/api/requirements.txt
 
-# 3. Download and prepare the small Monaco map (under 1 MB)
+# 3. Download and prepare the small Monaco map (about 1.1 MB). It only downloads while the
+#    publisher's file is unchanged; see docs/atlas/README.md for the source and how to reproduce.
 python scripts/data/prepare_datasets.py osm_monaco
 
 # 4. Install and build the website
@@ -250,8 +251,8 @@ Every map and graph the platform knows about, with its size, source and status.
 
 | Dataset | What it is | Size | Map? |
 |---|---|---|---|
-| `osm_monaco` | Monaco roads (OpenStreetMap) | 5,692 nodes | yes, **best for learning** |
-| `osm_liechtenstein` | Liechtenstein roads (OpenStreetMap) | 29,945 nodes | yes |
+| `osm_monaco` | Monaco roads (OpenStreetMap) | 7,592 nodes | yes, **best for learning** |
+| `osm_liechtenstein` | Liechtenstein roads (OpenStreetMap) | 29,945 nodes | yes, but **currently unavailable** (its source file no longer downloads) |
 | `dimacs_ny`, `dimacs_col`, `dimacs_fla` | New York, Colorado, Florida road networks | 264k – 1.07M nodes | yes (long animations are truncated) |
 | `synth_ratio1_ny` | New York roads with synthetic weights | 264k nodes | yes (long animations are truncated) |
 | `snap_facebook` | A social network | 4,039 nodes | no, numbers only |

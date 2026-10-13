@@ -8,7 +8,7 @@ building it. Nothing below was removed to make the documentation look consistent
 
 | id | item | status | evidence |
 |---|---|---|---|
-| D-01 | OSM promised, not implemented | **Reopened (M2, 2026-10-13); originally recorded as Resolved.** The extraction code and its tests exist, but the pinned dated Geofabrik snapshot can no longer be downloaded: `monaco-260925.osm.pbf` returned `HTTP 404 Not Found` in CI on 2026-10-11 and again on 2026-10-13 ([run #28](https://github.com/arkkadubharath2026-ops/lpq-atlas/actions/runs/38364982184), step "Prepare the OSM Monaco dataset"). Liechtenstein uses the same snapshot date and is untested. The v2 workflow avoids the download by using the bundled `demo_road`, so v2's green `e2e` says nothing about real OSM. Original evidence follows. | `python/lpq_tools/data/osm.py` (documented road policy), `configs/datasets/osm_*.yaml` (dated Geofabrik snapshots, SHA-256 pinned), `datasets/metadata/osm_*.osm.json` (provenance), `python/tests/test_osm.py`; Dijkstra, A* (haversine) and LPQ verified exact on `osm_monaco` / `osm_liechtenstein` |
+| D-01 | OSM promised, not implemented | **Monaco: re-sourced and verified (M3, 2026-10-13). Durable retention of the source bytes, and Liechtenstein: still open.** `osm_monaco` now reads the openstreetmap.fr "monaco" extract (replication state 2026-10-13T01:14:05Z, sequence 7326506), pinned by SHA-256 `26ac807383921434f6fc7ef07ddb367e03c8357e65ac360c72d5de120c239d1d`, computed locally by `sha256sum`, Python `hashlib`, `openssl` and the repo's helper (all equal). The publisher's MD5 `df804c9f8e6da26ddb350af60132554c` matched; it only detects corruption, so the pin is **trust-on-first-use**. Verified: publisher headers, MD5 file and state identical before and after the download; the PBF header's replication timestamp and sequence equal `state.txt`; two separate downloads and the pipeline's own fresh download are byte-identical; all seven pipeline outputs (graph, node-id map, four metadata files, 1000-query manifest) are byte-identical across a retained-bytes run and a fresh-download run; flipped bytes and the old Geofabrik digest are rejected; the runner refuses the old manifest. On the 1000-query manifest, Dijkstra over six queues and A\* with haversine are exact against the reference (correctness only, no performance claim), and LPQ approximate at ε=0.1 recorded ratio 1.0 on all queries. **It is a different graph:** 7,592 nodes and 11,680 arcs (earlier 5,692 and 8,495), bbox [7.4053929, 43.7232244, 7.4472402, 43.7545284] against [7.4053929, 43.7232244, 7.4423019, 43.7519682], about 1.23x the area; 32 road segments reference nodes cut at the extract boundary. The raw extract also holds nodes far outside Monaco (latitude 37.27 to 43.78, no header bbox); none enter the road graph. **Limit:** the publisher replaces the file daily and keeps no dated copies, so the pin holds only for these bytes; reproduction needs the retained file with `--skip-download` or a re-pin. Not redistributed (ODbL obligations need a separate decision). The tracked lock file `datasets/metadata/osm_monaco.checksums.json` still records the old Geofabrik digest and was left unchanged. Liechtenstein still names the dead Geofabrik URL (deferred by the owner). History: **Reopened (M2, 2026-10-13); originally recorded as Resolved.** The extraction code and its tests exist, but the pinned dated Geofabrik snapshot can no longer be downloaded: `monaco-260925.osm.pbf` returned `HTTP 404 Not Found` in CI on 2026-10-11 and again on 2026-10-13 ([run #28](https://github.com/arkkadubharath2026-ops/lpq-atlas/actions/runs/38364982184), step "Prepare the OSM Monaco dataset"). Liechtenstein uses the same snapshot date and is untested. The v2 workflow avoids the download by using the bundled `demo_road`, so v2's green `e2e` says nothing about real OSM. Original evidence follows. | `python/lpq_tools/data/osm.py` (documented road policy), `configs/datasets/osm_*.yaml` (dated Geofabrik snapshots, SHA-256 pinned), `datasets/metadata/osm_*.osm.json` (provenance), `python/tests/test_osm.py`; Dijkstra, A* (haversine) and LPQ verified exact on `osm_monaco` / `osm_liechtenstein` |
 | D-02 | "online ML" broader than the central path | **Resolved in the UI for the scorer label; reopened for online learning (M2, 2026-10-13).** `OnlineLearner::maybe_update` and `flush` have no call site outside tests on `main` and on the PR #1 branch (`git grep`, 2026-10-13): non-test code only calls `record()` (`controller_observer.hpp:99`) and `reset()`, so no model weight changes in any benchmark or API run. See D-11 and D-12. Original evidence follows. | every result states `lpq.scorer`, `adaptive_controller`, `online_learning`; the Models page states the static-scorer mode |
 | D-03 | rich features vs optimized path | **Exposed** | `lpq.features` lists the six static features used; the Model page shows which weights are non-zero as read by the C++ loader |
 | D-04 | model zoo vs selected model | **Resolved** | Models page separates implementations, trained artifacts, the queue that uses them, and split status |
@@ -184,3 +184,35 @@ entries true.
   nothing, and the CI `engine` job installs them and passes (run #27 and run #28).
 * **Status:** closed as not a repository defect. **Inferred**, because it was not reproduced in
   a clean virtual environment; that confirmation is a task for M10.
+
+## Findings added by M3 (2026-10-13)
+
+### D-17. The configured epsilon is not recorded in approximate-mode benchmark results
+
+* **Expected:** an approximate-mode result states the epsilon it was run with, so the file can be
+  reproduced and its bound checked later.
+* **Actual (verified on `completion/m3-osm-acquisition`):** `lpq_benchmark --mode approximate
+  --epsilon 0.1` wrote 1000 records whose `correctness` block holds `path_cost`, `optimal_cost`,
+  `approximation_ratio`, `exact_match`, `target_reachable` and `termination`; no field anywhere
+  in the file holds the epsilon, and `experiment_id` is `adhoc`. The runner does enforce the bound
+  while running: it aborts when `ratio > 1 + epsilon` (`lpq_benchmark.cpp` lines 882 to 886), and
+  the run exited 0. So the run is checked, but a stored file cannot say which epsilon it was
+  checked against.
+* **Status:** recorded; **no code changed** in M3. Fix due with M8 and M10 (result schema).
+
+### D-18. Dataset-pipeline hazards found while re-sourcing Monaco
+
+* **`prepare_datasets.py` replaces the tracked `index.json`.** It rewrites
+  `datasets/metadata/index.json` from only the datasets it was asked to prepare
+  (`docs/local-setup.md` calls the resulting git diff "expected"). Preparing one dataset therefore
+  drops the other entries from a tracked file. M3 avoided it by calling `prepare_dataset()` through
+  an uncommitted driver, as `scripts/demo/prepare_demo.py` does, and updating only the Monaco entry;
+  the four other entries were verified byte-identical. Fix due with M4.
+* **A stale lock file.** `datasets/metadata/osm_monaco.checksums.json` records the old Geofabrik
+  PBF digest. The pipeline writes that lock file only when a config has no pin, so it is not rewritten
+  now that the config is pinned. It is left unchanged as a historical record and now describes a file
+  the config no longer names.
+* **A hard-coded raw filename in a test.** `python/tests/test_osm.py` names the raw PBF literally, so a
+  re-pin that changes the local filename needs a test edit (done once in M3). Deriving it from the
+  dataset config would remove the coupling; not done.
+* **Status:** recorded; M4 owns the pipeline items.

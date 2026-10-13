@@ -57,8 +57,8 @@ datasets/ (OSM, DIMACS, SNAP, synthetic) · models/ · results/raw · results/at
 
 | id | family | nodes | notes |
 |---|---|---:|---|
-| `osm_monaco` | OSM | 5,692 | Geofabrik snapshot 2026-09-25, SHA-256 pinned |
-| `osm_liechtenstein` | OSM | 29,945 | Geofabrik snapshot 2026-09-25, SHA-256 pinned |
+| `osm_monaco` | OSM | 7,592 | openstreetmap.fr extract, replication state 2026-10-13T01:14:05Z, SHA-256 pinned; a different graph from the earlier Geofabrik one (5,692 nodes) |
+| `osm_liechtenstein` | OSM | 29,945 | Geofabrik snapshot 2026-09-25 (HTTP 404, **unavailable** until re-sourced); node count is from the earlier record |
 | `dimacs_ny` / `col` / `fla` | DIMACS | 264k / 436k / 1.07M | coordinates, route/research mode |
 | `snap_facebook`, `snap_roadnet_pa`, `snap_roadnet_ca` | SNAP | 4k – 2M | no coordinates |
 | `synth_ratio1_ny` | synthetic | 264k | NY topology, synthesized weights |
@@ -72,13 +72,24 @@ existing `lpq_convert` produces the graph, so OSM uses the same converter and ch
 path as every other dataset. Provenance is in `datasets/metadata/<id>.osm.json`.
 
 ```bash
-python scripts/data/prepare_datasets.py osm_monaco osm_liechtenstein
+python scripts/data/prepare_datasets.py osm_monaco
 ```
 
-> The configs pin dated Geofabrik snapshots. Geofabrik prunes old dated extracts: the
-> `monaco-260925` file returned **HTTP 404** in CI on 2026-10-11, so these two datasets
-> cannot be prepared until a current snapshot is chosen and its SHA-256 re-pinned. The
-> end-to-end CI job therefore uses the bundled offline `demo_road` graph instead.
+> **Monaco** (re-sourced in M3, 2026-10-13) reads the openstreetmap.fr "monaco" extract. Its
+> PBF is pinned by a SHA-256 computed locally from the downloaded bytes, after the publisher's
+> MD5 matched; the MD5 only detects corruption and does not prove authenticity, so the pin is
+> trust-on-first-use. **The publisher replaces that file daily and keeps no dated copies**, so the
+> pin holds only for those exact bytes: a download made after the next upstream refresh is
+> rejected by the digest check. To reproduce, keep the PBF at `datasets/raw/<filename>` (see
+> `filename:` in `configs/datasets/osm_monaco.yaml`) and prepare with `--skip-download`, or
+> re-pin a new snapshot and regenerate the metadata and query manifest. The PBF and the
+> processed graph are git-ignored and are not redistributed. This is a **different graph** from
+> the earlier Geofabrik one (7,592 nodes and 11,680 arcs against 5,692 and 8,495); results from
+> the two must not be compared.
+>
+> **Liechtenstein** still names a Geofabrik snapshot that returned **HTTP 404** and is
+> unavailable until it is re-sourced. The end-to-end CI job uses the bundled offline
+> `demo_road` graph, not real OSM.
 
 ## Running it
 
@@ -97,7 +108,7 @@ to the `atlas-work` volume, separate from a host API's `results/atlas/`.
 cmake --preset release && cmake --build build/release        # engine (from source)
 pip install -r python/requirements-dev.txt -r atlas/api/requirements.txt
 python scripts/demo/prepare_demo.py                            # bundled demo_road, offline
-# optional: python scripts/data/prepare_datasets.py osm_monaco   # needs a live Geofabrik snapshot (see below)
+# optional: python scripts/data/prepare_datasets.py osm_monaco   # needs the pinned PBF bytes (see the note above)
 
 python -m uvicorn atlas_api.app:app --app-dir atlas/api --port 8000
 cd atlas/web && npm ci && npm run build && npx next start -p 3000

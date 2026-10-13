@@ -35,6 +35,15 @@ Progress log: [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md).
 > 6. **Percentages were not re-scored.** The criteria and evidence behind the milestone scores
 >    did not change, so no score changed. The corrections above change wording and facts, not
 >    the matrices.
+>
+> **M3 update (2026-10-13, branch `completion/m3-osm-acquisition`).** `osm_monaco` was re-sourced
+> from the openstreetmap.fr extract and verified; details are in `DISCREPANCIES.md` D-01 and
+> `IMPLEMENTATION_PROGRESS.md`. The statements below about a broken OSM acquisition describe
+> **Monaco as of M2** and are superseded for Monaco only; **Liechtenstein is still unavailable**,
+> and the Monaco pin holds only for the retained bytes (the publisher replaces the file daily).
+> The scoring matrices and milestone percentages (§2, §3) are **as of M2 and were not re-scored in
+> M3**, so rows that cite the broken OSM step (for example the §54 "reproducible PBF acquisition:
+> 0" cell) have not been updated; the owner decides whether to re-score.
 
 ---
 
@@ -100,7 +109,7 @@ and the PR description only.
 | Is LPQ exact mode correct? | **Yes** — every benchmark and API result is checked against the reference Dijkstra and aborts on mismatch | [verified here] tests; [doc] benchmark runner |
 | Does the learned component make the queue faster end to end? | **Not on the measured workloads**, except one NY Dijkstra result where the speedup is from queue engineering and a calibrated queue choice, not from learning | [doc] v1 findings; [PR #1] v2-results §4–§8 |
 | Does online learning run? | **No.** `OnlineLearner::maybe_update` and `flush` have no call site outside tests | [verified here] `git grep` on both the `main`-derived and v2 trees: defined at `online_learner.hpp:246` and `:259`, referenced only by `test_online_learner.cpp`; [PR #1] `v2-results.md` §3 agrees |
-| Is the OSM pipeline usable from the pinned sources? | **No.** The pinned Monaco snapshot returned HTTP 404 in CI on 2026-10-11 and again on 2026-10-13. Liechtenstein uses the same snapshot date and is **[untested]** | [PR #1] `configs/datasets/osm_monaco.yaml` comment; [CI] run #28, `e2e` step 7, `HTTP 404 Not Found` |
+| Is the OSM pipeline usable from the pinned sources? | **Monaco: yes, with a durability limit (M3).** The old Geofabrik snapshot returned HTTP 404 in CI on 2026-10-11 and 2026-10-13; Monaco was re-sourced from the openstreetmap.fr extract and pinned by SHA-256, which holds only for the retained bytes because the publisher replaces the file daily. **Liechtenstein: no** (still names the dead URL) | [CI] run #28, `e2e` step 7, `HTTP 404 Not Found`; [verified here, M3] pipeline run, 1000-query correctness checks and a real-OSM Playwright run (8 passed, 2 skipped) |
 | Is the Atlas platform usable? | **Yes** on the bundled `demo_road` graph, with the OSM caveat and 7 lint warnings. Real-OSM operation is **[untested]** | [verified here] M1 e2e 8 passed, 2 skipped; [CI] run #27 |
 
 ---
@@ -268,9 +277,15 @@ Overall average: **71%** over 22 milestones.
   result is recorded in the docs.
 * **Gap 3 — raw graphs are not tracked:** the NY, COL, FLA, PA and CA graphs must be acquired.
   This is by design, but it means a clean checkout cannot reproduce results offline.
-* **Remaining:** re-pin OSM to a current snapshot, or pin a durable mirror with a checksum;
-  verify Liechtenstein; record an OSM benchmark; run the other real datasets through acquisition
-  and checksum verification.
+* **M3 update:** Gaps 1 and 2 are addressed **for Monaco only**. `osm_monaco` now reads the
+  openstreetmap.fr extract (7,592 nodes, 11,680 arcs; a different graph from the earlier 5,692-node
+  one), pinned by a locally computed SHA-256, with the 1000-query manifest regenerated. Dijkstra over six
+  queues and A* (haversine) were exact against the reference on all 1000 queries, which is a
+  correctness check and **not** a performance benchmark. The pin holds only for the retained bytes, and
+  Liechtenstein is untouched. See `DISCREPANCIES.md` D-01.
+* **Remaining:** decide how the Monaco source bytes are kept durable (the publisher replaces the
+  file daily); source Liechtenstein; record an OSM benchmark if wanted; run the other real
+  datasets through acquisition and checksum verification.
 
 ### M13 — Experiments: full matrix, distribution shift, ablations — **45%**
 * **Criteria:** full algorithm × queue × mode matrix on all datasets; distribution shift tested
@@ -572,10 +587,10 @@ Each item states the acceptance criterion it closes and how to know it is done.
    queries (warm and cold start). *Done when:* a test shows weights change during a real query,
    the update latency is recorded, and a benchmark run reports the effect with its sign.
    *Closes:* PRD §25.5, ESD §40 #6, README §19 #7.
-2. **Repair the OSM acquisition.** Re-pin Monaco and Liechtenstein to a current Geofabrik
-   snapshot, or pin a durable mirror. Re-verify the checksum from a clean environment. *Done when:*
-   `scripts/data/prepare_datasets.py osm_monaco osm_liechtenstein` succeeds from a clean checkout.
-   *Closes:* specdoc §54 (reproducible PBF), README §19 #11.
+2. **Repair the OSM acquisition.** *Monaco: done in M3 on its branch, with a durability limit*
+   (see D-01). *Open:* a durable home for the Monaco bytes, and Liechtenstein (deferred by the
+   owner). *Done when:* both datasets prepare from a clean checkout using bytes whose SHA-256
+   matches the config pin. *Closes:* specdoc §54 (reproducible PBF), README §19 #11.
 3. **Full approximate-mode measurement.** Run the 100-query manifests on several graphs at
    several ε values. Report mean, median, p50, p95, p99, maximum, and the percent within each ε.
    *Closes:* PRD §25.3, README §19 #2.

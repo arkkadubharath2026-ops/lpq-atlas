@@ -14,7 +14,7 @@ from lpq_tools.data.osm import (
     haversine_m,
 )
 
-_PBF = Path(__file__).resolve().parents[2] / "datasets" / "raw" / "monaco-260925.osm.pbf"
+_PBF = Path(__file__).resolve().parents[2] / "datasets" / "raw" / "monaco-osmfr-20261013T011405Z.osm.pbf"
 
 
 @pytest.mark.parametrize(

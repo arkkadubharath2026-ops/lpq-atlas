@@ -57,17 +57,17 @@
       "weight_type": "uint32"
     },
     {
-      "arc_count": 8495,
+      "arc_count": 11680,
       "dataset_id": "osm_monaco",
       "directed": true,
-      "edge_count": 8495,
+      "edge_count": 11680,
       "files_accepted_on_trust": [],
-      "graph_checksum_fnv1a64": 16866336453424606105,
+      "graph_checksum_fnv1a64": 7879006388132312723,
       "graph_path": "datasets/processed/osm_monaco.lpqgraph",
       "has_coordinates": true,
       "manifest_path": "experiments/manifests/osm_monaco_queries.yaml",
       "metadata_path": "datasets/metadata/osm_monaco.json",
-      "node_count": 5692,
+      "node_count": 7592,
       "weight_type": "uint32"
     }
   ]
