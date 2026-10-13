@@ -18,6 +18,27 @@ $script:WebDir   = Join-Path $script:Root 'atlas/web'
 $script:RunDir   = Join-Path $script:Root 'results/atlas/launcher'   # git-ignored
 $script:BuildDir = Join-Path $script:Root 'build/release'
 $script:BinDir   = Join-Path $script:BuildDir 'bin'
+# --- optional settings file -----------------------------------------------------------
+# A .env at the repository root is OPTIONAL (copy .env.example to .env to change a setting). Only ATLAS_*
+# and LPQ_* keys are read, a variable already set in the environment wins, and the file is parsed as
+# KEY=VALUE lines, never executed. Mirrors load_env_file in _common.sh.
+function Import-EnvFile {
+    $f = Join-Path $script:Root '.env'
+    if (-not (Test-Path -LiteralPath $f)) { return }
+    foreach ($line in (Get-Content -LiteralPath $f)) {
+        $t = $line.Trim()
+        if ($t -eq '' -or $t.StartsWith('#') -or -not $t.Contains('=')) { continue }
+        $i = $t.IndexOf('=')
+        $key = $t.Substring(0, $i).Trim()
+        $val = $t.Substring($i + 1).Trim()
+        if ($key -notmatch '^(ATLAS|LPQ)_[A-Za-z0-9_]+$') { continue }
+        if (Test-Path -LiteralPath "Env:$key") { continue }
+        if ($val.Length -ge 2 -and $val.StartsWith('"') -and $val.EndsWith('"')) { $val = $val.Substring(1, $val.Length - 2) }
+        Set-Item -LiteralPath "Env:$key" -Value $val
+    }
+}
+Import-EnvFile
+
 $script:HostName = '127.0.0.1'
 $script:ApiPort  = if ($env:ATLAS_API_PORT) { [int]$env:ATLAS_API_PORT } else { 8000 }
 $script:WebPort  = if ($env:ATLAS_WEB_PORT) { [int]$env:ATLAS_WEB_PORT } else { 3000 }

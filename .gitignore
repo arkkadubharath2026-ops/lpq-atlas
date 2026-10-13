@@ -20,6 +20,9 @@ CMakeUserPresets.json
 *.exe
 *.pdb
 
+# Local settings (see .env.example)
+.env
+
 # Python
 .venv/
 venv/

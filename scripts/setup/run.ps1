@@ -8,7 +8,7 @@
 #   -Dev    serve the UI with `next dev` instead of a production build
 #
 # Ports: ATLAS_API_PORT (default 8000), ATLAS_WEB_PORT (default 3000).
-# Press Ctrl+C to stop both. Logs: results\atlas\launcher\{api,web}.{out,err}.log
+# Stop: Ctrl+C, or scripts\setup\stop.ps1 from another terminal. Logs: results\atlas\launcher\{api,web}.{out,err}.log
 # =============================================================================
 param([switch]$Test, [switch]$Dev)
 . "$PSScriptRoot/_common.ps1"
@@ -38,6 +38,9 @@ foreach ($p in @($ApiPort, $WebPort)) {
 
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
 if (-not $Dev) { Ensure-WebBuilt }
+
+# scripts\setup\stop.ps1 reads this to stop a launcher that is not in your foreground.
+Set-Content -Path (Join-Path $RunDir 'run.pid') -Value $PID
 
 function Quote([string]$s) { return '"' + $s + '"' }
 # -WindowStyle exists only on Windows; the servers should not open console windows.
@@ -82,6 +85,13 @@ try {
         Start-Sleep -Seconds 1
     }
 
+    # --- readiness: a real query through the UI's own address, validated by the engine -------
+    Say 'checking that a real query works end to end (UI -> API -> engine)'
+    & $vpy (Join-Path $PSScriptRoot 'smoke.py') --web "http://${HostName}:$WebPort"
+    $smoke = $LASTEXITCODE
+    if ($smoke -eq 2) { Warn 'the demo dataset is not ready, so the end-to-end check was skipped' }
+    elseif ($smoke -ne 0) { Die "the end-to-end check failed (see above). Logs: $RunDir" }
+
     Write-Host ''
     Write-Host '  LPQ Atlas is running.' -ForegroundColor Green
     Write-Host ''
@@ -90,7 +100,8 @@ try {
     Write-Host '    Dataset     demo_road (synthetic, 19,600 nodes) is ready; pick it on the Explore page'
     Write-Host "    Logs        $RunDir"
     Write-Host ''
-    Write-Host '  Press Ctrl+C to stop.'
+    Write-Host '  Stop        press Ctrl+C here, or from another terminal:  scripts\setup\stop.ps1'
+    Write-Host '  Re-check    python scripts\setup\smoke.py        (any time while it runs)'
 
     # Exit as soon as either server dies, so a crash is not mistaken for "running".
     while (-not $api.HasExited -and -not $web.HasExited) { Start-Sleep -Seconds 2 }
@@ -99,6 +110,7 @@ try {
 } finally {
     Write-Host ''
     Say 'stopping'
+    Remove-Item -Path (Join-Path $RunDir 'run.pid') -Force -ErrorAction SilentlyContinue
     foreach ($p in $procs) {
         if (-not $p.HasExited) {
             # taskkill /T also ends Next's child processes.

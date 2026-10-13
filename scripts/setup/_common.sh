@@ -14,6 +14,30 @@ ROOT="$(cd "$SETUP_DIR/../.." && pwd)"
 WEB_DIR="$ROOT/atlas/web"
 RUN_DIR="$ROOT/results/atlas/launcher" # git-ignored (results/atlas/)
 
+# --- optional settings file ----------------------------------------------------
+# A .env at the repository root is OPTIONAL (copy .env.example to .env to change a setting). Only ATLAS_*
+# and LPQ_* keys are read, a variable that is already set in the environment wins, and the file is parsed
+# as KEY=VALUE lines, never executed.
+load_env_file() {
+    local f="$ROOT/.env" line key val
+    [ -f "$f" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%$'\r'}"
+        case "$line" in '' | '#'*) continue ;; esac
+        case "$line" in *=*) ;; *) continue ;; esac
+        key="${line%%=*}"
+        key="${key//[[:space:]]/}"
+        val="${line#*=}"
+        case "$key" in ATLAS_* | LPQ_*) ;; *) continue ;; esac
+        [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+        [ -n "${!key+x}" ] && continue
+        val="${val%\"}"
+        val="${val#\"}"
+        export "$key=$val"
+    done < "$f"
+}
+load_env_file
+
 API_PORT="${ATLAS_API_PORT:-8000}"
 WEB_PORT="${ATLAS_WEB_PORT:-3000}"
 HOST="127.0.0.1"

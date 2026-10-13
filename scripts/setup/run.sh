@@ -9,7 +9,7 @@
 #   --dev    serve the UI with `next dev` instead of a production build
 #
 # Ports: ATLAS_API_PORT (default 8000), ATLAS_WEB_PORT (default 3000).
-# Press Ctrl+C to stop both. Logs: results/atlas/launcher/{api,web}.log
+# Stop: Ctrl+C, or `scripts/setup/stop.sh` from another terminal. Logs: results/atlas/launcher/{api,web}.log
 # =============================================================================
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
@@ -46,11 +46,15 @@ done
 mkdir -p "$RUN_DIR"
 [ "$dev" = 0 ] && ensure_web_built
 
+# scripts/setup/stop.sh reads this to stop a launcher that is not in your foreground (Ctrl+C needs a terminal).
+printf '%s\n' "$$" > "$RUN_DIR/run.pid"
+
 pids=()
 cleanup() {
     trap - EXIT
     echo
     say "stopping"
+    rm -f "$RUN_DIR/run.pid"
     local p
     for p in "${pids[@]:-}"; do
         [ -n "$p" ] || continue
@@ -59,7 +63,7 @@ cleanup() {
     done
 }
 trap cleanup EXIT
-trap 'exit 0' INT TERM # Ctrl+C is a normal way to stop; EXIT then runs cleanup
+trap 'exit 0' INT TERM HUP # Ctrl+C / stop.sh / closing the terminal are normal ways to stop; EXIT then runs cleanup
 
 # --- API -------------------------------------------------------------------------
 say "starting the API on http://$HOST:$API_PORT"
@@ -88,6 +92,14 @@ for _ in $(seq 1 120); do
 done
 http_ok "http://$HOST:$WEB_PORT/" || die "the web UI did not answer within 120 s (log: $RUN_DIR/web.log)"
 
+# --- readiness: a real query through the UI's own address, validated by the engine ---------
+say "checking that a real query works end to end (UI -> API -> engine)"
+"$VPY" "$SETUP_DIR/smoke.py" --web "http://$HOST:$WEB_PORT" || {
+    rc=$?
+    [ "$rc" = 2 ] && warn "the demo dataset is not ready, so the end-to-end check was skipped" ||
+        die "the end-to-end check failed (see above). Logs: $RUN_DIR/api.log, web.log"
+}
+
 cat << EOF
 
   LPQ Atlas is running.
@@ -97,7 +109,8 @@ cat << EOF
     Dataset     demo_road (synthetic, 19,600 nodes) is ready; pick it on the Explore page
     Logs        $RUN_DIR/api.log, web.log
 
-  Press Ctrl+C to stop.
+  Stop        press Ctrl+C here, or from another terminal:  bash scripts/setup/stop.sh
+  Re-check    python scripts/setup/smoke.py        (any time while it runs)
 EOF
 
 # Exit as soon as either server dies, so a crash is not mistaken for "running".
