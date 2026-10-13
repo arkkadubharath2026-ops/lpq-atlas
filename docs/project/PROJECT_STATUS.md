@@ -359,8 +359,11 @@ Overall average: **71%** over 22 milestones.
     statement is **inferred** until then.
   * Raw results and processed graphs are not in the repository.
   * The OSM step (M12) cannot run from the pinned URL.
-* **Remaining:** make the 7 directly-run shell scripts executable in git (this is a source
-  change, deferred to M4), repair the OSM step, confirm in a clean virtual environment that the
+* **Remaining:** *(M4 update, local branch `completion/m4-reproducibility-tooling` only: the 7
+  scripts are now mode 100755 with a test, and the documented workflow was run end to end on
+  `dimacs_ny` and `snap_facebook`; see `IMPLEMENTATION_PROGRESS.md` and D-13, D-19, D-20. The
+  percentages in this document were not re-scored.)* Make the 7 directly-run shell scripts
+  executable in git (a source change; done on the M4 branch, not on `main` or v2), repair the OSM step, confirm in a clean virtual environment that the
   requirements install without a conflict (M10), and run the full reproduction once from a clean
   clone with datasets acquired.
 
@@ -616,7 +619,7 @@ Each item states the acceptance criterion it closes and how to know it is done.
 11. **Generate and inspect the figures and tables** from a reproduction run. Check each against its
     raw source. *Closes:* PRD §25.13, ESD §40 #9.
 12. **Make the 7 directly-run `.sh` scripts executable** in git (`git update-index
-    --chmod=+x`), and confirm in a clean virtual environment that the documented requirements
+    --chmod=+x`; done on the local M4 branch, commit `ee8d78f`), and confirm in a clean virtual environment that the documented requirements
     install without a conflict (the earlier "pip conflict" is not a repository defect; see
     M16 and D-16). *Closes:* M16.
 13. **Fresh literature review** before any publication claim. *Closes:* PRD §25.14, README §19 #18.

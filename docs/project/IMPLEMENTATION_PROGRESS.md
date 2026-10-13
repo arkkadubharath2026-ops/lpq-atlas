@@ -19,8 +19,9 @@ and `claude/sleepy-heisenberg-fhr3me` (docs) are unchanged.
 | M0 read-only reconnaissance | PASS | approved |
 | M1 branch and baseline | PASS | approved |
 | M2 documentation corrections | PASS | approved |
-| M3 Monaco real-OSM acquisition | PASS for Monaco, with stated limits | **pending** |
-| M4 onward | not started | |
+| M3 Monaco real-OSM acquisition | PASS for Monaco, with stated limits | accepted (conditional PASS) |
+| M4 reproducibility and tooling | PASS for the five scoped items; limits below | **pending** |
+| M5 onward | not started | |
 
 ---
 
@@ -281,3 +282,70 @@ confirmed the ports were closed.
 1. Review the M3 diff: `git diff 0981b1a..completion/m3-osm-acquisition`.
 2. Choose how the Monaco source bytes become durable (D1 release asset, D2 commit, D3 re-pin on demand), or accept D4 for now.
 3. Approve a proposed M4 (reproducibility baseline) when ready.
+
+---
+
+## Milestone M4: Reproducibility and tooling (local only)
+Status: PASS for the five scoped items, with the limits listed below
+Date: 2026-10-13
+Base commit SHA: `ca9a894abc17a2e7619ac349918f2be802905408` (the accepted M3 commit)
+Working branch: `completion/m4-reproducibility-tooling` (local, no upstream; scratch worktree `m4`)
+Commits: `ee8d78f`, `41906d9`, `099d628`, `37b7eda`, and the commit that adds this entry.
+
+### What I found
+- **D-13 (modes).** Seven scripts the docs run directly were tracked as 100644. Fixed.
+- **Index overwrite (D-18).** `prepare_datasets.py` rewrote `datasets/metadata/index.json` from only the
+  datasets it was asked about. Fixed; a real run preserved all five entries and added `snap_facebook`.
+- **Hard-coded Monaco filename in a test (D-18).** Now read from `configs/datasets/osm_monaco.yaml`.
+- **Stale lock files (D-18).** `osm_monaco.checksums.json` (and `osm_liechtenstein.checksums.json`) hold
+  an old observation. The lock is read only for unpinned files and keyed by filename, so it is inert once
+  a file is pinned. **Left unchanged on purpose**; two tests and a paragraph in `datasets.md` state this.
+- **New, recorded only:** D-19 (`snap_facebook` model metrics in the docs do not reproduce) and D-20
+  (the order-check results file has no producer in the documented workflow).
+
+### What changed
+Starting state (recorded before editing): clean tree, no ignored artifacts, HEAD = `ca9a894`.
+Files changed on the M4 branch (excluding this log): the seven scripts' modes; new
+`python/tests/test_script_modes.py` and `test_index_preservation.py`; `python/lpq_tools/data/pipeline.py`
+(`update_index`); `scripts/data/prepare_datasets.py`; `scripts/demo/prepare_demo.py` (docstring only);
+`python/tests/test_osm.py`, `test_acquire.py`; `docs/local-setup.md`, `docs/experiments/datasets.md`,
+`docs/atlas/DISCREPANCIES.md`, `docs/project/PROJECT_STATUS.md` (two annotations, not re-scored).
+**Not changed:** `.github/`, `cpp/`, `atlas/`, dependency files, the two lock files, generated metadata,
+the PBF. Raw and processed data stay untracked.
+
+### Verification actually run (worktree `m4`)
+| check | result |
+|---|---|
+| mode test, before the fix | 7 failed, 7 passed; after: **14 passed** |
+| index tests, before the fix | **13 failed**; after: **13 passed** |
+| `scripts/reproduce/build_all.sh` | exit 0; 155 targets; ctest **914/914** |
+| `prepare_datasets.py dimacs_ny snap_facebook` | exit 0; index kept all 5 entries and added `snap_facebook`; resulting churn inspected, restored, not committed |
+| `run_main_experiments.sh` | exit 0; all four comparison counts equal the recorded ones (203,801,439; 71,839,857; 177,580,603; 177,732,303) |
+| `generate_tables.sh`, `generate_figures.sh` | exit 0; figures: one of two (see D-20) |
+| `scripts/demo/prepare_demo.py` | exit 0; graph checksum `0xebd2ba73ec480d93` equals the committed metadata |
+| `python -m pytest -q` in `python/` | **341 passed, 1 skipped** (v2 result file absent) |
+| `python -m pytest -q` in `atlas/api/` | **87 passed, 1 skipped** (this `lpq_run` has `lpq_optimized`) |
+| web suite, Playwright, Monaco extraction | **not rerun in M4** (no web or engine code changed); Monaco extraction test skips without the PBF in this worktree |
+Graph checksums for `dimacs_ny` (`0xd268213e3a5c03e9`) and `snap_facebook` (`0x0061dc4fa16f3a09`) match the documented ones.
+Evidence files are in the scratchpad `m4_evidence/`, outside the repository.
+
+### Acceptance criteria
+Met: items 1 to 5 of the M4 scope. Not met / not claimed: a timing result of any kind (1 CPU, unpinned,
+every query flagged noisy), accuracy of either model, any statement that the whole reproduction matches
+the documents (D-19 and D-20 are open).
+
+### Datasets not tested, and why
+`osm_monaco` (PBF not present in this worktree; its extraction test skips), `osm_liechtenstein` (dead
+Geofabrik URL, deferred by the owner), `snap_roadnet_pa` and other large SNAP/DIMACS sets (not part of
+the documented main workflow, not downloaded).
+
+### Remaining reproducibility limits
+D-19 and D-20; the Monaco bytes are not durable (D4 from M3); timing cannot be reproduced reliably on one
+unpinned CPU; no hardware counters (no PMU); the fix for modes and the index exists only on the local
+branch; `models/policy/queue_policy_v1.*` are tracked (from v2) and were not produced by M4;
+the retraction of the 34% claim is unchanged (D-11).
+
+### Owner decision needed
+1. Review `git diff ca9a894..completion/m4-reproducibility-tooling`.
+2. Decide which `snap_facebook` figures are authoritative (D-19), and whether D-20 gets a producer script.
+3. Approve M5 (wiring online learning into a real search, D-12) when ready.

@@ -235,3 +235,47 @@ entries true.
   when the PBF is absent, and runs when it is present.
 * **Status:** fixed in M4 on the local branch `completion/m4-reproducibility-tooling`; the other
   branches are unchanged. Not changed: the lock files.
+
+## Findings added by M4 (2026-10-13)
+
+### D-19. The documented `snap_facebook` model metrics do not reproduce
+
+* **Claimed (documented):** `docs/experiments/static-scorer-training.md` lines 72 to 76 give, for
+  `snap_facebook`, held-out ROC AUC 0.7909, in-sample ROC AUC 0.7917 and precision lift 22.25x;
+  `docs/experiments/findings.md` (lines 168 to 169), the abstract (0.79) and `docs/experiments/README.md`
+  (line 44) repeat them.
+* **Actual (verified in M4):** `scripts/reproduce/run_main_experiments.sh` trained the model on a graph
+  whose checksum equals the documented one, with `TRAINING_SEED=20260923`. Held-out ROC AUC **0.8037**,
+  in-sample ROC AUC **0.7909**, precision lift **23.08x**. Training the same configuration a second time
+  gave identical results, so the pipeline is deterministic here and this is not run-to-run noise
+  (`fb_retrain_1` and `fb_retrain_2` in the M4 evidence directory). The installed library versions
+  equal the pinned ones. The New York model does reproduce (held-out AUC 0.5337, the value in
+  `findings.md` and `v2-results.md`).
+* **Likely cause (inferred, not checked):** the training document's New York figure (0.5331) is the
+  pre-leak-fix value; `ablation-waterfall.md` lines 126 to 127 say the disjoint-split value is 0.5337 and
+  the leaked one 0.5331. The `snap_facebook` figures were probably produced before the same fix. The
+  fix itself was not re-checked in M4.
+* **Status:** recorded. **No document was edited**: which figure is authoritative is an owner
+  decision. The reproduced values are a measurement of this repository, not a claim that the model is good.
+  Both models were used only to check comparison counts; no accuracy claim is made.
+
+### D-20. The order-check results file has no producer in the documented workflow
+
+* **Claimed:** `scripts/reproduce/generate_figures.sh` plots the order-reversed scatter from
+  `results/raw/dimacs_ny_order_check_v1.json` and tells the reader to produce it "with the order-check
+  experiment".
+* **Actual (verified in M4):** running the documented sequence (`build_all.sh`, `run_main_experiments.sh`,
+  `generate_tables.sh`, `generate_figures.sh`) produced the ablation file but not the order-check file.
+  `generate_figures.sh` exits 0 and prints a warning that the order-reversed scatter is missing and
+  that the remaining figure "carries the matrix order that was measured to inflate this effect by 45%".
+  The workflow documentation names no command that produces the file.
+* **Status:** recorded; no script changed. A reader who follows the documented workflow gets one of the
+  two figures and an exit code of 0.
+
+### Observation, not a discrepancy: timing direction (no performance claim)
+
+In the one reproduction run (1 CPU, unpinned, 11 repetitions, every query flagged noisy) the paired test
+reported `binary_heap -> radix_heap` as faster for radix, `radix_heap -> lpq` as slower for LPQ, and
+`lpq -> lpq_model` as not distinguishable from zero (CI includes 0, adjusted p 0.37). The comparison counts
+matched the recorded ones exactly for all four queues. Timings from this environment are not used for any
+claim, per the project's measurement rules.
