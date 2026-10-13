@@ -25,14 +25,16 @@ import sys
 from pathlib import Path
 
 _PYTHON_ROOT = Path(__file__).resolve().parents[2] / "python"
-if str(_PYTHON_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PYTHON_ROOT))
-
-from lpq_tools.data.queries import build_manifest, read_manifest, write_manifest  # noqa: E402
-from lpq_tools.utilities.hashing import sha256_file  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Imported here, after the repository's python/ directory is on the path, rather than at module
+    # level: that keeps the script runnable from any directory without import-order exceptions.
+    if str(_PYTHON_ROOT) not in sys.path:
+        sys.path.insert(0, str(_PYTHON_ROOT))
+    from lpq_tools.data.queries import build_manifest, read_manifest, write_manifest
+    from lpq_tools.utilities.hashing import sha256_file
+
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--benchmark", type=Path, required=True, help="the benchmark manifest")
     parser.add_argument("--also-exclude", type=Path, action="append", default=[],

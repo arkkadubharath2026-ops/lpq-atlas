@@ -151,3 +151,81 @@ require_python() {
         die "the analysis stack is not installed. Run:
        pip install -r python/requirements.txt"
 }
+
+# -----------------------------------------------------------------------------
+# Training query sets (protocol C, source-disjoint)
+# -----------------------------------------------------------------------------
+#
+# lpq_collect labels a training set from a full single-source search per query, so a training query
+# that shares a SOURCE with a benchmark query reuses that search even when the pair differs. A
+# training set therefore has to share no source with any benchmark manifest the pipeline measures or
+# reports against. These are those manifests; a dataset without an entry here is refused rather than
+# trained on an unchecked set.
+benchmark_manifests_for() {
+    case "$1" in
+        dimacs_ny)     printf '%s\n' dimacs_ny_queries_100 dimacs_ny_queries_first30 ;;
+        snap_facebook) printf '%s\n' snap_facebook_queries snap_facebook_queries_first100 \
+                                     snap_facebook_queries_first30 ;;
+        *) die "no benchmark manifests are declared for dataset '$1' in common.sh, so its training
+       set cannot be checked for source overlap" ;;
+    esac
+}
+
+# Prints the path of the training manifest to use for a dataset, after verifying it.
+#
+#   select_training_manifest <dataset> [manifests_dir]
+#
+# A manifest named <dataset>_training_queries_source_disjoint.yaml takes precedence; otherwise
+# <dataset>_training_queries.yaml is used, but only if the check below passes. It must be for the same
+# graph as the benchmark manifests and share no source with any of them. The protocol note goes to
+# stderr so stdout is only the path.
+select_training_manifest() {
+    local dataset="$1"
+    local dir="${2:-${REPO_ROOT}/experiments/manifests}"
+    local path="${dir}/${dataset}_training_queries_source_disjoint.yaml"
+    [ -f "$path" ] || path="${dir}/${dataset}_training_queries.yaml"
+    [ -f "$path" ] || die "no disjoint training query set for ${dataset} in ${dir}
+       Training on the benchmark queries would violate ESD.md section 30, so the
+       pipeline stops rather than falling back to them. Generate one with:
+       python scripts/data/generate_training_queries.py --benchmark <benchmark manifest> ..."
+
+    local benchmarks=() name
+    while IFS= read -r name; do
+        require_file "${dir}/${name}.yaml" "benchmark manifest" "git restore experiments/manifests/${name}.yaml"
+        benchmarks+=("$(native_path "${dir}/${name}.yaml")")
+    done < <(benchmark_manifests_for "$dataset")
+
+    "$PYTHON" - "$(native_path "$path")" "${benchmarks[@]}" >&2 <<'PYEOF' ||
+import sys
+from pathlib import Path
+from lpq_tools.data.queries import read_manifest, shared_sources
+
+training = read_manifest(Path(sys.argv[1]))
+bad = []
+for name in sys.argv[2:]:
+    benchmark = read_manifest(Path(name))
+    if (benchmark.dataset_id, benchmark.node_count, benchmark.graph_checksum) != (
+        training.dataset_id, training.node_count, training.graph_checksum
+    ):
+        bad.append(f"{Path(name).name}: a different graph (dataset id, node count or checksum)")
+        continue
+    shared = shared_sources(training, benchmark)
+    if shared:
+        bad.append(f"{Path(name).name}: {len(shared)} shared source node(s)")
+if bad:
+    print(f"{Path(sys.argv[1]).name} is not source-disjoint from the benchmark manifests:")
+    for line in bad:
+        print("  " + line)
+    sys.exit(1)
+print(
+    f"    {Path(sys.argv[1]).name}: source-disjoint from {len(sys.argv) - 2} benchmark "
+    f"manifest(s), {len(training.pairs)} queries, seed {training.seed}"
+)
+PYEOF
+        die "the training query set for ${dataset} shares source nodes with a benchmark manifest.
+       lpq_collect labels from a full single-source search per source, so that is leakage
+       under the corrected protocol. Generate a source-disjoint set with:
+       python scripts/data/generate_training_queries.py --benchmark <benchmark manifest> ..."
+
+    printf '%s' "$path"
+}

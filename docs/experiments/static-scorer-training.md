@@ -9,11 +9,13 @@
 >
 > * **A, pre-correction:** trained on the benchmark queries. The original figures; they reproduce exactly.
 > * **B, pair-disjoint:** trained on a separate seed-917 set that shares no (source, target) pair with
->   the benchmark. This is what `scripts/reproduce/run_main_experiments.sh` uses today. On
->   `snap_facebook` it still shares 45 source nodes with the benchmark, so it is **not** source-disjoint.
+>   the benchmark. This is what `scripts/reproduce/run_main_experiments.sh` used until M5-P1. On
+>   `snap_facebook` it shares 45 source nodes with the benchmark, so it is **not** source-disjoint.
 > * **C, source-disjoint (the corrected protocol, owner decision 2026-10-13):** trained on a set whose
 >   sources avoid every benchmark source. Generated for `snap_facebook` by
->   `scripts/data/generate_training_queries.py`; see below for `dimacs_ny`.
+>   `scripts/data/generate_training_queries.py`; see below for `dimacs_ny`. This is what
+>   `run_main_experiments.sh` now uses, and it refuses to continue if a training set shares a source
+>   with a benchmark manifest.
 >
 > Nothing is overwritten. Classification quality (how well the model ranks nodes) and end-to-end queue
 > behaviour (comparison counts) are different measurements and are reported separately.
@@ -103,7 +105,7 @@ Trained on the benchmark queries (seed 42: 1,000 queries on `snap_facebook`, 100
 ### Classification, protocol B: pair-disjoint
 
 Trained on the separate query sets `*_training_queries.yaml` (seed 917, 200 queries each), as
-`scripts/reproduce/run_main_experiments.sh` does today. Re-run on 2026-10-13.
+`scripts/reproduce/run_main_experiments.sh` did until M5-P1. Re-run on 2026-10-13.
 
 | | `snap_facebook` | `dimacs_ny` |
 |---|---:|---:|
@@ -198,8 +200,11 @@ train_from_file('models/training/snap_facebook_source_disjoint.lpqtrain', \
 ```
 
 The benchmark manifest is unchanged (sha256 `c495353a76f4e5abd4a1f0e1c0be18aa960022f8a5df839ba33c8716fb643b49`).
-`scripts/reproduce/run_main_experiments.sh` still trains `snap_facebook` on the protocol B manifest;
-switching it to protocol C is a separate decision.
+`scripts/reproduce/run_main_experiments.sh` now trains `snap_facebook` on this protocol C manifest and
+`dimacs_ny` on its existing seed-917 manifest, after checking each against the benchmark manifests the
+pipeline reports against (`select_training_manifest` in `scripts/reproduce/common.sh`). The protocol A and B
+manifests and results are kept unchanged as historical evidence (their hashes are pinned by a test), and the
+script does not reproduce them.
 
 **Artifacts** (untracked; SHA-256, produced in the scratch worktree `m5a`):
 
@@ -346,9 +351,10 @@ currently report, so it remains untested.
 
 ## Reproducing
 
-The commands below reproduce the **pre-correction protocol** (they train on the benchmark queries). The
-`run_main_experiments.sh` trains on `experiments/manifests/<dataset>_training_queries.yaml` instead; use that
-manifest in the first command to reproduce protocol B, or the source-disjoint manifest above for protocol C. For the end-to-end counts:
+The commands below reproduce the **pre-correction protocol A** (they train on the benchmark queries) and are kept
+for that reason. To reproduce protocol B, use `experiments/manifests/<dataset>_training_queries.yaml` in the first
+command; for the corrected protocol C, `scripts/reproduce/run_main_experiments.sh` does it (or use the
+source-disjoint manifest above). For the end-to-end counts:
 `lpq_benchmark --dataset <graph> --queries-file <benchmark manifest> --pq lpq_model --model <file> --repetitions 1 --warmup 0`.
 
 ```bash

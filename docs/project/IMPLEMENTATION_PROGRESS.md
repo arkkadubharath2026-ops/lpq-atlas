@@ -355,7 +355,7 @@ the retraction of the 34% claim is unchanged (D-11).
 ---
 
 ## Milestone M5-P1: D-19, the training protocols (documentation, one tested generator, re-measurement)
-Status: PASS (revised after owner review; first submitted with two protocols, then extended to three)
+Status: PASS, conditionally approved; revised twice after owner review (three protocols, then the pipeline switched to protocol C)
 Date: 2026-10-13
 Base commit SHA: `51a8b4cdc7b1e4d486ba40497d6abcaa54ca4e0c` (the accepted M4 commit)
 Working branch: `completion/m5a-d19-protocols` (local, no upstream; scratch worktree `m5a`)
@@ -375,13 +375,17 @@ Working branch: `completion/m5a-d19-protocols` (local, no upstream; scratch work
 
 ### What changed
 Code (new, tested): `python/lpq_tools/data/queries.py` (`exclude_sources` option, `selection` field,
-`notes` argument; default stream and default output bytes unchanged, pinned by a test),
-`scripts/data/generate_training_queries.py`, 12 new tests (`test_queries.py`, `test_training_query_script.py`,
-all red before the change, 33 green after). Data: `experiments/manifests/snap_facebook_training_queries_source_disjoint.yaml`.
+`notes` argument, `shared_sources`; default stream and default output bytes unchanged, pinned by a test),
+`scripts/data/generate_training_queries.py` (executable; imports moved into `main` so the ruff findings on the new
+file are gone without a lint configuration), `scripts/reproduce/common.sh` (`select_training_manifest`,
+`benchmark_manifests_for`) and `scripts/reproduce/run_main_experiments.sh` (trains on the verified source-disjoint
+sets: `snap_facebook` on protocol C, `dimacs_ny` on its existing seed-917 set, and stops if a set shares a source with
+a benchmark manifest). 28 new tests (`test_queries.py`, `test_training_query_script.py`,
+`test_canonical_training_sets.py`), each red before its change. Data: `experiments/manifests/snap_facebook_training_queries_source_disjoint.yaml`.
 Documentation: `static-scorer-training.md` (three protocols, tables, commands, hashes), `findings.md`,
-`docs/experiments/README.md`, `ABSTRACT.md`, `PROJECT_STATUS.md`, `PROJECT_OVERVIEW.md`, `DISCREPANCIES.md` (D-19),
-this log. The benchmark manifests, the protocol B manifest, `run_main_experiments.sh`, C++, CI and dependencies are
-unchanged.
+`docs/experiments/README.md`, `docs/reproducing.md`, `ABSTRACT.md`, `PROJECT_STATUS.md`, `PROJECT_OVERVIEW.md`,
+`DISCREPANCIES.md` (D-19 updated, D-21 new), this log. The benchmark manifests and the protocol B manifest are
+unchanged (hashes pinned by a test); C++, CI and dependencies are unchanged.
 
 ### Verification actually run (worktree `m5a`; binaries copied from `m4`, byte-identical, no C++ change since M3)
 | command | exit | result |
@@ -391,15 +395,22 @@ unchanged.
 | the three equivalents on `dimacs_ny` (100-query manifest) | 0, 0, 0 | 177,580,603 / 177,732,559 / 177,732,303 |
 | `generate_training_queries.py --benchmark ... --seed 917 --count 200` | 0 | 887 excluded, 3,152 allowed, 194 distinct sources |
 | `lpq_collect` on the C manifest, then `train_from_file(seed=20260923)` | 0, 0 | recollect and retrain byte-identical |
-| `python -m pytest -q` in `python/` | 0 | **353 passed, 2 skipped** (v2 result file absent; the Monaco extraction test skips because this worktree has no PBF) |
+| `scripts/reproduce/run_main_experiments.sh` (after moving the protocol B models to `m5a_evidence/historical_B_models/`, SHA256SUMS recorded) | 0 | selected `dimacs_ny_training_queries.yaml` (source-disjoint from 2 benchmark manifests) and `snap_facebook_training_queries_source_disjoint.yaml` (from 3); the four NY ablation counts matched (203,801,439 / 71,839,857 / 177,580,603 / 177,732,303); the Facebook model, training set and report are **byte-identical** to the protocol C artifacts, and the NY model to the B/C one |
+| `lpq_benchmark` Facebook control and `--pq lpq_model --model models/exported/snap_facebook_static.lpqmodel`, 1 rep | 0, 0 | 798,334,612 and **804,305,590** (+0.748%), pops 3,534,412 and 3,531,802, all 1,000 records exact |
+| `scripts/reproduce/generate_tables.sh` | 0 | training report shows held-out AUC 0.798469, lift 22.91x |
+| `python -m pytest -q` in `python/` | 0 | **369 passed, 2 skipped** (v2 result file absent; the Monaco extraction test skips because this worktree has no PBF); the 26 source-exclusion, canonical-set and selection tests pass |
+| `python -m pytest -q` in `atlas/api/` | 0 | **87 passed, 1 skipped** |
 Every benchmark record was exact against the reference. Overlap checks (pairs and sources, all Facebook and New York
 manifests) are in the scratchpad `m5a_evidence/`. Python 3.13.16, scikit-learn 1.6.1, numpy 2.2.4, scipy 1.15.2.
 
 ### Not done, by design
-No timing is reported or claimed. The `snap_facebook` wall-clock effect remains unmeasured. Model files are untracked.
-`run_main_experiments.sh` still uses the B manifest for Facebook.
+No timing is reported or claimed, and the counts above are not a performance improvement: the protocol C model does
+**more** comparisons than the control (804,305,590 against 798,334,612). The `snap_facebook` wall-clock effect remains
+unmeasured. Model files are untracked. The 1,000-query New York manifest is out of scope (D-19: model-free baseline counts
+and a pair-level test only). D-21 records that the split guard and the Atlas model page are still pair-level and keyed by
+file name.
 
 ### Owner decision needed
 1. Review `git diff 51a8b4c..completion/m5a-d19-protocols`.
-2. Switch `run_main_experiments.sh` to the C manifest for `snap_facebook`? Regenerate a source-disjoint 1,000-query
-   New York separation?
+2. D-21: make `lpq_tools/training/leakage.py` and the Atlas model page source-level, and record the training manifest name and
+   SHA-256 in the model report?

@@ -265,7 +265,7 @@ entries true.
   benchmark manifest.
 * **Three protocols (revised after owner review, 2026-10-13).** A: pre-correction (benchmark queries, seed 42).
   B: pair-disjoint (seed 917, no shared (source, target) pair), which is what `run_main_experiments.sh`
-  trains on today. C: **source-disjoint**, the corrected protocol. B is **not** source-disjoint: the
+  trained on until M5-P1. C: **source-disjoint**, the corrected protocol. B is **not** source-disjoint: the
   collector labels from a full single-source search per source and the target plays no part, and the
   `snap_facebook` B set shares **45 source nodes** with the 1,000-query benchmark manifest (4 with
   `first100`, 1 with `first30`). `dimacs_ny`'s B set shares none with the 100-query and `first30`
@@ -287,9 +287,32 @@ entries true.
   `completion/m5a-d19-protocols`. All three protocols are kept, labelled, side by side in
   `static-scorer-training.md` with configuration, split, seeds, library versions and artifact hashes; the
   other documents carry pointers and their original numbers are unchanged. Classification metrics and queue
-  comparison counts are reported separately and no timing is reported. Open, for the owner: whether
-  `run_main_experiments.sh` should switch `snap_facebook` to the protocol C manifest (it would change that
-  script's output), and whether to regenerate the 1,000-query New York separation.
+  comparison counts are reported separately and no timing is reported.
+* **Pipeline (owner-approved follow-up, same milestone):** `scripts/reproduce/run_main_experiments.sh` now
+  selects each dataset's training set with `select_training_manifest` (`scripts/reproduce/common.sh`):
+  `snap_facebook` trains on the protocol C manifest and `dimacs_ny` on its existing seed-917 manifest, and the
+  script stops if a set shares a source with any benchmark manifest it reports against. Tests pin this, and pin
+  the hashes of the benchmark manifests and of the protocol B manifests, which are unchanged. The script no
+  longer reproduces protocols A and B; their documented results are the historical evidence.
+* **Out of scope, reported (owner decision):** the 1,000-query `dimacs_ny_queries.yaml` shares 2 sources with
+  the New York training set. It is used for the model-free baseline counts (`lpq-baseline-measurements.md`,
+  `datasets.md`) and is a parameter of `test_leakage.py`, which checks pair overlap only. No model result and no
+  step of the reproduction pipeline uses it, so it was not changed. The related guard is D-21.
+
+### D-21. The split guard and the Atlas model page are still pair-level and keyed by file name
+
+* **Claimed:** `python/lpq_tools/training/leakage.py` (spec section 31) reports a training/evaluation split as
+  `DISJOINT` unless a (source, target) pair repeats; a shared endpoint is "reported, never hidden, but does not
+  by itself fail the split", and `python/tests/test_leakage.py` asserts exactly that. The Atlas model page
+  (`atlas/api/atlas_api/registry.py`, `split_status`) looks up `<dataset>_training_queries.yaml` and compares it
+  with every `<dataset>_queries*.yaml`.
+* **Actual (verified by reading both, M5-P1):** that is the pair-level rule that the corrected protocol (C) does
+  not accept, and the model page assumes the model was trained on the manifest with that file name. A
+  `snap_facebook` model trained on the protocol C manifest is therefore described against the protocol B manifest,
+  and the model report does not record which manifest trained it (D-15), so the two cannot be told apart from the
+  report (both have seed 917 and 200 queries).
+* **Status:** recorded; **no code changed** (outside the scope approved for M5-P1). Options for the owner: make
+  the guard source-level, and record the training manifest name and SHA-256 in the model report.
 
 ### D-20. The order-check results file has no producer in the documented workflow
 

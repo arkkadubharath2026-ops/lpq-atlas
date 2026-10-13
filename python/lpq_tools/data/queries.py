@@ -228,6 +228,15 @@ def build_manifest(
     )
 
 
+def shared_sources(left: QueryManifest, right: QueryManifest) -> set[int]:
+    """The source nodes both manifests use.
+
+    Sources, not pairs: training labels come from a full single-source search, so a shared source
+    means a shared search whatever the targets are.
+    """
+    return {p.source for p in left.pairs} & {p.source for p in right.pairs}
+
+
 def write_manifest(
     path: Path, manifest: QueryManifest, *, notes: Iterable[str] = ()
 ) -> None:

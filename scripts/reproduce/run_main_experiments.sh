@@ -66,19 +66,20 @@ say "collecting training sets"
 # -----------------------------------------------------------------------------
 # ESD.md section 30: test-query outcomes must never influence model parameters.
 #
-# The training labels come from a query set with a DIFFERENT seed to the one the
-# benchmark measures, verified to share no query with it. An earlier version of
-# this pipeline trained on the benchmark queries themselves, which inflated the
-# measured speedup by about a third (docs/experiments/ablation-waterfall.md).
-# The leak was invisible in every number it produced.
+# The training labels come from a query set that is disjoint from the benchmark.
+# "Disjoint" is checked at SOURCE level, not pair level: lpq_collect labels from a
+# full single-source search per source, so a training query that shares a source
+# with a benchmark query reuses that search whatever its target is. An earlier
+# version of this pipeline trained on the benchmark queries themselves, which
+# inflated the measured speedup by about a third
+# (docs/experiments/ablation-waterfall.md); a later one used a set that shared no
+# (source, target) pair but did share sources on snap_facebook
+# (docs/experiments/static-scorer-training.md, "Protocols compared").
+# select_training_manifest (common.sh) picks the set and refuses to continue if
+# it shares a source with any benchmark manifest.
 for dataset in "${MAIN_DATASETS[@]}"; do
-    manifest="${REPO_ROOT}/experiments/manifests/${dataset}_training_queries.yaml"
-    if [ ! -f "$manifest" ]; then
-        die "no disjoint training query set for ${dataset}: ${manifest}
-       Training on the benchmark queries would violate ESD.md section 30, so the
-       pipeline stops rather than falling back to them. Generate it with
-       lpq_tools.data.queries at a seed different from the benchmark's."
-    fi
+    manifest="$(select_training_manifest "$dataset")"
+    printf "    %s\n" "$(basename "$manifest")"
 
     "$COLLECT" --dataset "${REPO_ROOT}/datasets/processed/${dataset}.lpqgraph" \
         --queries-file "$manifest" \
