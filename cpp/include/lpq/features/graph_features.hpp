@@ -62,6 +62,22 @@ static_assert(sizeof(NodeStaticFeatures) == 24,
               "NodeStaticFeatures is expected to stay compact; growing it increases "
               "cache pressure on the hottest feature path");
 
+/// The feature vector a node's STATIC features define: the six static columns set, every other
+/// column zero.
+///
+/// The one definition of that mapping. StaticNodeScorer (precomputed scores), OnlineNodeScorer
+/// (scores computed on demand) and the online learner (training examples) all call this, so a model
+/// is trained on exactly the vector it is scored with; a test compares the three paths bit for bit.
+inline void fill_static_features(const NodeStaticFeatures& sf, FeatureVector& x) noexcept {
+    x.fill(0.0F);
+    set_feature(x, Feature::kOutDegree, sf.out_degree);
+    set_feature(x, Feature::kMinAdjacentWeight, sf.min_adjacent_weight);
+    set_feature(x, Feature::kMeanAdjacentWeight, sf.mean_adjacent_weight);
+    set_feature(x, Feature::kMaxAdjacentWeight, sf.max_adjacent_weight);
+    set_feature(x, Feature::kAdjacentWeightSpread, sf.weight_spread);
+    set_feature(x, Feature::kDegreeRelativeToMean, sf.degree_relative_to_mean);
+}
+
 /// Graph-level constants used to normalise dynamic features during extraction.
 ///
 /// Derived from the graph alone, never from queries or outcomes, so they are

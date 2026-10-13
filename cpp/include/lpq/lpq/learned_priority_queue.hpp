@@ -103,16 +103,7 @@ public:
 
         FeatureVector x{};
         for (std::size_t u = 0; u < features.size(); ++u) {
-            const NodeStaticFeatures& sf = features.node(static_cast<NodeId>(u));
-
-            x.fill(0.0F);
-            set_feature(x, Feature::kOutDegree, sf.out_degree);
-            set_feature(x, Feature::kMinAdjacentWeight, sf.min_adjacent_weight);
-            set_feature(x, Feature::kMeanAdjacentWeight, sf.mean_adjacent_weight);
-            set_feature(x, Feature::kMaxAdjacentWeight, sf.max_adjacent_weight);
-            set_feature(x, Feature::kAdjacentWeightSpread, sf.weight_spread);
-            set_feature(x, Feature::kDegreeRelativeToMean, sf.degree_relative_to_mean);
-
+            fill_static_features(features.node(static_cast<NodeId>(u)), x);
             scores_[u] = model.predict(x).score;
         }
     }
@@ -330,7 +321,7 @@ public:
         std::size_t      cursor = offered;
         const QueueBound bound  = bound_for(cursor, bucket_size);
 
-        const CorrectionOutcome outcome = corrector_.resolve(
+        CorrectionOutcome outcome = corrector_.resolve(
             manager_, verifier_, bound, [this, &cursor, bucket_size](CandidateManager& m) {
                 return this->refill(m, cursor, bucket_size);
             });
@@ -348,6 +339,7 @@ public:
                     bucket_size > cursor ? (bucket_size - cursor) : 0;
                 metrics_.entries_skipped += skipped;
                 if (observer_ != nullptr) {
+                    stamp_identity(outcome, node, static_cast<double>(key));
                     observer_->on_extraction(
                         skipped,
                         static_cast<std::uint32_t>(outcome.verification.comparisons),
@@ -369,6 +361,7 @@ public:
             // Zero entries skipped: a fallback examined all of them. That is
             // the signal the controller uses to retreat, so reporting anything
             // else here would hide the cost of the path being taken.
+            stamp_identity(outcome, entry.node, static_cast<double>(entry.key));
             observer_->on_extraction(
                 0, static_cast<std::uint32_t>(outcome.verification.comparisons), outcome);
         }
@@ -432,6 +425,19 @@ public:
     [[nodiscard]] const Substrate& substrate() const noexcept { return substrate_; }
 
 private:
+
+    /// Records which node the model ranked first and which node was returned, for the observer.
+    /// The first choice is read from the candidate window the verifier last examined.
+    void stamp_identity(CorrectionOutcome& outcome, NodeId extracted,
+                        double extracted_key) const noexcept {
+        const auto window = manager_.candidates();
+        if (!window.empty()) {
+            outcome.predicted_node = window[0].node;
+            outcome.predicted_key  = window[0].key;
+        }
+        outcome.extracted_node = extracted;
+        outcome.extracted_key  = extracted_key;
+    }
     /// In-place extraction (ExtractionStrategy::kDirect).
     ///
     /// Correctness argument, which is the same one the modular path makes: the
@@ -454,6 +460,15 @@ private:
         LPQ_PROFILE_BEGIN(verify);
         const std::span<const typename Substrate::Entry> bucket = substrate_.peek_current_bucket();
         const KeyType bound = substrate_.current_bound();
+
+        // The model's first choice is the front of the bucket. Read it now: taking the winner out of
+        // the bucket below invalidates the span.
+        NodeId first_node = kInvalidNode;
+        double first_key  = 0.0;
+        if (observer_ != nullptr) {
+            first_node = bucket[0].node;
+            first_key  = static_cast<double>(bucket[0].key);
+        }
 
         const std::size_t cap =
             observer_ != nullptr ? std::min<std::size_t>(policy.window_size, front_cap_)
@@ -522,6 +537,10 @@ private:
             outcome.verification.prediction_was_correct = (best == 0);
             outcome.verification.rank_displacement      = static_cast<std::uint32_t>(best);
             outcome.verification.comparisons            = static_cast<std::uint32_t>(compared);
+            outcome.predicted_node = first_node;
+            outcome.predicted_key  = first_key;
+            outcome.extracted_node = entry.node;
+            outcome.extracted_key  = static_cast<double>(entry.key);
             observer_->on_extraction(scanned_past_front ? 0 : skipped,
                                      static_cast<std::uint32_t>(compared), outcome);
         }

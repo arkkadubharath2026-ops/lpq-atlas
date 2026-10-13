@@ -102,7 +102,9 @@ lpq_add_test(test_verification
 
 lpq_add_test(test_adaptation
     SOURCES adaptation/test_online_learner.cpp adaptation/test_adaptive_controller.cpp
-            adaptation/test_controller_observer.cpp
+            adaptation/test_controller_observer.cpp adaptation/test_online_events.cpp
+            adaptation/test_online_recovery.cpp adaptation/test_online_session.cpp
+            adaptation/test_online_model_check.cpp
     LIBS    lpq::adaptation lpq::lpq lpq::algorithms
     LABELS  "unit")
 

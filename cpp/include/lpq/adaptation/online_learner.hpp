@@ -53,8 +53,11 @@
 #ifndef LPQ_ADAPTATION_ONLINE_LEARNER_HPP
 #define LPQ_ADAPTATION_ONLINE_LEARNER_HPP
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -140,6 +143,16 @@ struct OnlineLearningConfig {
     /// Responsiveness of the recent-error statistic.
     double error_alpha = 0.05;
 
+    /// Largest absolute parameter value a batch may leave behind. A batch that ends with a
+    /// non-finite parameter, or one beyond this, is rolled back (see apply_batch). Fitted logistic
+    /// weights on the static features are single digits; the default is far above anything
+    /// legitimate, so it catches divergence and nothing else.
+    float max_abs_weight = 1000.0F;
+
+    /// Rolled-back batches tolerated before the learner halts. A halted learner stops buffering and
+    /// applying; the model stays at its last good parameters and the search carries on.
+    std::uint32_t max_rollbacks = 3;
+
     void validate() const {
         if (interval == 0) {
             throw InvalidConfigError("update interval must be at least 1");
@@ -158,6 +171,12 @@ struct OnlineLearningConfig {
         if (!(error_threshold >= 0.0) || !(error_threshold <= 1.0)) {
             throw InvalidConfigError("error_threshold must lie within [0, 1]");
         }
+        if (!std::isfinite(max_abs_weight) || !(max_abs_weight > 0.0F)) {
+            throw InvalidConfigError("max_abs_weight must be finite and positive");
+        }
+        if (max_rollbacks == 0) {
+            throw InvalidConfigError("max_rollbacks must be at least 1");
+        }
     }
 };
 
@@ -174,6 +193,18 @@ struct OnlineLearningMetrics {
     std::uint64_t updates_performed = 0;
     std::uint64_t largest_batch     = 0;
 
+    /// Training examples behind those events: an event carries one, or two when the first choice
+    /// was wrong. `examples_applied` counts only examples that stayed applied (not rolled back).
+    std::uint64_t examples_recorded = 0;
+    std::uint64_t examples_applied  = 0;
+
+    /// Recovery (M5-O3). Every recorded event ends in exactly one of: applied, dropped (buffer full),
+    /// rolled back, discarded because the learner was disabled or halted, or still pending.
+    std::uint64_t rollbacks                = 0;
+    std::uint64_t events_rolled_back       = 0;
+    std::uint64_t events_discarded_disabled = 0;
+    std::uint64_t events_discarded_halted  = 0;
+
     [[nodiscard]] double drop_rate() const noexcept {
         return events_recorded == 0
                    ? 0.0
@@ -188,6 +219,45 @@ struct OnlineLearningMetrics {
 
     void reset() noexcept { *this = OnlineLearningMetrics{}; }
 };
+
+/// Models whose parameters are a weight vector and a bias (LinearPredictor and LogisticPredictor).
+/// Only these can be checked for numerical failure and rolled back without copying unbounded state.
+template <typename M>
+concept HasLinearParameters = requires(const M& m) {
+    m.weights();
+    m.bias();
+};
+
+/// True when every parameter is finite and no weight or bias exceeds `max_abs`.
+template <HasLinearParameters M>
+[[nodiscard]] inline bool parameters_within(const M& m, float max_abs) noexcept {
+    for (const float w : m.weights()) {
+        if (!std::isfinite(w) || std::fabs(w) > max_abs) {
+            return false;
+        }
+    }
+    return std::isfinite(m.bias()) && std::fabs(m.bias()) <= max_abs;
+}
+
+/// FNV-1a over the bit patterns of the weights and the bias: an identity for "did the parameters
+/// change", not a cryptographic digest.
+template <HasLinearParameters M>
+[[nodiscard]] inline std::uint64_t parameters_fnv1a64(const M& m) noexcept {
+    std::uint64_t h = 14695981039346656037ULL;
+    const auto mix  = [&h](float v) {
+        std::uint32_t bits = 0;
+        std::memcpy(&bits, &v, sizeof bits);
+        for (int i = 0; i < 4; ++i) {
+            h ^= static_cast<std::uint64_t>((bits >> (8 * i)) & 0xFFU);
+            h *= 1099511628211ULL;
+        }
+    };
+    for (const float w : m.weights()) {
+        mix(w);
+    }
+    mix(m.bias());
+    return h;
+}
 
 /// Buffers prediction events and applies bounded updates to a model.
 ///
@@ -211,10 +281,17 @@ public:
     /// Records one verified decision. O(1), never allocates.
     void record(const PredictionEvent& event) noexcept {
         ++metrics_.events_recorded;
+        metrics_.examples_recorded += event.example_count();
         recent_error_.add(event.was_correct ? 0.0 : 1.0);
         rank_errors_.add(event.rank_error);
 
+        if (halted_) {
+            ++metrics_.events_discarded_halted;
+            return;
+        }
+
         if (config_.mode == UpdateMode::kDisabled) {
+            ++metrics_.events_discarded_disabled;
             // Still counted and still fed to the statistics: the controller and
             // the experiment need prediction quality even when nothing is being
             // learned from it, and the frozen-model control must pay the same
@@ -261,7 +338,7 @@ public:
             return 0;
         }
         std::size_t total = 0;
-        while (pending_ > 0) {
+        while (pending_ > 0 && !halted_) {
             total += apply_batch(model, config_.max_batch);
         }
         return total;
@@ -269,7 +346,7 @@ public:
 
     /// Whether an update would be applied now.
     [[nodiscard]] bool update_due() const noexcept {
-        if (config_.mode == UpdateMode::kDisabled || pending_ == 0) {
+        if (config_.mode == UpdateMode::kDisabled || pending_ == 0 || halted_) {
             return false;
         }
         switch (config_.mode) {
@@ -291,6 +368,17 @@ public:
     // --- Observation ---------------------------------------------------------
 
     [[nodiscard]] const OnlineLearningMetrics& metrics() const noexcept { return metrics_; }
+
+    /// True once `max_rollbacks` batches have been rolled back. The learner then ignores events.
+    [[nodiscard]] bool halted() const noexcept { return halted_; }
+
+    /// Every recorded event is accounted for exactly once.
+    [[nodiscard]] bool accounting_balanced() const noexcept {
+        const auto& m = metrics_;
+        return m.events_recorded == m.events_applied + m.events_dropped + m.events_rolled_back +
+                                        m.events_discarded_disabled + m.events_discarded_halted +
+                                        pending_;
+    }
 
     /// Exponentially weighted fraction of predictions that were wrong.
     [[nodiscard]] double recent_error_rate() const noexcept { return recent_error_.value(); }
@@ -317,6 +405,7 @@ public:
         head_         = 0;
         pending_      = 0;
         since_update_ = 0;
+        halted_       = false;
     }
 
 private:
@@ -327,19 +416,58 @@ private:
     template <PredictorLike Model>
     std::size_t apply_batch(Model& model, std::size_t limit) {
         const std::size_t count = pending_ < limit ? pending_ : limit;
+
+        // A copy of the parameters, taken before the batch and used only if the batch leaves them
+        // non-finite or out of range. Constant size (a weight vector, a bias, a calibrator), so it
+        // adds nothing to the bound on one update.
+        [[maybe_unused]] std::optional<Model> before;
+        if constexpr (HasLinearParameters<Model>) {
+            before = model;
+        }
+
+        std::uint64_t examples = 0;
         for (std::size_t i = 0; i < count; ++i) {
-            model.update(buffer_[head_].to_example(config_.fallback_penalty));
+            const PredictionEvent& e = buffer_[head_];
+            model.update(e.to_example(config_.fallback_penalty));
+            ++examples;
+            if (e.has_accepted_example) {
+                model.update(e.accepted_example());
+                ++examples;
+            }
             head_ = (head_ + 1) % buffer_.size();
         }
         pending_ -= count;
         since_update_ = 0;
 
+        if constexpr (HasLinearParameters<Model>) {
+            if (!parameters_within(model, config_.max_abs_weight)) {
+                // Numerical failure: restore the last good parameters and forget this batch. The
+                // search never sees the bad ones, because they were never used for a score.
+                model = *before;
+                ++metrics_.rollbacks;
+                metrics_.events_rolled_back += count;
+                if (metrics_.rollbacks >= config_.max_rollbacks) {
+                    halt();
+                }
+                return 0;
+            }
+        }
+
         ++metrics_.updates_performed;
         metrics_.events_applied += count;
+        metrics_.examples_applied += examples;
         if (count > metrics_.largest_batch) {
             metrics_.largest_batch = count;
         }
         return count;
+    }
+
+    /// Stops the learner: pending events are discarded (and counted), nothing more is buffered or
+    /// applied, and the model keeps its last good parameters.
+    void halt() noexcept {
+        halted_ = true;
+        metrics_.events_discarded_halted += pending_;
+        pending_ = 0;
     }
 
     OnlineLearningConfig         config_{};
@@ -347,6 +475,7 @@ private:
     std::size_t                  head_         = 0;
     std::size_t                  pending_      = 0;
     std::uint32_t                since_update_ = 0;
+    bool                         halted_       = false;
 
     ExponentiallyWeighted  recent_error_{0.05};
     BoundedHistogram<64>   rank_errors_{};

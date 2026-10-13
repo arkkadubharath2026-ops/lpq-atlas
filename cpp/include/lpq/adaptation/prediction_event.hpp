@@ -34,6 +34,7 @@
 #ifndef LPQ_ADAPTATION_PREDICTION_EVENT_HPP
 #define LPQ_ADAPTATION_PREDICTION_EVENT_HPP
 
+#include <cstddef>
 #include <cstdint>
 
 #include "lpq/common/types.hpp"
@@ -43,7 +44,23 @@
 
 namespace lpq {
 
+/// Where the learner gets the feature vector of a node (M5-O2).
+///
+/// The queue reports node ids only; it never sees features. The component that scores pushes also
+/// implements this, so a training example is built from exactly the vector the model was scored
+/// with. Static features only: the dynamic groups are zero in a per-node score by construction.
+class FeatureSource {
+public:
+    virtual ~FeatureSource() = default;
+
+    /// Fills `out` with the features the scorer uses for node `u`.
+    virtual void features_of(NodeId u, FeatureVector& out) const noexcept = 0;
+};
+
 /// One verified queue decision, exactly as ESD.md section 14 specifies.
+///
+/// Version 2 (M5-O2) adds the accepted node's features, so that a wrong first choice can be turned
+/// into a negative example for it and a positive one for the node that was actually extracted.
 struct PredictionEvent {
     /// The features the prediction was made from. Captured at prediction time,
     /// because they cannot be recovered afterwards.
@@ -71,6 +88,14 @@ struct PredictionEvent {
     /// Verification comparisons this decision cost. Lets the learner weigh an
     /// expensive mistake more heavily than a cheap one.
     std::uint32_t verification_cost = 0;
+
+    /// The node the verifier accepted (the authoritative answer) and its features. Set only when the
+    /// model's first choice was NOT a minimum: the event then yields two examples, a negative for
+    /// the first choice and a positive for this node, both from the verifier and neither from a
+    /// model output. When the first choice was right this is unset and `features` is the positive.
+    FeatureVector accepted_features{};
+    NodeId        accepted_node         = kInvalidNode;
+    bool          has_accepted_example  = false;
 
     /// Whether the decision ended in a fallback to the authoritative queue.
     ///
@@ -113,8 +138,24 @@ struct PredictionEvent {
         TrainingExample ex;
         ex.features = features;
         ex.target   = was_correct ? 1.0F : 0.0F;
-        ex.weight   = fallback_used ? fallback_penalty : 1.0F;
+        // The penalty marks a first choice that was wrong AND forced a fallback. A first choice
+        // that was a minimum keeps weight 1 even when verification could not certify it.
+        ex.weight   = (fallback_used && !was_correct) ? fallback_penalty : 1.0F;
         return ex;
+    }
+
+    /// The positive example for the accepted node, when the first choice was wrong.
+    [[nodiscard]] TrainingExample accepted_example() const {
+        TrainingExample ex;
+        ex.features = accepted_features;
+        ex.target   = 1.0F;
+        ex.weight   = 1.0F;
+        return ex;
+    }
+
+    /// Training examples this event carries (0, 1 or 2).
+    [[nodiscard]] std::size_t example_count() const noexcept {
+        return has_accepted_example ? 2U : 1U;
     }
 };
 

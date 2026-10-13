@@ -115,6 +115,29 @@ struct CorrectionOutcome {
     std::uint32_t expansions = 0;  ///< window widenings
     std::uint32_t comparisons = 0; ///< total verification comparisons
 
+    // --- Identity of the decision, stamped by the queue (D-12 / M5-O2) -------------------------
+    //
+    // `verification.node` is the node the verifier ACCEPTED; nothing recorded which node the model
+    // ranked first, so a wrongly ranked first choice could not be turned into a labelled example.
+    // The queue fills these in just before it reports the extraction. kInvalidNode means "not
+    // provided": the controller-retreat path makes no prediction and leaves them unset.
+
+    /// The model's first choice in the window the verifier last examined (the accepted window when
+    /// the extraction resolved, the last failed one on a fallback).
+    NodeId predicted_node = kInvalidNode;
+    double predicted_key  = 0.0;
+
+    /// The node actually returned by the extraction, with its key. Always the authoritative
+    /// answer, including on a fallback, where `verification.node` is only the last failed attempt.
+    NodeId extracted_node = kInvalidNode;
+    double extracted_key  = 0.0;
+
+    /// True when a prediction was made and its first choice was itself a minimum: its key equals
+    /// the extracted key. Decided on keys rather than node identity so that a tie is not punished.
+    [[nodiscard]] bool first_choice_was_minimum() const noexcept {
+        return predicted_node != kInvalidNode && predicted_key <= extracted_key;
+    }
+
     /// True when a candidate was proven extractable. False means the caller
     /// must fall back to the authoritative queue.
     [[nodiscard]] bool resolved() const noexcept {
