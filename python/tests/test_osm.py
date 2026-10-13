@@ -13,8 +13,30 @@ from lpq_tools.data.osm import (
     extract_road_graph,
     haversine_m,
 )
+from lpq_tools.data.sources import load_all_dataset_configs
+from lpq_tools.utilities.paths import RepoPaths
 
-_PBF = Path(__file__).resolve().parents[2] / "datasets" / "raw" / "monaco-osmfr-20261013T011405Z.osm.pbf"
+_PATHS = RepoPaths(Path(__file__).resolve().parents[2])
+
+
+def _monaco_raw_pbf() -> Path:
+    """Where the pipeline stores the Monaco PBF, read from the dataset config.
+
+    The local filename is dated from the verified replication state and changes whenever the
+    source is re-pinned, so it is looked up in ``configs/datasets/osm_monaco.yaml`` instead of
+    being repeated here.
+    """
+    configs = {c.dataset_id: c for c in load_all_dataset_configs(_PATHS.dataset_configs)}
+    return _PATHS.raw / configs["osm_monaco"].graph_file.filename
+
+
+_PBF = _monaco_raw_pbf()
+
+
+def test_the_monaco_raw_path_comes_from_the_dataset_config() -> None:
+    configs = {c.dataset_id: c for c in load_all_dataset_configs(_PATHS.dataset_configs)}
+    assert _PBF == _PATHS.raw / configs["osm_monaco"].graph_file.filename
+    assert _PBF.name.endswith(".osm.pbf")
 
 
 @pytest.mark.parametrize(

@@ -11,6 +11,7 @@ No test here touches the network: downloads are redirected to local files.
 from __future__ import annotations
 
 import gzip
+import hashlib
 import os
 import stat
 
@@ -20,7 +21,7 @@ from lpq_tools.data import acquire
 from lpq_tools.data.acquire import AcquisitionError, acquire_file, decompress
 from lpq_tools.data.sources import RemoteFile
 from lpq_tools.utilities.hashing import fnv1a64, sha256_file
-from lpq_tools.utilities.jsonio import read_json
+from lpq_tools.utilities.jsonio import read_json, write_json
 
 
 @pytest.fixture
@@ -126,6 +127,61 @@ def test_a_changed_unpinned_file_is_detected_on_the_next_run(tmp_path, fake_serv
 
     with pytest.raises(AcquisitionError, match="changed since it was first acquired"):
         acquire_file(remote, raw, metadata_dir=metadata, dataset_id="toy")
+
+
+# A lock file is a record of what the pipeline OBSERVED when a file had no pin. Once a dataset
+# is pinned, or re-sourced under a new filename (osm_monaco in M3), the lock keeps describing the
+# earlier file. These two tests pin down that such a leftover is inert and is never rewritten,
+# which is why the stale osm_monaco / osm_liechtenstein lock files are left as they are.
+def test_a_leftover_lock_entry_for_another_filename_does_not_affect_a_pinned_file(
+    tmp_path, fake_server
+):
+    served, _ = fake_server
+    served["https://x.invalid/new.bin"] = b"new bytes\n"
+    raw, metadata = make_dirs(tmp_path)
+    lock_path = metadata / "toy.checksums.json"
+    leftover = {
+        "dataset_id": "toy",
+        "files": {"old.bin": "0" * 64},
+        "note": "Digests observed on first acquisition. These files were NOT verified ...",
+    }
+    write_json(lock_path, leftover)
+    before = lock_path.read_bytes()
+    pin = hashlib.sha256(b"new bytes\n").hexdigest()
+
+    result = acquire_file(
+        RemoteFile(url="https://x.invalid/new.bin", filename="new.bin", sha256=pin),
+        raw,
+        metadata_dir=metadata,
+        dataset_id="toy",
+    )
+
+    assert result.sha256 == pin
+    assert not result.trusted_on_first_use
+    assert lock_path.read_bytes() == before, "a pinned acquisition must not rewrite the lock"
+
+
+def test_a_leftover_lock_entry_is_kept_when_a_new_unpinned_file_is_recorded(tmp_path, fake_server):
+    served, _ = fake_server
+    served["https://x.invalid/new.bin"] = b"new bytes\n"
+    raw, metadata = make_dirs(tmp_path)
+
+    write_json(
+        metadata / "toy.checksums.json",
+        {"dataset_id": "toy", "files": {"old.bin": "0" * 64}, "note": "trust"},
+    )
+
+    result = acquire_file(
+        RemoteFile(url="https://x.invalid/new.bin", filename="new.bin"),
+        raw,
+        metadata_dir=metadata,
+        dataset_id="toy",
+    )
+
+    assert result.trusted_on_first_use, "a different filename is a first acquisition"
+    files = read_json(metadata / "toy.checksums.json")["files"]
+    assert files["old.bin"] == "0" * 64, "the earlier observation is kept, not replaced"
+    assert files["new.bin"] == result.sha256
 
 
 def test_a_present_file_with_the_wrong_pinned_digest_is_not_repaired(tmp_path, fake_server):

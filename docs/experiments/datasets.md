@@ -113,6 +113,18 @@ propagates the distinction all the way to the run summary, because "verified"
 and "accepted on trust" are different claims and the pipeline never conflates
 them.
 
+**A lock file is a record of a first observation, and pinning does not rewrite it.**
+`<dataset_id>.checksums.json` is written only for a file that had no pin, it is read
+only when a file has no pin, and its entries are keyed by the raw *filename*. Promoting
+a file to a pin, or re-sourcing a dataset under a new filename, therefore leaves the
+lock describing the earlier file. That is the state of `osm_liechtenstein.checksums.json`
+(its digest later became the config pin) and of `osm_monaco.checksums.json` (its entry is
+the old Geofabrik file, which the config no longer names). Both are left as they are: the
+entry is still a true record of what was observed, nothing reads it for the current
+filename, and a pinned acquisition never rewrites it. `test_acquire.py` pins this down:
+a leftover entry for another filename is inert for a pinned file, and is kept, not
+replaced, when a new unpinned file is recorded beside it.
+
 ## `edges_listed`: a real bug, and the check that now prevents it
 
 SNAP edge lists give no indication of whether each undirected edge is listed
