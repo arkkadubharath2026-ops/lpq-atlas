@@ -18,8 +18,9 @@ and `claude/sleepy-heisenberg-fhr3me` (docs) are unchanged.
 |---|---|---|
 | M0 read-only reconnaissance | PASS | approved |
 | M1 branch and baseline | PASS | approved |
-| M2 documentation corrections | PASS, pending review | **pending** |
-| M3 onward | not started | |
+| M2 documentation corrections | PASS | approved |
+| M3 Monaco real-OSM acquisition | PASS for Monaco, with stated limits | **pending** |
+| M4 onward | not started | |
 
 ---
 
@@ -179,3 +180,104 @@ web 41 unit tests, lint 0 errors, typecheck, production build; Playwright e2e 8 
 2. How should the corrections reach the branches that still state the claim? (No action taken.)
 3. Push policy, still open; and the OSM source for M3 (network access to a durable source, or a
    supplied PBF with checksum). Proposed next milestone: M3, OSM acquisition.
+
+---
+
+## Milestone M3: Real-OSM acquisition for Monaco
+Status: PASS for Monaco, with stated limits (durable retention and Liechtenstein remain open)
+Date/time: 2026-10-13, 09:28 to about 09:43 UTC
+Base commit SHA: `0981b1acd3a422788a79b94d620dea1302499f56`
+Working branch: `completion/m3-osm-acquisition` (local only, in a scratch worktree; no upstream)
+Commit: `cf5aea4` (all tracked changes). This log entry is the commit after it.
+
+### What I found
+- **Source (verified now).** `download.openstreetmap.fr/extracts/europe/monaco.osm.pbf`, 1,105,253 bytes,
+  last modified 2026-10-13 01:16:03 GMT. Headers, the MD5 sidecar and `state.txt` were identical before and
+  after the download. The first identity attempt was invalid (the "before" snapshot timed out under
+  CPU load); it was archived and the whole sequence redone with longer timeouts.
+- **Checksums (verified now).** Publisher MD5 `df804c9f8e6da26ddb350af60132554c` equals the local MD5
+  from two tools. SHA-256 `26ac807383921434f6fc7ef07ddb367e03c8357e65ac360c72d5de120c239d1d` from
+  `sha256sum`, Python `hashlib`, `openssl` and the repo helper, all equal. Two separate downloads and the
+  pipeline's own third download are byte-identical. The MD5 is a corruption check, not authenticity,
+  so the pin is trust-on-first-use.
+- **Header (verified now).** Replication timestamp `2026-10-13T01:14:05Z` and sequence `7326506` equal
+  `state.txt`. No header bbox. 68,533 nodes, 10,168 ways (4,298 highway-tagged), 371 relations. The raw
+  nodes span latitude 37.27 to 43.78 and longitude 7.21 to 7.62; none of the far ones enter the road graph.
+- **Extracted graph (verified now).** 7,592 nodes, 11,680 arcs, graph checksum 7879006388132312723
+  (`0x6d57da90b3a8f693`), bbox [7.4053929, 43.7232244, 7.4472402, 43.7545284], 4,298 ways seen, 1,265
+  kept, 619 nodes dropped outside the largest strongly connected component, 32 segments with a missing
+  node location. The earlier Geofabrik graph had 5,692 nodes, 8,495 arcs and bbox [7.4053929, 43.7232244,
+  7.4423019, 43.7519682]: **a different graph**, about 1.23x the area, same west and south edges.
+- **Pre-registered triggers** (written to a file before any bytes were fetched): T1 nodes over 20,000,
+  T2 bbox area over 0.004244 square degrees, T3 bbox outside the publisher polygon bbox. **None fired**
+  (7,592; 0.001310; inside), so M3 continued. The coverage difference is reported, not hidden.
+- **No performance claim anywhere in this milestone** (1 CPU, unpinned, single repetition).
+
+### What changed
+Twelve tracked files, one local commit (`cf5aea4`): `configs/datasets/osm_monaco.yaml` (new URL, dated
+local filename `monaco-osmfr-20261013T011405Z.osm.pbf`, SHA-256 pin, full provenance, licence);
+`datasets/metadata/osm_monaco{,.osm,.conversion}.json` (regenerated); `datasets/metadata/index.json`
+(Monaco entry only: four lines; the four other entries byte-identical, checked after a byte-exact round-trip
+test); `experiments/manifests/osm_monaco_queries.yaml` (regenerated, seed 42);
+`python/tests/test_osm.py` (one line: the raw filename); `docs/atlas/DISCREPANCIES.md` (D-01, D-17, D-18),
+`docs/atlas/README.md`, `docs/local-setup.md`, `INSTRUCTION_MANUAL.md`, `docs/project/PROJECT_STATUS.md`.
+No CI, C++, web, API, script or dependency change. The PBF and the processed graph are git-ignored and
+not tracked or distributed. `osm_monaco.checksums.json` was left unchanged (stale; see D-18).
+
+### Verification actually run (worktree `m3`, all exit 0 unless stated)
+| check | result |
+|---|---|
+| `cmake --preset release`, build, `ctest --test-dir build/release -j 4` | 155 targets, 0 warnings, **914/914** |
+| one-off driver, run 1 (retained bytes, no network) | 7,592 nodes, 11,680 arcs, 7 output files hashed |
+| one-off driver, run 2 (empty raw dir, pipeline downloads, forced reconvert) | all 7 outputs **byte-identical** to run 1 |
+| rejection tests with the repo's `acquire_file` (loopback server) | good bytes accepted; flipped byte rejected on download and left no file; flipped cached file rejected (not repaired in place); old Geofabrik digest rejected |
+| `lpq_benchmark` Dijkstra `--pq all`, 1000-query manifest, 1 rep | 6000 records, **all exact against the reference**, nothing unsupported |
+| `lpq_benchmark` A* `--heuristic haversine --pq all` | 6000 records, **all exact** |
+| `lpq_benchmark` LPQ `--mode approximate --epsilon 0.1` | 1000 records, runner's `ratio > 1 + epsilon` gate did not fire; all ratios 1.0 on this graph |
+| old (Geofabrik) manifest against the new graph | **refused**, exit 1: `generated for a graph with 5692 nodes but this graph has 7592` |
+| `python -m pytest -q -rs` in `python/` | `test_osm.py` 19 passed; full **301 passed, 11 skipped** |
+| `python -m pytest -q -rs` in `atlas/api/` | **87 passed, 1 skipped** |
+| web `npm ci`, `lint`, `typecheck`, `npm test`, `npm run build` | lint 0 errors / 7 warnings; unit tests **41/41**; build OK |
+| Playwright with `ATLAS_E2E_DATASET=osm_monaco` | **8 passed, 2 skipped**; the 6 job records created are all `osm_monaco` (7,592 nodes), exact |
+Evidence files (hashes, headers, logs, JSON results) are in the scratchpad `m3_evidence/`, outside the repository.
+
+### Acceptance criteria (pre-registered)
+Met: A1 identity (after the redo), A2, A3, A4, A5, A6, A7 (correctness only), A8, A9, A10, A11, A12.
+Partly met: A10 covers the explore, compare and replay flows on real OSM; the unreachable-route and
+research/model tests skip (they need `snap_roadnet_pa` and NY results), so spec §43 item 10 is still
+untested at the UI level. Not met by design: none. Not in scope: Liechtenstein (deferred by the owner).
+
+### Process notes (what went wrong along the way)
+My first identity snapshot was invalid (timeouts) and was redone. A hashing-helper call and a pyosmium
+call failed from my own invocation mistakes (a `str` instead of a `Path`; `python3 -I` hid the user-site
+package) and were rerun correctly. A benchmark-record check looked for the wrong field name and was
+corrected after reading the real schema. Two helper processes (a loopback test server and the web server)
+were left running by my scripts; I verified each belonged to my scratch directories, stopped them, and
+confirmed the ports were closed.
+
+### Risks and decisions
+- **Durability.** The publisher replaces the file daily and keeps no dated copies. The retained bytes exist
+  only in the scratch worktree (`datasets/raw/`) and the scratchpad evidence directory, both ephemeral.
+  The repository records the SHA-256, so anyone holding the same bytes can reproduce the graph; nobody
+  can fetch them from the publisher after the next refresh. Options D1 to D3 from the plan still need
+  an owner decision before this is durable.
+- **Coverage.** The new graph is larger than the old one; results on the two must not be compared.
+- **Licence.** ODbL 1.0, attribution recorded; nothing is redistributed.
+- **New findings** (code unchanged): D-17 (epsilon not recorded in approximate-mode results), D-18
+  (the `index.json` overwrite hazard, a stale lock file, a hard-coded raw filename in a test).
+
+### Unresolved after M3
+1. Durable retention of the Monaco bytes (owner decision).
+2. Liechtenstein: still names the dead Geofabrik URL.
+3. D-12: the `online_learning` label can read true with no learning; due with M5.
+4. D-17, D-18: due with M8/M10 and M4.
+5. Research validation gaps unchanged: online learning unwired, ML cost outside the timed clock, approximate
+   mode measured on few queries elsewhere, ablations and distribution shift missing, `confidence` does not
+   gate extraction (D-14), model provenance (D-15), the 34% attribution not re-run (D-11).
+6. The corrected docs and the M3 branch exist only locally; `main`, v2 and the docs branch are unchanged.
+7. No real-OSM CI path exists (the owner chose to keep `demo_road` and to defer CI changes).
+
+### Owner decision needed
+1. Review the M3 diff: `git diff 0981b1a..completion/m3-osm-acquisition`.
+2. Choose how the Monaco source bytes become durable (D1 release asset, D2 commit, D3 re-pin on demand), or accept D4 for now.
+3. Approve a proposed M4 (reproducibility baseline) when ready.
